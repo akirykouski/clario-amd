@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 from pydantic import BaseModel
 
+from .i18n import lay_it
 from .knowledge import Ontology, _norm
 from .llm import LLM
 from .models import Entry, NextQuestion, RankedPattern
@@ -227,7 +228,7 @@ def question_problems(q: str, onto: Ontology, label: str | None = None, lay: str
 
 
 def template_question(lay: str, lang: str) -> str:
-    return f"Le capita di avere: {lay}?" if lang == "it" else f"Do you sometimes have: {lay}?"
+    return f"Ti capita di avere {lay}?" if lang == "it" else f"Do you sometimes have: {lay}?"
 
 
 def why_text(lang: str, splits: list[str]) -> str:
@@ -241,6 +242,10 @@ def why_text(lang: str, splits: list[str]) -> str:
 async def phrase(llm: LLM, onto: Ontology, c: Choice, lang: str) -> tuple[str, str] | None:
     """(question, source) or None when neither the model text nor the template is acceptable."""
     label = onto.label(c.feature_id)
+    lay = lay_it().get(c.feature_id, "") if lang == "it" else c.lay  # Italian: only phrases we wrote in Italian
+    if not lay:
+        return None
+    c = Choice(c.feature_id, c.ig, c.p_feature, lay, c.splits)
     payload = {"plain_description": c.lay, "language": LANG_NAME.get(lang, "English")}
     try:
         out, _ = await llm.json("next_question", [{"role": "system", "content": QUESTION_SYSTEM},
@@ -259,7 +264,7 @@ async def next_question(llm: LLM, onto: Ontology, entries: list[Entry], lang: st
                         lay: dict[str, list[str]] | None = None, skip: set[str] | None = None,
                         min_terms: int = MIN_TERMS) -> NextQuestion | None:
     lang = lang if lang in LANG_NAME else "en"
-    for c in choose(onto, entries, lay, skip, min_terms)[:6]:
+    for c in choose(onto, entries, lay, skip, min_terms, top=12 if lang == "it" else 6)[:12 if lang == "it" else 6]:
         got = await phrase(llm, onto, c, lang)
         if not got:
             continue

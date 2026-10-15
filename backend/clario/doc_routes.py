@@ -18,6 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from . import documents as docs
 from .config import Settings
+from .review import LabReview
 from .models import Entry, LabResult, LabsResponse, LabTest, LabValue
 from .vault import Locked, Vault
 
@@ -42,12 +43,18 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
 
     def widen_llm() -> None:
         """The client's own semaphore would cap the pool below CLARIO_DOC_CONCURRENCY and starve vLLM batching."""
-        sem = getattr(llm, "_sem", None)
-        if sem is not None and s.doc_workers > s.llm_concurrency:
-            llm._sem = asyncio.Semaphore(s.doc_workers)
+        inner = getattr(llm, "_inner", llm)  # PrivacyLLM forwards reads only: assigning on the wrapper would not reach the client
+        if getattr(inner, "_sem", None) is not None and s.doc_workers > s.llm_concurrency:
+            inner._sem = asyncio.Semaphore(s.doc_workers)
 
     def labs() -> list[LabResult]:
         return [LabResult.model_validate(d) for d in vault.all("lab")]
+
+    def save_lab(lab: LabResult) -> None:
+        vault.put("lab", lab.id, lab.model_dump(mode="json"))
+
+    # labs wait in the same review queue as entities (GET /api/review, nav badge, correction_log)
+    app.state.review_kinds["lab"] = LabReview(labs, save_lab)
 
     async def gpu_info() -> dict | None:
         """GET /api/system/gpu if another module registered it, else None. amd-smi is not called here."""
@@ -106,6 +113,10 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
                 raise HTTPException(413, f"A batch is limited to {MAX_PAGES} pages")
         if not pages:
             raise HTTPException(422, "Add at least one PDF or image")
+        return start_batch(pages)
+
+    def start_batch(pages: list[docs.Page]) -> dict:
+        """Store the pages encrypted, add the diary entry, start reading in the background."""
         bid = f"b_{uuid.uuid4().hex[:10]}"
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         occurred = docs.today_iso()
@@ -120,6 +131,8 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
         widen_llm()
         spawn(run_batch(bid, pages))
         return {"batch_id": bid, "pages": len(pages), "entry_id": entry.id}
+
+    app.state.start_batch = start_batch
 
     def snapshot(bid: str, gpu: dict | None) -> dict:
         b = batches[bid]
@@ -170,23 +183,9 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
         if not doc or "test_key" not in doc:
             raise HTTPException(404, "lab result not found")
         lab = LabResult.model_validate(doc)
-        upd: dict[str, Any] = {}
-        if body.action == "confirm":
-            upd["review"] = "confirmed"
-        elif body.action == "reject":
-            upd["review"] = "rejected"
-        else:
-            given = body.model_dump(exclude={"action"}, exclude_none=True)
-            if not given:
-                raise HTTPException(422, "Give the corrected value, unit or range")
-            if "value_numeric" in given and "value_text" not in given:
-                given["value_text"] = None
-            if "value_text" in given and given["value_text"] is not None and "value_numeric" not in given:
-                given["value_numeric"] = None
-            upd = {**given, "review": "corrected"}
-            if upd.get("value_numeric") is None and not (upd.get("value_text") or lab.value_text):
-                raise HTTPException(422, "A result needs a number or text")
-        new = lab.model_copy(update=upd)
-        new = new.model_copy(update={"flag": docs.compute_flag(new.value_numeric, new.ref_low, new.ref_high, new.flag)})
+        try:
+            new = docs.apply_lab_action(lab, body.action, body.model_dump(exclude={"action"}, exclude_none=True))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
         vault.put("lab", new.id, new.model_dump(mode="json"))
         return new

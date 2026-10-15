@@ -1,6 +1,7 @@
 """Diary entry -> grounded clinical entities (extraction v3, schemas/extraction_v3.json).
 
-The model proposes; code decides:
+The prompt is shared with training (clario/prompt.py == train/prompt.py, a test keeps them identical), so the
+fine-tuned model sees in the app exactly what it saw in training. The model proposes; code decides:
   * every entity must quote a span that exists in the entry (case-insensitive), else dropped
   * an HPO ID is picked by the model from ontology candidates only (second call, enum schema); an id
     outside the candidate list becomes null. The existing ontology check (label/synonym agrees with
@@ -27,40 +28,11 @@ from .config import Settings
 from .knowledge import Ontology
 from .llm import LLM, LLMError, Stats, extract_json, merge_stats
 from .models import Entity
+from .prompt import build_messages
 from .review import route_review
 
 _SCHEMA_FILE = Path(__file__).parent / "schemas" / "extraction_v3.json"
 EXTRACTION_SCHEMA: dict = {k: v for k, v in json.loads(_SCHEMA_FILE.read_text()).items() if k not in ("$schema", "$id")}
-
-SYSTEM = """You read one diary entry written by a patient in everyday words (English or Italian) and list the \
-clinically relevant things in it. Return JSON only:
-{"entities": [{"quote": "<exact words copied from the entry>", "canonical": "<standard clinical English term>", \
-"hpo_id": "<HP:0000000 code if you are sure, else null>", "type": "symptom|finding|lab|medication|trigger|body_site", \
-"negated": <true if the entry says it is absent>, "family_history": <true if it belongs to a relative>, \
-"onset_hint": "<date or phrase from the entry such as since Tuesday, else null>", \
-"severity": <0-10 if the patient rates it, else null>, "confidence": <0-1 how sure you are, else null>}]}
-Rules: quote must be copied exactly from the entry. One entity per distinct thing. Do not add anything the entry does \
-not say. Do not interpret causes. Moods and weather are triggers only if the patient links them to a symptom. \
-Something a mother, father, sibling or other relative has is family_history true; it is not the patient's own."""
-
-FEW_SHOT_USER = ("Woke up with that butterfly rash on my cheeks again after gardening. Knees ache, maybe 6/10. No fever. "
-                 "My mother has lupus. Tired since Tuesday.")
-FEW_SHOT_ASSISTANT = ('{"entities": ['
-                      '{"quote": "butterfly rash on my cheeks", "canonical": "Malar rash", "hpo_id": "HP:0025300", '
-                      '"type": "symptom", "negated": false, "family_history": false, "onset_hint": null, '
-                      '"severity": null, "confidence": 0.9},'
-                      '{"quote": "after gardening", "canonical": "Sun exposure", "hpo_id": null, "type": "trigger", '
-                      '"negated": false, "family_history": false, "onset_hint": null, "severity": null, "confidence": 0.7},'
-                      '{"quote": "Knees ache", "canonical": "Knee pain", "hpo_id": "HP:0030839", "type": "symptom", '
-                      '"negated": false, "family_history": false, "onset_hint": null, "severity": 6, "confidence": 0.9},'
-                      '{"quote": "No fever", "canonical": "Fever", "hpo_id": "HP:0001945", "type": "symptom", '
-                      '"negated": true, "family_history": false, "onset_hint": null, "severity": null, "confidence": 0.95},'
-                      '{"quote": "My mother has lupus", "canonical": "Systemic lupus erythematosus", "hpo_id": null, '
-                      '"type": "finding", "negated": false, "family_history": true, "onset_hint": null, '
-                      '"severity": null, "confidence": 0.9},'
-                      '{"quote": "Tired since Tuesday", "canonical": "Fatigue", "hpo_id": "HP:0012378", '
-                      '"type": "symptom", "negated": false, "family_history": false, "onset_hint": "since Tuesday", '
-                      '"severity": null, "confidence": 0.9}]}')
 
 PICK_SYSTEM = """You map a patient's words to one term of a clinical vocabulary. You get the patient's quote, a \
 clinical name, and a list of candidate terms with ids. Answer with the id of the candidate that means the same \
@@ -138,11 +110,10 @@ class ExtractOpts:
         return cls(s.sc_n, s.trust_model_confidence, s.hpo_pick, s.review_threshold)
 
 
-def messages_for(text: str) -> list[dict]:
-    return [{"role": "system", "content": SYSTEM},
-            {"role": "user", "content": FEW_SHOT_USER},
-            {"role": "assistant", "content": FEW_SHOT_ASSISTANT},
-            {"role": "user", "content": text}]
+def messages_for(text: str, confidence: bool = False) -> list[dict]:
+    """The exact messages the LoRA saw in training (clario/prompt.py is a verbatim copy of train/prompt.py): one system
+    prompt, the diary as the only user turn, no few-shot. `confidence` selects the variant that asks for a probability."""
+    return build_messages(text, confidence)
 
 
 def _fold(s: str) -> str:
@@ -310,7 +281,7 @@ async def _primary(llm: LLM, msgs: list[dict], text: str) -> tuple[RawOut, Stats
 async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
                   opts: ExtractOpts | None = None) -> tuple[list[Entity], Stats]:
     opts = opts or ExtractOpts()
-    msgs = messages_for(text)
+    msgs = messages_for(text, opts.trust_model_confidence)
     raw, st = await _primary(llm, msgs, text)
     # drop ungrounded entities up front so the later calls only spend tokens on real ones
     raw = RawOut(entities=[r for r in raw.entities if find_quote(text, r.quote) and r.canonical.strip()])

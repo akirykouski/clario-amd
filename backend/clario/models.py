@@ -102,6 +102,7 @@ class SharedEntity(BaseModel):
     negated: bool = False
     family_history: bool = False
     severity: int | None = None
+    onset_hint: str | None = Field(None, description="Time phrase the patient wrote ('since Tuesday'); shown to the clinician")
     reviewed: bool = Field(True, description="False: no person has checked it; the brief says so")
 
 
@@ -137,6 +138,8 @@ class Brief(BaseModel):
     backend: str | None = None
     finalized: bool = False
     stats: dict = Field(default_factory=dict, description="latency_ms, tokens_per_s, tokens")
+    lang: Literal["en", "it"] = Field("en", description="Language of the text: the AI items are drafted in it; patient-origin items are rendered in it")
+    audience: Literal["clinician", "patient"] = "clinician"
 
 
 class PrivacyReplacement(BaseModel):

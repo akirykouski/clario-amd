@@ -21,6 +21,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .llm import LLM, LLMError, extract_json
+from .models import LabResult
 
 TRUTH_PREFIX = "clario-truth:"
 MAX_DIM = 1600
@@ -287,6 +288,37 @@ async def extract_page(llm: LLM, page: Page, page_no: int, *, vision_model: str 
                      "date": r.date or doc.date, "page": page_no, "confidence": c,
                      "review": review_state(c, threshold)})
     return PageResult(rows, doc.date, vision_model or llm.model, llm.backend)
+
+
+def apply_lab_action(lab: LabResult, action: str, given: dict | None = None) -> LabResult:
+    """confirm / reject / correct a lab row. `given` holds the corrected value_numeric, value_text, unit, ref_low, ref_high.
+    Raises ValueError (HTTP 422) on an unusable correction. The flag is always recomputed in code."""
+    if action == "confirm":
+        upd: dict[str, Any] = {"review": "confirmed"}
+    elif action == "reject":
+        upd = {"review": "rejected"}
+    elif action == "correct":
+        given = dict(given or {})
+        if not given:
+            raise ValueError("Give the corrected value, unit or range")
+        if "value_numeric" in given and "value_text" not in given:
+            given["value_text"] = None
+        if "value_text" in given and given["value_text"] is not None and "value_numeric" not in given:
+            given["value_numeric"] = None
+        upd = {**given, "review": "corrected"}
+        if upd.get("value_numeric", lab.value_numeric) is None and not (upd.get("value_text") or lab.value_text):
+            raise ValueError("A result needs a number or text")
+    else:
+        raise ValueError("action must be confirm, correct or reject")
+    new = lab.model_copy(update=upd)
+    return new.model_copy(update={"flag": compute_flag(new.value_numeric, new.ref_low, new.ref_high, new.flag)})
+
+
+def parse_lab_value(value: str) -> dict:
+    """Free text from the review queue ('5,5' or 'Positivo 1:160') -> a correction for apply_lab_action."""
+    v = (value or "").strip()
+    n = _num(v)
+    return {"value_numeric": n} if n is not None else {"value_text": v}
 
 
 def today_iso() -> str:
