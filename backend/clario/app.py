@@ -9,7 +9,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -28,12 +28,12 @@ from . import share as sharing
 from .config import Settings
 from .share import now_iso
 from . import documents as docs
-from .demo import PERSONA_LANG, PERSONAS, demo_referti, persona_entries
+from .demo import DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_entries
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
 from .knowledge import Ontology
 from .llm import extract_json, make_llm
-from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage, Term
+from .models import AnswerResult, Brief, Entity, Entry, LabResult, NextQuestion, ShareRequest, SharePackage, Term
 from .next_question import as_ranked_patterns, next_question, template_question
 from .patterns import counts_as_evidence, evidence_from, patient_patterns, score_patterns
 from .review import ACTIONS, EntityReview, apply_entity_action, correction_record, register_review_kind
@@ -448,7 +448,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         pages: list = []
         for f in demo_referti():
             pages += await asyncio.to_thread(docs.file_pages, f.name, f.read_bytes())
-        return app.state.start_batch(pages)
+        return app.state.start_batch(pages, (date.today() - timedelta(days=DEMO_REFERTI_AGE) - REFERTI_LATEST).days)
 
     async def clinic_key(url: str) -> dict:
         u = urlparse(url)
@@ -476,8 +476,10 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         if body.include_patterns:
             chosen = [e for e in entries if body.since <= e.occurred_on <= body.until]
             pats = score_patterns(chosen, onto)
+        labs = [LabResult.model_validate(d) for d in vault.all("lab")]
+        batch_entry = {d["batch_id"]: d["entry_id"] for d in vault.all("docbatch")}
         pkg = sharing.build_package(entries, body.since, body.until, sharing.alias(str(s.data_dir.resolve())),
-                                    body.note, pats, body.expires_hours)
+                                    body.note, pats, body.expires_hours, labs, batch_entry)
         if not pkg.entries:
             raise HTTPException(422, "No entries in that period")
         sealed = sharing.seal(pkg, key["public_key"])
@@ -491,7 +493,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         qr_payload = json.dumps({"clinic": body.clinic_url, "package": pkg.package_id})
         return {"package_id": pkg.package_id, "clinic_url": body.clinic_url, "expires_at": pkg.expires_at,
                 "clinic_name": key.get("clinic_name"), "fingerprint": key.get("fingerprint"),
-                "entries": len(pkg.entries), "entities": len(pkg.entities), "patterns": len(pkg.patterns),
+                "entries": len(pkg.entries), **sharing.counts(pkg), "patterns": len(pkg.patterns),
                 "qr_payload": qr_payload, "qr_svg": sharing.qr_svg(qr_payload)}
 
 
@@ -574,7 +576,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             state = "none" if not b else ("final" if b.finalized else "draft")
             out.append({"package_id": pkg.package_id, "patient_alias": pkg.patient_alias, "period": pkg.period,
                         "received_at": rec["received_at"], "expires_at": pkg.expires_at,
-                        "entities": len(pkg.entities), "entries": len(pkg.entries), "brief_state": state})
+                        **sharing.counts(pkg), "entries": len(pkg.entries), "brief_state": state})
         return out
 
     @app.get("/api/inbox/{pid}")

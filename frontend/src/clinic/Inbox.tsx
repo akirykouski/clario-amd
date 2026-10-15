@@ -28,7 +28,7 @@ export default function Inbox() {
                 <td className="px-3 py-2">{t("share.range", { a: fmtDate(r.period[0]), b: fmtDate(r.period[1]) })}</td>
                 <td className="px-3 py-2">{fmtDate(r.received_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
                 <td className="px-3 py-2">{fmtDate(r.expires_at)}</td>
-                <td className="px-3 py-2">{r.entities}</td>
+                <td className="px-3 py-2">{r.terms === undefined ? r.entities : t("pkg.mentions", { m: r.entities, t: r.terms })}</td>
                 <td className="px-3 py-2">{stateKey[r.brief_state] ? t(stateKey[r.brief_state]) : r.brief_state}</td>
               </tr>
             ))}

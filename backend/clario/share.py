@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from nacl.public import PrivateKey, PublicKey, SealedBox
 
-from .models import COUNTED, Entry, Pattern, SharedEntity, SharePackage
+from .models import COUNTED, Entity, Entry, LabResult, Pattern, SharedEntity, SharedLab, SharePackage
 
 
 def now_iso() -> str:
@@ -38,12 +38,43 @@ def alias(seed: str) -> str:
     return f"{words[h % len(words)]}-{h % 1000:03d}"
 
 
+def patient_mentions(entities: list[SharedEntity]) -> list[SharedEntity]:
+    """What counts as the patient's own terms: not negated, not about a relative. Every count uses this."""
+    return [x for x in entities if not x.negated and not x.family_history]
+
+
+def term_count(entities: list[SharedEntity]) -> int:
+    return len({x.hpo_id or x.canonical.lower() for x in patient_mentions(entities) if x.type != "lab"})
+
+
+def counts(pkg: SharePackage) -> dict[str, int]:
+    """The numbers both screens show ("N mentions of M terms"), from one place."""
+    ms = patient_mentions(pkg.entities)
+    return {"entities": len(ms), "mentions": len(ms), "terms": term_count(pkg.entities), "labs": len(pkg.labs)}
+
+
+def _clinic_copy(x: Entity) -> Entity:
+    """A relative's condition leaves as family history only: no ontology id the clinic could count as the patient's."""
+    return x.model_copy(update={"hpo_id": None, "hpo_label": None}) if x.family_history else x
+
+
+def shared_labs(labs: list[LabResult], since: str, until: str, batch_entry: dict[str, str] | None = None) -> list[SharedLab]:
+    """Lab rows in the period a person confirmed or corrected, plus confident rows nobody has looked at (marked)."""
+    batch_entry = batch_entry or {}
+    rows = [l for l in labs if since <= l.date <= until and l.review in (*COUNTED, "auto")]
+    rows.sort(key=lambda l: (l.date, l.test_key, l.page))
+    return [SharedLab(test_name=l.test_name, value_numeric=l.value_numeric, value_text=l.value_text, unit=l.unit,
+                      ref_low=l.ref_low, ref_high=l.ref_high, flag=l.flag, date=l.date, page=l.page,
+                      entry_id=batch_entry.get(l.batch_id), reviewed=l.review in COUNTED) for l in rows]
+
+
 def build_package(entries: list[Entry], since: str, until: str, patient_alias: str, note: str | None,
-                  patterns: list[Pattern], expires_hours: int) -> SharePackage:
+                  patterns: list[Pattern], expires_hours: int, labs: list[LabResult] | None = None,
+                  batch_entry: dict[str, str] | None = None) -> SharePackage:
     chosen = sorted((e for e in entries if since <= e.occurred_on <= until), key=lambda e: e.occurred_on)
     shared_entities, slim = [], []
     for e in chosen:
-        confirmed = [x for x in e.entities if x.review in COUNTED]  # a person decided; needs_review never leaves
+        confirmed = [_clinic_copy(x) for x in e.entities if x.review in COUNTED]  # a person decided; needs_review never leaves
         shared_entities += [SharedEntity(entry_id=e.id, occurred_on=e.occurred_on, type=x.type, quote=x.quote,
                                          canonical=x.canonical, hpo_id=x.hpo_id, negated=x.negated,
                                          family_history=x.family_history, severity=x.severity, onset_hint=x.onset_hint,
@@ -54,7 +85,7 @@ def build_package(entries: list[Entry], since: str, until: str, patient_alias: s
                         created_at=created.isoformat(timespec="seconds"),
                         expires_at=(created + timedelta(hours=expires_hours)).isoformat(timespec="seconds"),
                         period=(since, until), note=note, entries=slim, entities=shared_entities,
-                        patterns=patterns)
+                        labs=shared_labs(labs or [], since, until, batch_entry), patterns=patterns)
 
 
 def seal(package: SharePackage, clinic_public_key_b64: str) -> str:

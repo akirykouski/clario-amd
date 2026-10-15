@@ -30,7 +30,7 @@ Shapes: `backend/clario/models.py`. One codebase, two modes: `CLARIO_MODE=patien
 | POST | `/api/patterns/answer` | `{feature_id, answer: "yes"\|"no"\|"unsure", question?, lang?}` | `AnswerResult {before: RankedPattern[], after: RankedPattern[], entry_id}` (the cards on screen, at most 2, keyed by `card_id`). yes/no saves a diary entry "Answer to a question: <question> Yes\|No" with one confirmed entity (negated for no); unsure only records that it was skipped (`entry_id` null) |
 | POST | `/api/demo` | `{persona: "giulia" \| "giulia_it"}` | loads synthetic entries (marked as demo): the English persona or "Giulia (IT)", the same clinical picture in colloquial Italian (negation, a relative's condition, onset hints, a 0-10 rating). Returns `{ok, entries, persona, lang}` |
 | POST | `/api/demo/documents` | | reads the 3 synthetic Italian referti shipped with the app, same path as an upload. Returns `{batch_id, pages, entry_id}` |
-| POST | `/api/share` | `ShareRequest` | `{package_id, clinic_url, expires_at, qr_payload, entities: n, entries: n}` |
+| POST | `/api/share` | `ShareRequest` | `{package_id, clinic_url, expires_at, qr_payload, entries, entities, mentions, terms, labs, patterns}`. `entities` = `mentions` = the patient's own mentions (negated and family-history entities are not counted), `terms` = distinct terms, `labs` = shared lab rows; the clinic inbox row carries the same numbers ("N mentions of M terms") |
 | GET | `/api/clinic/key` | `?url=` | proxy fetch of the clinic's public key (shown to the patient as a fingerprint) |
 | POST | `/api/documents/batch` | multipart `files` (PDF, JPEG, PNG; max 400 pages) | `{batch_id, pages, entry_id}`; pages stored encrypted, entry "Imported documents (N pages)", extraction runs in the background |
 | GET | `/api/documents/batch/{id}/events` | | SSE once per second `{batch_id, pages_done, pages_total, pages_per_sec, gpu, errors, labs, needs_review, done}`; `gpu` = result of `GET /api/system/gpu` if that route exists, else null |
@@ -47,14 +47,16 @@ Lab rows carry `confidence` (self-consistency across samples when the client has
 
 Extraction env (patient mode): `CLARIO_SC_N` (self-consistency samples, default 5, 1 disables), `CLARIO_TRUST_MODEL_CONFIDENCE=1` (use the model's own `confidence`), `CLARIO_HPO_PICK` (default 1: second call picks the HPO id from ontology candidates only), `CLARIO_REVIEW_THRESHOLD` (default 0.7).
 
-`SharedEntity` carries `family_history`, `onset_hint` and `reviewed`; the clinician brief marks any item with `reviewed=false` as "not reviewed by a person".
+`SharedEntity` carries `family_history`, `onset_hint` and `reviewed`; the clinician brief marks any item with `reviewed=false` as "not reviewed by a person". A relative's condition leaves the device only as family history: `family_history=true` and no `hpo_id`, so it is never a patient term and never counted. Negated entities keep `negated=true` and are not counted either.
+
+`SharePackage.labs: SharedLab[]` holds the lab rows dated inside the shared period that a person confirmed or corrected, plus confident rows nobody has looked at (`reviewed=false`, the brief says "not reviewed by a person"). `needs_review` and rejected rows never leave. `SharedLab = {test_name, value_numeric, value_text, unit, ref_low, ref_high, flag, date, page, entry_id, reviewed}`; `entry_id` is the diary entry of the import, which the brief's labs items cite. `POST /api/demo/documents` moves the newest synthetic report to 28 days ago so the demo labs fall inside a normal share period.
 
 ## Clinic mode
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | GET | `/api/clinic/key` | | `{public_key (base64), fingerprint, clinic_name}` |
 | POST | `/api/inbox` | `{package_id, sealed (base64)}` | `{ok, package_id}` (sealed box to clinic key; rejects expired) |
-| GET | `/api/inbox` | | `[{package_id, patient_alias, period, received_at, expires_at, entities, brief_state}]` |
+| GET | `/api/inbox` | | `[{package_id, patient_alias, period, received_at, expires_at, entities, mentions, terms, labs, entries, brief_state}]` |
 | GET | `/api/inbox/{id}` | | `SharePackage` |
 | POST | `/api/inbox/{id}/brief` | `?lang=en\|it` | `{run_id}`: drafts the brief with the clinic model; SSE events on `/api/runs/{run_id}/events` |
 | GET | `/api/runs/{run_id}/events` | | SSE `{stage, message, progress, backend, model, tokens_per_s, latency_ms, payload}`; final `done` payload = `Brief` |

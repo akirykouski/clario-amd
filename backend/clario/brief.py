@@ -59,6 +59,39 @@ def _span(ds: list[str], lang: str) -> str:
     return f"dal {ds[0]} al {ds[-1]}" if lang == "it" else f"{ds[0]} to {ds[-1]}"
 
 
+_LAB_FLAG = {"en": {"low": "low", "high": "high", "normal": "in range"}, "it": {"low": "basso", "high": "alto", "normal": "nella norma"}}
+
+
+def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
+    """One item per test, straight from the shared lab rows (no model): value, unit, flag, date, source page, range."""
+    it = lang == "it"
+    groups: dict[str, list] = {}
+    for l in pkg.labs:
+        groups.setdefault(l.test_name, []).append(l)
+    items = []
+    for name, rows in sorted(groups.items(), key=lambda kv: min(r.date for r in kv[1])):
+        rows = sorted(rows, key=lambda r: (r.date, r.page))
+        parts = []
+        for r in rows:
+            val = r.value_text or (f"{r.value_numeric:g}" if r.value_numeric is not None else "?")
+            flag = f", {_LAB_FLAG[lang][r.flag]}" if r.flag else ""
+            where = f"{'pagina' if it else 'page'} {r.page}"
+            parts.append(f"{(val + ' ' + r.unit).strip()}{flag} ({r.date}, {where})")
+        rng = next((r for r in rows if r.ref_low is not None or r.ref_high is not None), None)
+        rtxt = ""
+        if rng:
+            lo = "" if rng.ref_low is None else f"{rng.ref_low:g}"
+            hi = "" if rng.ref_high is None else f"{rng.ref_high:g}"
+            rtxt = f"; {'intervallo stampato' if it else 'printed range'} {lo} {'a' if it else 'to'} {hi}".replace("  ", " ")
+        mark = ""
+        if any(not r.reviewed for r in rows):
+            mark = f" ({'non verificato da una persona' if it else NOT_REVIEWED})"
+        cites = sorted({r.entry_id for r in rows if r.entry_id})
+        items.append(BriefItem(id=_id(), section="labs", text=f"{name}: {'; '.join(parts)}{rtxt}{mark}", cites=cites,
+                               origin="patient", review="accepted"))
+    return items
+
+
 def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
     """Clinician view of what the patient recorded, straight from data: clinical terms and HPO ids."""
     it = lang == "it"
@@ -91,7 +124,7 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         rec = f"registrato {len(cites)} {'volta' if len(cites) == 1 else 'volte'}" if it else f"recorded {len(cites)}x"
         items.append(BriefItem(id=_id(), section=sec, text=f"{label}: {rec}, {_span(ds, lang)}{extra}{mark}",
                                cites=sorted(set(cites)), origin="patient", review="accepted"))
-    return items
+    return items + lab_items(pkg, lang)
 
 
 # ---------------------------------------------------------------- audience and language views
@@ -156,6 +189,7 @@ def patient_view_items(pkg: SharePackage, lang: str, onto) -> list[BriefItem]:
         text = f"{name}: {said} {words + ' ' if words else ''}({times}, {_span(ds, lang)})"
         items.append(BriefItem(id=f"bi_p{n}", section="symptoms", text=text, cites=cites, origin="patient", review="accepted"))
         n += 1
+    items += lab_items(pkg, lang)
     if family:
         items.append(BriefItem(id="bi_p_family", section="summary", origin="patient", review="accepted",
                                text="Hai scritto di una condizione che ha un tuo parente." if it

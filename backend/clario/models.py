@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 EntityType = Literal["symptom", "finding", "lab", "medication", "trigger", "body_site"]
 Signal = Literal["weak", "moderate", "strong"]
 Review = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
+LabReview = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
+LabFlag = Literal["low", "high", "normal"]
 COUNTED = ("confirmed", "corrected")  # decided by a person and kept: counts toward patterns and sharing
 
 
@@ -130,8 +132,27 @@ class SharedEntity(BaseModel):
     reviewed: bool = Field(True, description="False: no person has checked it; the brief says so")
 
 
+class SharedLab(BaseModel):
+    """One lab row in the shared period. Rows a person confirmed or corrected, or that were read with high confidence
+    (`reviewed=false`, the brief says so). needs_review and rejected rows never leave the device."""
+
+    test_name: str
+    value_numeric: float | None = None
+    value_text: str | None = None
+    unit: str = ""
+    ref_low: float | None = None
+    ref_high: float | None = None
+    flag: LabFlag | None = None
+    date: str
+    page: int = Field(description="Page within the imported document batch")
+    entry_id: str | None = Field(None, description="The diary entry of the import, when known: what the brief cites")
+    reviewed: bool = Field(True, description="False: read by the model and not checked by a person")
+
+
 class SharePackage(BaseModel):
-    """Decrypted payload a clinic receives. Only confirmed entities and the selected entries."""
+    """Decrypted payload a clinic receives. Only confirmed entities, confirmed or confident lab rows, and the selected entries.
+
+    A relative's condition (`family_history`) is shared only as family history: no HPO id, never a patient term."""
 
     package_id: str
     patient_alias: str
@@ -141,6 +162,7 @@ class SharePackage(BaseModel):
     note: str | None = None
     entries: list[Entry]
     entities: list[SharedEntity]
+    labs: list[SharedLab] = Field(default_factory=list)
     patterns: list[Pattern] = Field(default_factory=list)
 
 
@@ -214,10 +236,6 @@ class Health(BaseModel):
     llm: dict
     locked: bool | None = None
     ontology: dict = Field(default_factory=dict)
-
-
-LabReview = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
-LabFlag = Literal["low", "high", "normal"]
 
 
 class LabResult(BaseModel):

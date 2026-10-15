@@ -57,9 +57,14 @@ export interface SharedEntity {
   hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; onset_hint?: string | null; reviewed: boolean;
 }
 
+export interface SharedLab {
+  test_name: string; value_numeric: number | null; value_text: string | null; unit: string; ref_low: number | null;
+  ref_high: number | null; flag: LabFlag | null; date: string; page: number; entry_id: string | null; reviewed: boolean;
+}
+
 export interface SharePackage {
   package_id: string; patient_alias: string; created_at: string; expires_at: string;
-  period: [string, string]; note: string | null; entries: Entry[]; entities: SharedEntity[]; patterns: Pattern[];
+  period: [string, string]; note: string | null; entries: Entry[]; entities: SharedEntity[]; labs: SharedLab[]; patterns: Pattern[];
 }
 
 export type BriefSection = "summary" | "timeline" | "symptoms" | "labs" | "medications" | "patterns" | "questions";
@@ -103,11 +108,12 @@ export interface Timeline { days: TimelineDay[]; terms: Evidence[] }
 export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms: number; note: string }
 export interface ShareResult {
   package_id: string; clinic_url: string; expires_at: string; qr_payload: string; entities: number; entries: number;
+  mentions?: number; terms?: number; labs?: number;  // entities = mentions: patient terms only, no negated, no family history
 }
 export interface ClinicKey { public_key: string; fingerprint: string; clinic_name: string }
 export interface InboxRow {
   package_id: string; patient_alias: string; period: [string, string]; received_at: string;
-  expires_at: string; entities: number; brief_state: string;
+  expires_at: string; entities: number; terms?: number; mentions?: number; labs?: number; brief_state: string;
 }
 
 export interface RunEvent {
