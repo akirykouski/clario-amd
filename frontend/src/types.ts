@@ -16,7 +16,10 @@ export interface Entity {
 export interface ReviewItem {
   kind: "entity" | "lab"; id: string; entry_id: string | null; display: string; value: string | null;
   confidence: number | null; source_excerpt: string;
-  quote?: string; hpo_label?: string | null; occurred_on?: string; negated?: boolean; family_history?: boolean;
+  quote?: string | null; hpo_label?: string | null; occurred_on?: string; negated?: boolean; family_history?: boolean;
+  canonical?: string;
+  // lab rows only
+  flag?: LabFlag | null; page?: number; batch_id?: string; unit?: string; ref_low?: number | null; ref_high?: number | null;
 }
 export interface ReviewQueue { items: ReviewItem[]; count: number }
 export type ReviewAction = "confirm" | "correct" | "reject";
@@ -43,7 +46,7 @@ export interface ShareRequest {
 
 export interface SharedEntity {
   entry_id: string; occurred_on: string; type: EntityType; quote: string; canonical: string;
-  hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; reviewed: boolean;
+  hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; onset_hint?: string | null; reviewed: boolean;
 }
 
 export interface SharePackage {
@@ -59,8 +62,12 @@ export interface BriefItem {
   origin: "patient" | "ai"; review: BriefReview;
 }
 
+export type Persona = "giulia" | "giulia_it";
+export type BriefView = { audience?: "clinician" | "patient"; lang?: "en" | "it" };
+
 export interface Brief {
   package_id: string; items: BriefItem[]; model: string | null; backend: string | null;
+  lang?: "en" | "it"; audience?: "clinician" | "patient";
   finalized: boolean; stats: { latency_ms?: number; tokens_per_s?: number; tokens?: number } & Record<string, unknown>;
 }
 

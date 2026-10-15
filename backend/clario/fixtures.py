@@ -26,10 +26,30 @@ PHRASES = [
     ("protein in my urine", "Proteinuria", "HP:0000093"), ("white cells are a bit low", "Leukopenia", "HP:0001882"),
     ("ankles a little puffy", "Edema of the lower limbs", "HP:0010741"), ("headache", "Headache", "HP:0002315"),
     ("after a sunny afternoon", "Sun exposure", None),
+    # Italian (the persona "Giulia (IT)"). Quotes cover the symptom words, not the negation word, as the shared prompt says.
+    ("stanchissima", "Fatigue", "HP:0012378"), ("stanca", "Fatigue", "HP:0012378"), ("esausta", "Fatigue", "HP:0012378"),
+    ("ginocchia e le dita delle mani mi fanno male", "Arthralgia", "HP:0002829"),
+    ("ginocchia che fanno male", "Arthralgia", "HP:0002829"), ("ginocchia e polsi fanno male", "Arthralgia", "HP:0002829"),
+    ("dolore alle articolazioni", "Arthralgia", "HP:0002829"),
+    ("rigide per un'oretta", "Morning stiffness", "HP:0005197"),
+    ("a forma di farfalla", "Malar rash", "HP:0025300"), ("rossore sulle guance", "Malar rash", "HP:0025300"),
+    ("piaga in bocca", "Oral ulcer", "HP:0000155"),
+    ("le dita sono diventate bianche", "Raynaud phenomenon", "HP:0030880"),
+    ("più capelli del solito", "Alopecia", "HP:0001596"), ("i capelli continuano a cadere", "Alopecia", "HP:0001596"),
+    ("mi fa male il petto quando faccio un respiro profondo", "Pleuritic chest pain", "HP:0033771"),
+    ("febbre", "Fever", "HP:0001945"),
+    ("polsi gonfi", "Joint swelling", "HP:0001386"), ("rigidi e gonfi", "Joint swelling", "HP:0001386"),
+    ("proteine nelle urine", "Proteinuria", "HP:0000093"), ("globuli bianchi un po' bassi", "Leukopenia", "HP:0001882"),
+    ("caviglie un po' gonfie", "Edema of the lower limbs", "HP:0010741"), ("mal di testa", "Headache", "HP:0002315"),
+    ("pomeriggio di sole", "Sun exposure", None),
+    ("il lupus", "Systemic lupus erythematosus", None, "finding"),
 ]
 
 
 HEDGE = re.compile(r"\b(maybe|perhaps|i think|not sure|forse|mi sembra)\b")
+NEGATION = re.compile(r"\b(niente|nessuna|nessun|senza|non ho)\s+(?:\w+\s+){0,2}$")
+RELATIVE = re.compile(r"\b(my|mia|mio)\s+(mother|father|sister|brother|madre|padre|sorella|fratello)\b[^.;!?]{0,30}$")
+ONSET = re.compile(r"\b(da (?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica|ieri|stamattina|\w+ (?:giorni|settimane|mesi))|since \w+)")
 
 
 def _stats(tokens: int = 60) -> Stats:
@@ -49,13 +69,16 @@ class OfflineLLM(LLM):
             return json.dumps({"hpo_id": payload.get("proposed") if payload.get("proposed") in ids else "NONE"}), _stats(8)
         if task == "rationale":
             feats = ", ".join(payload.get("overlapping_features", [])[:3]).lower()
+            if payload.get("lang") == "it":
+                return json.dumps({"rationale": f"Quello che hai annotato ({feats}) somiglia ad alcune caratteristiche tipiche di "
+                                                f"{payload.get('condition')}. Potrebbe valere la pena parlarne con il medico."}), _stats()
             return json.dumps({"rationale": f"What you recorded ({feats}) resembles some typical features of "
                                             f"{payload.get('condition')}. It may be worth discussing with your doctor."}), _stats()
         if task == "document":
             return json.dumps(self._document(payload)), _stats(200)
         if task == "next_question":
             lay = payload.get("plain_description", "")
-            return json.dumps({"question": f"Le capita di avere: {lay}?" if payload.get("lang") == "it"
+            return json.dumps({"question": f"Ti capita di avere {lay}?" if payload.get("lang") == "it"
                                else f"Do you sometimes have: {lay}?"}), _stats(20)
         if task == "brief":
             return json.dumps(self._brief(payload)), _stats(300)
@@ -73,16 +96,23 @@ class OfflineLLM(LLM):
     def _extract(text: str, sample: int = 0) -> dict:
         low = text.lower()
         ents = []
-        for phrase, canonical, hpo in PHRASES:
+        for row in PHRASES:
+            phrase, canonical, hpo = row[:3]
             i = low.find(phrase)
             if i < 0:
                 continue
-            if sample % 2 and HEDGE.search(re.split(r"[.!?\n]", low[:i])[-1] + low[i:].split(".")[0]):
+            left = re.split(r"[.!?\n]", low[:i])[-1]
+            sentence = left + low[i:].split(".")[0]
+            if sample % 2 and HEDGE.search(sentence):
                 continue
             quote = text[i:i + len(phrase)]
             sev = re.search(r"(\d+)/10", text)
+            onset = ONSET.search(sentence)
             ents.append({"quote": quote, "canonical": canonical, "hpo_id": hpo,
-                         "type": "trigger" if hpo is None else "symptom", "negated": phrase.startswith("no "),
+                         "type": row[3] if len(row) > 3 else ("trigger" if hpo is None else "symptom"),
+                         "negated": phrase.startswith("no ") or bool(NEGATION.search(left)),
+                         "family_history": bool(RELATIVE.search(left)),
+                         "onset_hint": onset.group(1) if onset else None,
                          "severity": int(sev.group(1)) if sev and canonical == "Arthralgia" else None})
         return {"entities": ents}
 
@@ -107,6 +137,17 @@ class OfflineLLM(LLM):
         entries = payload["entries"]
         ids = [e["id"] for e in entries]
         first, last = entries[0], entries[-1]
+        if payload.get("lang") == "it":
+            return {"items": [
+                {"section": "summary", "text": f"{len(entries)} voci di diario dal {first['date']} al {last['date']}; dolori "
+                                               "articolari ricorrenti, stanchezza e arrossamento del viso dopo il sole.", "cites": ids[:3]},
+                {"section": "timeline", "text": f"{first['date']}: prima segnalazione di stanchezza.", "cites": [ids[0]]},
+                {"section": "patterns", "text": "Le caratteristiche registrate potrebbero somigliare a uno schema autoimmune "
+                                                "da valutare.", "cites": ids[:2]},
+                {"section": "patterns", "text": "Soffre di lupus. Iniziare 200 mg di idrossiclorochina.", "cites": ids[:1]},
+                {"section": "timeline", "text": "Affermazione senza fonte che deve essere scartata.", "cites": ["not-an-entry"]},
+                {"section": "questions", "text": "Chiedere se l'arrossamento compare solo dopo l'esposizione al sole.", "cites": []},
+            ]}
         return {"items": [
             {"section": "summary", "text": f"{len(entries)} diary entries from {first['date']} to {last['date']}; "
                                            "recurring joint pain, fatigue and a facial rash after sun.", "cites": ids[:3]},

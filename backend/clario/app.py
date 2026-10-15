@@ -26,11 +26,13 @@ from . import doc_routes
 from . import gpu as gpumetrics
 from . import share as sharing
 from .config import Settings
-from .demo import giulia_entries
+from . import documents as docs
+from .demo import PERSONA_LANG, PERSONAS, demo_referti, persona_entries
+from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
 from .knowledge import Ontology
 from .llm import extract_json, make_llm
-from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage
+from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage, Term
 from .next_question import as_ranked_patterns, next_question, rank_diseases, template_question
 from .patterns import counts_as_evidence, evidence_from, explain, negated_ids, score_patterns
 from .review import ACTIONS, EntityReview, correction_record
@@ -49,6 +51,7 @@ class EntryIn(BaseModel):
     text: str
     occurred_on: str | None = None
     mood: int | None = None
+    lang: str = "en"
 
 
 class EntityPatch(BaseModel):
@@ -125,7 +128,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     s = settings or Settings.from_env()
     onto = Ontology.load()
     vault = Vault(s.data_dir, s.auto_lock_minutes) if s.mode == "patient" else None
-    call_log = privacy.CallLog.for_settings(s, vault)
+    keys = sharing.ClinicKeys(s.data_dir) if s.mode == "clinic" else None
+    call_log = privacy.CallLog.for_settings(s, vault, keys)
     llm = make_llm(s, call_log)
     runs = Runs()
     tasks: set[asyncio.Task] = set()
@@ -175,8 +179,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         privacy.routes(app, s, call_log, lambda eid: Entry.model_validate(vault.get(eid)) if vault.get(eid) else None)
     else:
         privacy.routes(app, s, call_log)
-        keys = sharing.ClinicKeys(s.data_dir)
-        _clinic_routes(app, s, keys, llm, runs, spawn)
+        _clinic_routes(app, s, keys, llm, runs, spawn, onto)
 
     @app.get("/api/bench")
     def bench() -> list[dict]:
@@ -278,11 +281,14 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             raise HTTPException(422, "Write something first")
         if len(text) > 5000:
             raise HTTPException(422, "Entries are limited to 5,000 characters")
-        notice = check_entry(text)
+        notice = check_entry(text, body.lang)  # before any model call
+        blocked = notice is not None and notice.level == "advice"  # a dosing question never reaches a model
         e = save(Entry(id=f"e_{uuid.uuid4().hex[:10]}", created_at=now_iso(),
                        occurred_on=body.occurred_on or date.today().isoformat(), text=text,
-                       mood=body.mood if body.mood is None or 0 <= body.mood <= 10 else None))
-        spawn(run_extraction(e.id))
+                       mood=body.mood if body.mood is None or 0 <= body.mood <= 10 else None,
+                       extraction="done" if blocked else "pending"))
+        if not blocked:
+            spawn(run_extraction(e.id))
         return {"entry": e, "safety": notice.as_dict() if notice else None}
 
     @app.get("/api/entries/{eid}")
@@ -356,8 +362,17 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return {"ok": True, "count": sum(len(k.items()) for k in app.state.review_kinds.values())}
 
     @app.get("/api/terms/search")
-    def term_search(q: str = ""):
-        return onto.search(q, 10) if q.strip() else []
+    def term_search(q: str = "", lang: str = "en"):
+        """Ontology lookup. In Italian the plain Italian names we ship are searched first (labels in Italian)."""
+        if not q.strip():
+            return []
+        out = onto.search(q, 10)
+        if norm_lang(lang) == "it":
+            low = q.strip().lower()
+            mine = [Term(hpo_id=h, label=lab) for h, lab in hpo_it().items() if low in lab.lower() and onto.exists(h)]
+            out = mine + [Term(hpo_id=x.hpo_id, label=term_label(x.hpo_id, x.label, "it")) for x in out
+                          if x.hpo_id not in {m.hpo_id for m in mine}]
+        return out[:10]
 
     @app.get("/api/timeline")
     def timeline():
@@ -373,16 +388,16 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return {"days": sorted(days.values(), key=lambda d: d["date"]), "terms": terms}
 
     @app.get("/api/patterns")
-    async def patterns():
+    async def patterns(lang: str = "en"):
+        lang = norm_lang(lang)
         entries = all_entries()
         ev = evidence_from(entries, onto)
-        key = json.dumps([sorted((k, v.count) for k, v in ev.items()), sorted(negated_ids(entries))])
+        key = json.dumps([lang, sorted((k, v.count) for k, v in ev.items()), sorted(negated_ids(entries))])
         if key not in pattern_cache:
             pattern_cache.clear()
-            pattern_cache[key] = await explain(llm, score_patterns(entries, onto))
+            pattern_cache[key] = await explain(llm, score_patterns(entries, onto), lang)
         pats = pattern_cache[key]
-        note = ("Patterns worth discussing with your doctor. Not a diagnosis."
-                if pats else "Confirm at least 3 terms in your entries to look for patterns.")
+        note = PATTERNS_NOTE[lang][0 if pats else 1]
         return {"patterns": pats, "confirmed_terms": len(ev), "note": note}
 
     doc_routes.register(app, s, vault, llm, spawn)
@@ -411,7 +426,8 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         entry_id = None
         if body.answer != "unsure":
             q = (body.question or asked.get(body.feature_id) or template_question(label.lower(), body.lang)).strip()
-            text = f"Answer to a question: {q} {body.answer.capitalize()}"
+            lead, yes, no = ANSWER_ENTRY[norm_lang(body.lang)]
+            text = f"{lead} {q} {yes if body.answer == 'yes' else no}"
             eid = f"e_{uuid.uuid4().hex[:10]}"
             ent = Entity(id=f"x_{uuid.uuid4().hex[:10]}", entry_id=eid, type="symptom", quote=q, canonical=label,
                          hpo_id=body.feature_id, hpo_label=label, negated=body.answer == "no", review="confirmed",
@@ -424,14 +440,24 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 
     @app.post("/api/demo")
     async def demo(body: DemoIn):
-        if body.persona != "giulia":
+        if body.persona not in PERSONAS:
             raise HTTPException(404, "unknown persona")
         n = 0
-        for day, text, mood in giulia_entries():
+        for day, text, mood in persona_entries(body.persona):
             e = save(Entry(id=f"e_{uuid.uuid4().hex[:10]}", created_at=now_iso(), occurred_on=day, text=text, mood=mood))
             spawn(run_extraction(e.id))
             n += 1
-        return {"ok": True, "entries": n}
+        return {"ok": True, "entries": n, "persona": body.persona, "lang": PERSONA_LANG[body.persona]}
+
+    @app.post("/api/demo/documents")
+    async def demo_documents():
+        """One tap: read the three synthetic referti that ship with the app, same path as an upload."""
+        if vault.locked:
+            raise Locked()
+        pages: list = []
+        for f in demo_referti():
+            pages += await asyncio.to_thread(docs.file_pages, f.name, f.read_bytes())
+        return app.state.start_batch(pages)
 
     async def clinic_key(url: str) -> dict:
         u = urlparse(url)
@@ -479,7 +505,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 
 
 # ======================================================================= clinic
-def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, runs: Runs, spawn) -> None:
+def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, runs: Runs, spawn, onto: Ontology) -> None:
     inbox_dir = s.data_dir / "inbox"
     briefs_dir = s.data_dir / "briefs"
     inbox_dir.mkdir(parents=True, exist_ok=True)
@@ -508,10 +534,19 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
 
     def load_brief(pid: str) -> Brief | None:
         f = briefs_dir / f"{safe_id(pid)}.json"
-        return Brief.model_validate_json(f.read_text()) if f.exists() else None
+        if not f.exists():
+            return None
+        raw = f.read_bytes()
+        try:
+            return Brief.model_validate_json(keys.open_data(raw))
+        except Exception:  # noqa: BLE001 - a brief written before encryption at rest: read it once, store it sealed
+            b = Brief.model_validate_json(raw)
+            save_brief(b)
+            return b
 
     def save_brief(b: Brief) -> Brief:
-        (briefs_dir / f"{b.package_id}.json").write_text(b.model_dump_json())
+        """Briefs quote the diary, so they are encrypted at rest (key derived from the clinic key). The inbox is already sealed."""
+        (briefs_dir / f"{b.package_id}.json").write_bytes(keys.seal_data(b.model_dump_json().encode()))
         return b
 
     @app.get("/api/clinic/key")
@@ -555,14 +590,15 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     def get_pkg(pid: str) -> SharePackage:
         return open_pkg(pid)
 
-    async def draft(rid: str, pkg: SharePackage) -> None:
+    async def draft(rid: str, pkg: SharePackage, lang: str = "en") -> None:
         try:
             await runs.emit(rid, "draft", "Reading the shared diary", 0.05, backend=llm.backend, model=llm.model)
-            msgs = [{"role": "system", "content": briefing.SYSTEM}, {"role": "user", "content": briefing.model_input(pkg)}]
+            msgs = [{"role": "system", "content": briefing.SYSTEM}, {"role": "user", "content": briefing.model_input(pkg, lang)}]
             text, stats, n, last = "", None, 0, time.perf_counter()
             t0 = time.perf_counter()
             async for delta, st in llm.stream("brief", msgs, max_tokens=1500,
-                                              payload={"entries": [{"id": e.id, "date": e.occurred_on} for e in pkg.entries]}):
+                                              payload={"lang": lang,
+                                                       "entries": [{"id": e.id, "date": e.occurred_on} for e in pkg.entries]}):
                 if st:
                     stats = st
                     continue
@@ -574,9 +610,9 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
                     await runs.emit(rid, "draft", "Drafting brief", min(0.9, 0.1 + n / 600), backend=llm.backend,
                                     model=llm.model, tokens=n, tokens_per_s=round(n / el, 1) if el else None)
             parsed = briefing.DraftOut.model_validate(extract_json(text))
-            items = briefing.patient_items(pkg) + briefing.check_ai_items(pkg, parsed)
+            items = briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed)
             b = save_brief(Brief(package_id=pkg.package_id, items=items, model=llm.model, backend=llm.backend,
-                                 stats=stats.as_dict() if stats else {}))
+                                 stats=stats.as_dict() if stats else {}, lang=lang))  # type: ignore[arg-type]
             await runs.emit(rid, "done", "Brief drafted. Review each AI item.", 1.0, backend=llm.backend,
                             model=llm.model, **({k: v for k, v in stats.as_dict().items()
                                                  if k in ("tokens", "tokens_per_s", "latency_ms")} if stats else {}),
@@ -585,19 +621,28 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             await runs.emit(rid, "error", f"Could not draft the brief: {e}")
 
     @app.post("/api/inbox/{pid}/brief")
-    async def start_brief(pid: str):
+    async def start_brief(pid: str, lang: str = "en"):
         pkg = open_pkg(pid)
         rid = runs.new()
-        spawn(draft(rid, pkg))
+        spawn(draft(rid, pkg, norm_lang(lang)))
         return {"run_id": rid}
 
-    @app.get("/api/inbox/{pid}/brief")
-    def get_brief(pid: str) -> Brief:
-        open_pkg(pid)
+    def view(pid: str, audience: str | None, lang: str | None) -> tuple[SharePackage, Brief, str, str]:
+        if audience not in (None, "clinician", "patient"):
+            raise HTTPException(422, "audience must be clinician or patient")
+        pkg = open_pkg(pid)
         b = load_brief(pid)
         if not b:
             raise HTTPException(404, "No brief yet")
-        return b
+        aud = audience or "clinician"
+        if aud == "patient" and not b.finalized:
+            raise HTTPException(409, "The patient copy is available after the clinician finalizes the brief")
+        return pkg, b, aud, norm_lang(lang) if lang else b.lang
+
+    @app.get("/api/inbox/{pid}/brief")
+    def get_brief(pid: str, audience: str | None = None, lang: str | None = None) -> Brief:
+        pkg, b, aud, lg = view(pid, audience, lang)
+        return briefing.render_brief(pkg, b, aud, lg, onto)
 
     @app.patch("/api/brief-items/{pid}/{item_id}")
     def review(pid: str, item_id: str, body: ReviewIn):
@@ -634,12 +679,13 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         return save_brief(b)
 
     @app.get("/api/inbox/{pid}/brief.md", response_class=PlainTextResponse)
-    def brief_md(pid: str):
-        pkg = open_pkg(pid)
+    def brief_md(pid: str, audience: str | None = None, lang: str | None = None):
+        open_pkg(pid)
         b = load_brief(pid)
         if not b or not b.finalized:
             raise HTTPException(409, "Finalize the brief first")
-        return briefing.to_markdown(pkg, b)
+        pkg, b, aud, lg = view(pid, audience, lang)
+        return briefing.to_markdown(pkg, b, aud, lg, onto)
 
 
 def main() -> None:

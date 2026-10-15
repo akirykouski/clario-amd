@@ -6,6 +6,8 @@ import { useAsync } from "../components/useAsync";
 import Inbox from "./Inbox";
 import PackagePage from "./PackagePage";
 import PrivacyPage from "../patient/PrivacyPage";
+import { LangSwitch } from "../components/LangSwitch";
+import { useT } from "../i18n";
 
 export function ComputeBadge({ llm }: { llm: Health["llm"] }) {
   const amd = !!llm.is_amd;
@@ -19,20 +21,22 @@ export function ComputeBadge({ llm }: { llm: Health["llm"] }) {
 }
 
 export default function ClinicApp({ health }: { health: Health }) {
+  const { t } = useT();
   const key = useAsync(() => api.clinicKey(), []);
   return (
     <div className="min-h-screen">
       <header className="no-print border-b border-line bg-panel">
-        <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
-          <Link to="/" className="font-display text-2xl">Clario <span className="text-muted text-base">Clinic</span></Link>
-          <div className="flex items-center gap-4 flex-wrap justify-end">
-            <Link to="/privacy" className="text-sm font-bold text-accent underline underline-offset-4">Model call log</Link>
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-2 min-h-14 flex items-center justify-between gap-x-4 gap-y-2 flex-wrap">
+          <Link to="/" className="font-display text-2xl">Clario <span className="text-muted text-base">{t("clinic.name")}</span></Link>
+          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap justify-end">
+            <Link to="/privacy" className="text-sm font-bold text-accent underline underline-offset-4">{t("clinic.callLog")}</Link>
+            <LangSwitch />
             <ComputeBadge llm={health.llm} />
-            {key.data && <span className="text-sm text-muted inline-flex items-center gap-1.5" title="Clinic key fingerprint"><KeyRound size={14} aria-hidden />{key.data.clinic_name} <span className="font-mono text-ink">{key.data.fingerprint}</span></span>}
           </div>
+          {key.data && <span className="w-full text-sm text-muted inline-flex items-center gap-1.5 flex-wrap" title={t("clinic.keyTitle")}><KeyRound size={14} aria-hidden />{key.data.clinic_name} <span className="font-mono text-ink break-all">{key.data.fingerprint}</span></span>}
         </div>
       </header>
-      <main className="max-w-[1400px] mx-auto px-6 py-5">
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-5">
         <Routes>
           <Route path="/" element={<Inbox />} />
           <Route path="/p/:id" element={<PackagePage />} />

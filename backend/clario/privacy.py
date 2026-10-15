@@ -13,6 +13,7 @@ Medical content (terms, doses, lab values, scores) is deliberately left alone: t
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -233,9 +234,24 @@ class VaultStore:
 class FileStore:
     """Clinic mode: its own append-only JSONL file next to the clinic keys. Holds redacted previews only."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, keys=None):
         self.path = path
+        self.keys = keys  # ClinicKeys: the diary preview text is encrypted at rest when given
         path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _enc(self, rec: dict) -> dict:
+        if self.keys and rec.get("redacted_preview"):
+            rec = {**rec, "redacted_preview": "enc:" + base64.b64encode(self.keys.seal_data(rec["redacted_preview"].encode())).decode()}
+        return rec
+
+    def _dec(self, rec: dict) -> dict:
+        pv = rec.get("redacted_preview")
+        if self.keys and isinstance(pv, str) and pv.startswith("enc:"):
+            try:
+                rec = {**rec, "redacted_preview": self.keys.open_data(base64.b64decode(pv[4:])).decode()}
+            except Exception:  # noqa: BLE001 - wrong key or damaged: show nothing rather than the cipher text
+                rec = {**rec, "redacted_preview": ""}
+        return rec
 
     def records(self) -> list[dict]:
         if not self.path.exists():
@@ -244,14 +260,14 @@ class FileStore:
         for line in self.path.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 try:
-                    recs.append(json.loads(line))
+                    recs.append(self._dec(json.loads(line)))
                 except json.JSONDecodeError:
                     recs.append({"id": "corrupt", "seq": 10 ** 9})
         return sorted(recs, key=lambda r: r.get("seq", 0))
 
     def add(self, rec: dict) -> None:
         with self.path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            f.write(json.dumps(self._enc(rec), ensure_ascii=False) + "\n")
 
 
 class CallLog:
@@ -262,8 +278,8 @@ class CallLog:
         self._pending: list[dict] = []  # calls made while the vault was locked, chained on the next write
 
     @classmethod
-    def for_settings(cls, s, vault: Vault | None) -> "CallLog":
-        return cls(VaultStore(vault) if vault is not None else FileStore(s.data_dir / "ai_calls.jsonl"))
+    def for_settings(cls, s, vault: Vault | None, keys=None) -> "CallLog":
+        return cls(VaultStore(vault) if vault is not None else FileStore(s.data_dir / "ai_calls.jsonl", keys))
 
     def _load_head(self) -> tuple[int, str]:
         recs = self.store.records()

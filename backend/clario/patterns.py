@@ -13,6 +13,7 @@ from collections import defaultdict
 
 from pydantic import BaseModel
 
+from .i18n import disease_name, term_label
 from .knowledge import Ontology
 from .llm import LLM
 from .models import COUNTED, Entity, Entry, Evidence, Pattern, Term
@@ -27,7 +28,7 @@ RATIONALE_SYSTEM = """You help a patient prepare for a doctor's visit. You are g
 typical features overlap with features the patient recorded. Write 2 short sentences in plain words: what overlaps, \
 and that it is worth discussing with their doctor. Use hedged words such as "resembles", "may", "worth discussing". \
 Never say the patient has the condition. Never mention treatment, medicines, doses or percentages. \
-Return JSON: {"rationale": "..."}"""
+Write in the requested language. Return JSON: {"rationale": "..."}"""
 
 
 class RationaleOut(BaseModel):
@@ -95,8 +96,11 @@ def signal_for(score: float, n_matched: int) -> str | None:
     return None
 
 
-def template_rationale(name: str, matched: list[Evidence]) -> str:
+def template_rationale(name: str, matched: list[Evidence], lang: str = "en") -> str:
     feats = ", ".join(m.label.lower() for m in matched[:4])
+    if lang == "it":
+        return (f"Alcune cose che hai annotato ({feats}) coincidono con caratteristiche tipiche di {name}. "
+                f"Potrebbe valere la pena parlarne con il medico, che può dire se è rilevante per te.")
     return (f"Some of what you recorded ({feats}) overlaps with features that are typical of {name}. "
             f"This may be worth discussing with your doctor, who can tell whether it is relevant to you.")
 
@@ -157,16 +161,29 @@ def score_patterns(entries: list[Entry], onto: Ontology) -> list[Pattern]:
     return sorted(out, key=lambda p: (rank[p.signal], -p.score))[:MAX_PATTERNS]
 
 
-async def explain(llm: LLM, patterns: list[Pattern]) -> list[Pattern]:
+def localize(p: Pattern, lang: str) -> Pattern:
+    """Patient-facing copy of a pattern: plain Italian names where we have them, template rationale in Italian."""
+    if lang != "it":
+        return p
+    matched = [e.model_copy(update={"label": term_label(e.hpo_id, e.label, lang)}) for e in p.matched]
+    missing = [Term(hpo_id=t.hpo_id, label=term_label(t.hpo_id, t.label, lang)) for t in p.missing]
+    name = disease_name(p.disease_name, lang)
+    return p.model_copy(update={"matched": matched, "missing": missing, "neutral_label": neutral_label([m.label for m in matched]),
+                                "disease_name": name, "rationale": template_rationale(name, matched, lang)})
+
+
+async def explain(llm: LLM, patterns: list[Pattern], lang: str = "en") -> list[Pattern]:
     """Replace template rationales with model text where the model's text passes the hedge validator."""
+    patterns = [localize(p, lang) for p in patterns]
 
     async def one(p: Pattern) -> Pattern:
         prompt = {"condition": p.disease_name, "overlapping_features": [m.label for m in p.matched],
-                  "typical_features_not_recorded": [t.label for t in p.missing]}
+                  "typical_features_not_recorded": [t.label for t in p.missing],
+                  "language": "Italian" if lang == "it" else "English"}
         try:
             out, _ = await llm.json("rationale", [{"role": "system", "content": RATIONALE_SYSTEM},
                                                   {"role": "user", "content": str(prompt)}],
-                                    RationaleOut, max_tokens=200, payload=prompt)
+                                    RationaleOut, max_tokens=200, payload=prompt | {"lang": lang})
         except Exception:  # noqa: BLE001 - template stays
             return p
         text = out.rationale.strip()

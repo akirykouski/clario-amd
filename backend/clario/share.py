@@ -14,6 +14,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from nacl.public import PrivateKey, PublicKey, SealedBox
 
 from .models import COUNTED, Entry, Pattern, SharedEntity, SharePackage
@@ -43,7 +46,7 @@ def build_package(entries: list[Entry], since: str, until: str, patient_alias: s
         confirmed = [x for x in e.entities if x.review in COUNTED]  # a person decided; needs_review never leaves
         shared_entities += [SharedEntity(entry_id=e.id, occurred_on=e.occurred_on, type=x.type, quote=x.quote,
                                          canonical=x.canonical, hpo_id=x.hpo_id, negated=x.negated,
-                                         family_history=x.family_history, severity=x.severity,
+                                         family_history=x.family_history, severity=x.severity, onset_hint=x.onset_hint,
                                          reviewed=x.review in COUNTED) for x in confirmed]
         slim.append(e.model_copy(update={"entities": confirmed}))
     created = datetime.now(timezone.utc)
@@ -69,6 +72,19 @@ class ClinicKeys:
             path.write_bytes(bytes(PrivateKey.generate()))
             path.chmod(0o600)
         self._sk = PrivateKey(path.read_bytes())
+        # data-at-rest key: HKDF of the clinic's private key (0600 file), same AES-256-GCM as the patient vault
+        self._data = AESGCM(HKDF(hashes.SHA256(), 32, None, b"clario-clinic-data-v1").derive(bytes(self._sk)))
+
+    def seal_data(self, data: bytes) -> bytes:
+        """Encrypt something the clinic stores on disk (briefs, call previews). nonce || ciphertext."""
+        from .vault import Vault
+
+        return Vault._seal(self._data, data)
+
+    def open_data(self, blob: bytes) -> bytes:
+        from .vault import Vault
+
+        return Vault._open(self._data, blob)
 
     @property
     def public_b64(self) -> str:

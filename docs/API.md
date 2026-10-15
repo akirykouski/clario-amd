@@ -16,19 +16,20 @@ Shapes: `backend/clario/models.py`. One codebase, two modes: `CLARIO_MODE=patien
 | POST | `/api/vault/unlock` | `{passphrase}` | `{ok}` or 401 |
 | POST | `/api/vault/lock` | | `{ok}` |
 | GET | `/api/entries` | `?since&until` | `Entry[]` newest first (423 if locked) |
-| POST | `/api/entries` | `{text, occurred_on?, mood?}` | `{entry: Entry, safety: SafetyNotice \| null}`; extraction runs in background |
+| POST | `/api/entries` | `{text, occurred_on?, mood?, lang?: en\|it}` | `{entry: Entry, safety: SafetyNotice \| null}`; extraction runs in background, except for a dosing or medicine-change question (`safety.level = advice`): the entry is saved with `extraction=done`, no entities, and never reaches a model. `lang` words the notice |
 | GET | `/api/entries/{id}` | | `Entry` |
 | DELETE | `/api/entries/{id}` | | `{ok}` |
 | POST | `/api/entries/{id}/extract` | | `Entry` (re-run extraction synchronously) |
 | PATCH | `/api/entities/{id}` | `{review?, canonical?, hpo_id?, severity?, negated?}` (`review`: `auto\|confirmed\|rejected`; legacy `status` is accepted as an alias; setting `hpo_id` alone marks it `corrected`) | `Entity` |
-| GET | `/api/review` | | `{items: ReviewItem[], count}`: entities in `needs_review` (confidence below `CLARIO_REVIEW_THRESHOLD`) |
+| GET | `/api/review` | | `{items: ReviewItem[], count}`: entities and lab rows in `needs_review` (confidence below `CLARIO_REVIEW_THRESHOLD`). `count` feeds the nav badge |
 | POST | `/api/review/{kind}/{id}` | `{action: confirm\|correct\|reject, value?}` | `{ok, count}`; `correct` needs `value` = an HPO id from the term list. Writes a `correction_log` record to the vault (kind, item_id, action, before, after, source_excerpt, ts) |
-| GET | `/api/terms/search` | `?q=` | `Term[]` (ontology lookup for manual fixes) |
+| GET | `/api/terms/search` | `?q=&lang=en\|it` | `Term[]` (ontology lookup for manual fixes; with `lang=it` the shipped plain Italian names are searched first and labels come back in Italian) |
 | GET | `/api/timeline` | | `{days: [{date, entries, terms: [{hpo_id,label}]}], terms: Evidence[]}` |
-| GET | `/api/patterns` | | `{patterns: Pattern[], confirmed_terms: int, note: string}` (computed from confirmed or corrected entities only; negated, family-history, `needs_review` and rejected entities never count) |
+| GET | `/api/patterns` | `?lang=en\|it` | `{patterns: Pattern[], confirmed_terms: int, note: string}` (computed from confirmed or corrected entities only; negated, family-history, `needs_review` and rejected entities never count) |
 | GET | `/api/patterns/next-question` | `?lang=en\|it` | `NextQuestion \| null`: the one yes/no question with the highest expected information gain over the top patterns (null while fewer than 3 confirmed terms or nothing askable). Never names a condition or medicine; red-flag, medicine and lab-only terms are never asked |
 | POST | `/api/patterns/answer` | `{feature_id, answer: "yes"\|"no"\|"unsure", question?, lang?}` | `AnswerResult {before: RankedPattern[5], after: RankedPattern[5], entry_id}`. yes/no saves a diary entry "Answer to a question: <question> Yes\|No" with one confirmed entity (negated for no); unsure only records that it was skipped (`entry_id` null) |
-| POST | `/api/demo` | `{persona: "giulia"}` | loads synthetic entries (marked as demo) |
+| POST | `/api/demo` | `{persona: "giulia" \| "giulia_it"}` | loads synthetic entries (marked as demo): the English persona or "Giulia (IT)", the same clinical picture in colloquial Italian (negation, a relative's condition, onset hints, a 0-10 rating). Returns `{ok, entries, persona, lang}` |
+| POST | `/api/demo/documents` | | reads the 3 synthetic Italian referti shipped with the app, same path as an upload. Returns `{batch_id, pages, entry_id}` |
 | POST | `/api/share` | `ShareRequest` | `{package_id, clinic_url, expires_at, qr_payload, entities: n, entries: n}` |
 | GET | `/api/clinic/key` | `?url=` | proxy fetch of the clinic's public key (shown to the patient as a fingerprint) |
 | POST | `/api/documents/batch` | multipart `files` (PDF, JPEG, PNG; max 400 pages) | `{batch_id, pages, entry_id}`; pages stored encrypted, entry "Imported documents (N pages)", extraction runs in the background |
@@ -40,13 +41,13 @@ Lab rows carry `confidence` (self-consistency across samples when the client has
 
 `Entity.review` is the single state field: `auto` (extracted, not looked at), `needs_review` (self-consistency confidence below the threshold, shown in the review queue), `confirmed`, `corrected`, `rejected` (decided by the patient). Extraction v3 also fills `family_history`, `onset_hint` and `confidence` (null when not measured). Only `confirmed` and `corrected` entities count toward patterns and leave the device in a share.
 
-`ReviewItem = {kind: "entity" (later "lab"), id, entry_id, display, value, confidence, source_excerpt, quote, hpo_label, occurred_on, negated, family_history}`. Other modules add a kind by registering a handler in `app.state.review_kinds` (see `review.py`).
+`ReviewItem = {kind: "entity" \| "lab", id, entry_id, canonical, display, value, confidence, source_excerpt, quote, hpo_label, occurred_on, negated, family_history}`. Lab items add `{flag, page, batch_id, unit, ref_low, ref_high}` (`entry_id` null, `value` = printed value with unit) and use the same `POST /api/review/lab/{id}`: `correct` takes `value` as free text (`5,5` or `Positivo 1:160`), the flag is recomputed in code. Other modules add a kind by registering a handler in `app.state.review_kinds` (see `review.py`); the lab handler is registered by `doc_routes.py`.
 
 `SafetyNotice = {level: "emergency" \| "advice", message, matched}`: returned when the text matches a red-flag rule. Emergency text still saves, but the UI must show the notice first.
 
 Extraction env (patient mode): `CLARIO_SC_N` (self-consistency samples, default 5, 1 disables), `CLARIO_TRUST_MODEL_CONFIDENCE=1` (use the model's own `confidence`), `CLARIO_HPO_PICK` (default 1: second call picks the HPO id from ontology candidates only), `CLARIO_REVIEW_THRESHOLD` (default 0.7).
 
-`SharedEntity` carries `family_history` and `reviewed`; the clinician brief marks any item with `reviewed=false` as "not reviewed by a person".
+`SharedEntity` carries `family_history`, `onset_hint` and `reviewed`; the clinician brief marks any item with `reviewed=false` as "not reviewed by a person".
 
 ## Clinic mode
 | Method | Path | Body | Returns |
@@ -55,12 +56,12 @@ Extraction env (patient mode): `CLARIO_SC_N` (self-consistency samples, default 
 | POST | `/api/inbox` | `{package_id, sealed (base64)}` | `{ok, package_id}` (sealed box to clinic key; rejects expired) |
 | GET | `/api/inbox` | | `[{package_id, patient_alias, period, received_at, expires_at, entities, brief_state}]` |
 | GET | `/api/inbox/{id}` | | `SharePackage` |
-| POST | `/api/inbox/{id}/brief` | | `{run_id}`: drafts the brief with the clinic model; SSE events on `/api/runs/{run_id}/events` |
+| POST | `/api/inbox/{id}/brief` | `?lang=en\|it` | `{run_id}`: drafts the brief with the clinic model; SSE events on `/api/runs/{run_id}/events` |
 | GET | `/api/runs/{run_id}/events` | | SSE `{stage, message, progress, backend, model, tokens_per_s, latency_ms, payload}`; final `done` payload = `Brief` |
-| GET | `/api/inbox/{id}/brief` | | `Brief` |
+| GET | `/api/inbox/{id}/brief` | `?audience=clinician\|patient&lang=it\|en` | `Brief` (carries `lang`, `audience`). Default: the stored clinician brief. `clinician`: clinical terms, HPO ids, severity and onset, family history marked. `patient`: plain words (the patient's own quotes and Italian names where shipped), no condition names, only AI items a clinician accepted or edited that were drafted in the same `lang`; 409 until the brief is finalized |
 | PATCH | `/api/brief-items/{package_id}/{item_id}` | `{review, text?}` | `BriefItem` |
 | POST | `/api/inbox/{id}/brief/finalize` | | `Brief` (409 while any item is `pending`) |
-| GET | `/api/inbox/{id}/brief.md` | | text/markdown of accepted and edited items only, with citations |
+| GET | `/api/inbox/{id}/brief.md` | `?audience&lang` as above | text/markdown of accepted and edited items only, with citations |
 | GET | `/api/bench` | | latest `bench/results/*.json` |
 
 ## Privacy (both modes)
@@ -73,3 +74,9 @@ Text is pseudonymized (`backend/clario/privacy.py`) before a model call when `CL
 | GET | `/api/privacy/preview` | patient only. `?entry_id=` returns `PrivacyPreview` = `{original, redacted, replacements: [{type, start, end, out_start, out_end}], applied, backend}` |
 
 `/api/health` `llm.pseudonymize` reports whether redaction is active. The log stores a 200 char redacted preview and the sha256 of the exact payload sent, never the raw text. Deleting the newest records (tail truncation) is not detectable by the chain alone.
+
+## Safety interceptor, wording and storage
+- Red-flag text and dosing or medicine-change questions (EN and IT: "can I take more ibuprofen", "should I stop my pills", "posso aumentare la dose", "smetto di prendere ...?", and any such question about medicines in pregnancy or breastfeeding) are matched in `safety.check_entry` before any model call. Emergencies return `level=emergency`. Dosing questions return `level=advice`, point to the clinician or pharmacist, and the entry skips extraction. A note that merely mentions a medicine is not blocked.
+- Patient-facing server text honours `lang=it`: safety notices, `/api/patterns` (labels, rationale, note), `/api/patterns/next-question`, the saved answer entry (`Risposta a una domanda: ... Sì|No`). HPO names in Italian come from `clario/data/hpo_it.json` and `lay_terms_it.json`; a term without an entry keeps its English label. Italian next questions are only asked for terms that have an Italian phrase.
+- Clinic mode stores the opened packages sealed to the clinic key (as received) and writes briefs and the call-log previews encrypted with AES-256-GCM under a key derived (HKDF) from the clinic key file. No diary text is written to disk in clear.
+- One extraction prompt: `backend/clario/prompt.py` is a verbatim copy of `train/prompt.py` (a test fails if they differ); the app sends the same system prompt and a single user turn as training. No few-shot.

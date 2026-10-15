@@ -18,8 +18,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Callable, Protocol
 
+from . import documents as docs
 from .knowledge import Ontology
-from .models import Entity, Entry
+from .models import Entity, Entry, LabResult
 
 ACTIONS = ("confirm", "correct", "reject")
 EXCERPT_WIDTH = 90
@@ -40,7 +41,7 @@ def excerpt(text: str, quote: str, width: int = EXCERPT_WIDTH) -> str:
 
 
 def entity_item(entry: Entry, ent: Entity) -> dict:
-    return {"kind": "entity", "id": ent.id, "entry_id": entry.id,
+    return {"kind": "entity", "id": ent.id, "entry_id": entry.id, "canonical": ent.canonical,
             "display": ("No " if ent.negated else "") + ent.canonical,
             "value": ent.hpo_id, "confidence": ent.confidence,
             "source_excerpt": excerpt(entry.text, ent.quote),
@@ -90,6 +91,54 @@ class EntityReview:
                 self._save(e)
                 return {"entry_id": e.id, "source_excerpt": excerpt(e.text, x.quote),
                         "before": _snap(x), "after": _snap(new)}
+        raise LookupError("item not found")
+
+
+def _num(n: float | None) -> str:
+    return "" if n is None else f"{n:.6g}"
+
+
+def lab_item(lab: LabResult) -> dict:
+    """A lab row in queue shape. Text here is language neutral (names, numbers, units); the UI words the rest."""
+    val = _num(lab.value_numeric) if lab.value_numeric is not None else (lab.value_text or "")
+    shown = f"{val} {lab.unit}".strip()
+    rng = (f"{_num(lab.ref_low)} - {_num(lab.ref_high)}" if lab.ref_low is not None and lab.ref_high is not None
+           else f"<= {_num(lab.ref_high)}" if lab.ref_high is not None else f">= {_num(lab.ref_low)}" if lab.ref_low is not None else "")
+    return {"kind": "lab", "id": lab.id, "entry_id": None, "canonical": lab.test_name,
+            "display": f"{lab.test_name}: {shown}", "value": shown, "confidence": lab.confidence,
+            "source_excerpt": f"{lab.test_name}   {shown}" + (f"   ({rng})" if rng else ""),
+            "quote": None, "hpo_label": None, "occurred_on": lab.date, "negated": False, "family_history": False,
+            "flag": lab.flag, "page": lab.page, "batch_id": lab.batch_id, "unit": lab.unit,
+            "ref_low": lab.ref_low, "ref_high": lab.ref_high}
+
+
+def _lab_snap(x: LabResult) -> dict:
+    return {"test_name": x.test_name, "value_numeric": x.value_numeric, "value_text": x.value_text, "unit": x.unit,
+            "ref_low": x.ref_low, "ref_high": x.ref_high, "flag": x.flag, "confidence": x.confidence, "review": x.review,
+            "date": x.date, "page": x.page}
+
+
+class LabReview:
+    """Rows read from scanned lab reports. Same confirm / correct / reject as entities, same log, same badge."""
+
+    def __init__(self, all_labs: Callable[[], list[LabResult]], save: Callable[[LabResult], None]):
+        self._all, self._save = all_labs, save
+
+    def items(self) -> list[dict]:
+        rows = [x for x in self._all() if x.review == "needs_review"]
+        rows.sort(key=lambda x: (x.confidence if x.confidence is not None else 1.0, x.date, x.page))
+        return [lab_item(x) for x in rows]
+
+    def apply(self, item_id: str, action: str, value: str | None) -> dict:
+        for x in self._all():
+            if x.id != item_id:
+                continue
+            if action == "correct" and not (value or "").strip():
+                raise ValueError("correct needs the corrected value")
+            new = docs.apply_lab_action(x, action, docs.parse_lab_value(value or "") if action == "correct" else None)
+            self._save(new)
+            return {"entry_id": None, "source_excerpt": lab_item(x)["source_excerpt"],
+                    "before": _lab_snap(x), "after": _lab_snap(new)}
         raise LookupError("item not found")
 
 

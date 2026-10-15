@@ -53,7 +53,8 @@ class Vault:
 
     # ------------------------------------------------------------ state
     def _meta(self, k: str) -> bytes | None:
-        r = self._db.execute("SELECT v FROM meta WHERE k=?", (k,)).fetchone()
+        with self._lock:
+            r = self._db.execute("SELECT v FROM meta WHERE k=?", (k,)).fetchone()
         return r[0] if r else None
 
     @property
@@ -119,12 +120,14 @@ class Vault:
 
     def get(self, rid: str) -> dict[str, Any] | None:
         k = self._k()
-        r = self._db.execute("SELECT blob FROM records WHERE id=?", (rid,)).fetchone()
+        with self._lock:  # one connection shared by the thread pool: reads must not interleave with writes
+            r = self._db.execute("SELECT blob FROM records WHERE id=?", (rid,)).fetchone()
         return json.loads(self._open(k, r[0])) if r else None
 
     def all(self, kind: str) -> list[dict[str, Any]]:
         k = self._k()
-        rows = self._db.execute("SELECT blob FROM records WHERE kind=?", (kind,)).fetchall()
+        with self._lock:
+            rows = self._db.execute("SELECT blob FROM records WHERE kind=?", (kind,)).fetchall()
         return [json.loads(self._open(k, r[0])) for r in rows]
 
     def delete(self, rid: str) -> None:

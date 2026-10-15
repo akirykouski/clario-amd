@@ -3,30 +3,33 @@ import { api } from "../api";
 import type { AiCall, PrivacyVerify } from "../types";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
+import { getLang, tn, useT } from "../i18n";
 
 export function ChainStatus({ v }: { v: PrivacyVerify }) {
+  const { t } = useT();
   return v.ok ? (
     <p role="status" className="inline-flex items-center gap-2 font-bold" style={{ color: "var(--accent)" }}>
-      <ShieldCheck size={20} aria-hidden /> Log verified. {v.count} call{v.count === 1 ? "" : "s"}, none changed.
+      <ShieldCheck size={20} aria-hidden /> {tn("privacy.verified", v.count)}
     </p>
   ) : (
     <p role="alert" className="inline-flex items-center gap-2 font-bold text-strong">
-      <ShieldAlert size={20} aria-hidden /> Log broken at {v.broken_at}. A record was changed or removed.
+      <ShieldAlert size={20} aria-hidden /> {t("privacy.broken", { id: v.broken_at ?? "" })}
     </p>
   );
 }
 
 export function CallRow({ c }: { c: AiCall }) {
+  const { t } = useT();
   return (
     <li className="card" data-testid="ai-call">
       <div className="flex flex-wrap justify-between gap-x-3 text-sm text-muted">
         <span className="font-mono">{c.id}</span>
-        <time dateTime={c.ts}>{new Date(c.ts).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</time>
+        <time dateTime={c.ts}>{new Date(c.ts).toLocaleString(getLang() === "it" ? "it-IT" : "en-GB", { dateStyle: "medium", timeStyle: "short" })}</time>
       </div>
-      <p className="mt-1 font-bold">{c.purpose.replace("_", " ")} <span className="font-normal text-muted">on {c.backend}, {c.model}</span></p>
+      <p className="mt-1 font-bold">{t(`purpose.${c.purpose}`)} <span className="font-normal text-muted">{t("privacy.on", { backend: c.backend, model: c.model })}</span></p>
       <p className="text-sm">
-        {c.redacted ? `${c.replacements} detail${c.replacements === 1 ? "" : "s"} replaced before sending` : "Sent as written (model on a trusted machine)"}
-        {c.images > 0 && `, ${c.images} image${c.images === 1 ? "" : "s"}`}
+        {c.redacted ? tn("privacy.replaced", c.replacements) : t("privacy.asWritten")}
+        {c.images > 0 && tn("privacy.images", c.images)}
       </p>
       {c.redacted_preview && <p className="mt-1 text-sm text-muted break-words line-clamp-3">{c.redacted_preview}</p>}
     </li>
@@ -34,26 +37,28 @@ export function CallRow({ c }: { c: AiCall }) {
 }
 
 export function CallLogPanel() {
+  const { t } = useT();
   const verify = useAsync(() => api.privacyVerify(), []);
   const calls = useAsync(() => api.privacyCalls(50), []);
   if (verify.loading || calls.loading) return <Loading />;
   if (verify.error || calls.error || !verify.data || !calls.data)
-    return <ErrorBox error={verify.error ?? calls.error ?? "Could not load the log"} retry={() => { verify.reload(); calls.reload(); }} />;
+    return <ErrorBox error={verify.error ?? calls.error ?? t("privacy.loadError")} retry={() => { verify.reload(); calls.reload(); }} />;
   return (
     <div className="space-y-4">
       <ChainStatus v={verify.data} />
       {calls.data.length === 0
-        ? <Empty title="No model calls yet">Each time a note or brief goes to a model, it is listed here.</Empty>
+        ? <Empty title={t("privacy.emptyTitle")}>{t("privacy.emptyText")}</Empty>
         : <ul className="space-y-3">{calls.data.map((c) => <CallRow key={c.id} c={c} />)}</ul>}
     </div>
   );
 }
 
 export default function PrivacyPage() {
+  const { t } = useT();
   return (
     <div className="space-y-4">
-      <h1 className="text-3xl">What left this device</h1>
-      <p className="text-muted">Every call to a model is written to a chain of hashes. Change or remove one record and the check below fails. The log keeps a short redacted preview, never your full text.</p>
+      <h1 className="text-3xl">{t("privacy.title")}</h1>
+      <p className="text-muted">{t("privacy.intro")}</p>
       <CallLogPanel />
     </div>
   );

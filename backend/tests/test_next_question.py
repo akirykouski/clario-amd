@@ -2,6 +2,7 @@ import asyncio
 import json
 
 import numpy as np
+import pytest
 
 from conftest import confirm_all, wait_extracted
 from clario.knowledge import Ontology
@@ -92,8 +93,17 @@ def test_questions_never_name_a_disease_or_a_drug():
     q = asyncio.run(next_question(FakeLLM("Do you have Zeta syndrome?"), onto, es, "en", lay=LAY, min_terms=2))
     assert q and q.question_source == "template" and "zeta" not in q.question.lower()
     assert q.question == template_question(LAY[q.feature_id][0], "en")
-    q = asyncio.run(next_question(FakeLLM("Did you take paracetamol?"), onto, es, "it", lay=LAY, min_terms=2))
-    assert q and q.question.startswith("Le capita di avere")
+    # Italian is asked only with an Italian phrase we wrote: no Italian phrase, no question (never English words in Italian)
+    assert asyncio.run(next_question(FakeLLM("Did you take paracetamol?"), onto, es, "it", lay=LAY, min_terms=2)) is None
+    import clario.next_question as nq
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(nq, "lay_it", lambda: {k: "la prima cosa" for k in LAY})
+    try:
+        q = asyncio.run(next_question(FakeLLM("Did you take paracetamol?"), onto, es, "it", lay=LAY, min_terms=2))
+    finally:
+        mp.undo()
+    assert q and q.question == "Ti capita di avere la prima cosa?"
     ok = asyncio.run(next_question(FakeLLM("Is there a second thing going on?"), onto, es, "en", lay=LAY, min_terms=2))
     assert ok and ok.question_source == "model"
     assert "may" in ok.why and "syndrome" not in ok.why.lower()

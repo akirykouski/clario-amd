@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { api } from "../api";
+import { LangSwitch } from "../components/LangSwitch";
+import { useT } from "../i18n";
 
 export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () => void }) {
+  const { t } = useT();
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
@@ -18,29 +21,30 @@ export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () =
   };
 
   return (
-    <main className="min-h-screen max-w-md mx-auto px-5 py-10 flex flex-col justify-center">
+    <main className="min-h-screen max-w-md mx-auto px-5 py-10 flex flex-col justify-center relative">
+      <div className="absolute top-4 right-5"><LangSwitch /></div>
       <h1 className="text-4xl mb-2">Clario</h1>
-      <p className="text-muted mb-6">{setup ? "A private diary that stays on this device. Choose a passphrase to lock it." : "Your diary is locked. Enter your passphrase to open it."}</p>
+      <p className="text-muted mb-6">{setup ? t("vault.setupIntro") : t("vault.unlockIntro")}</p>
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label htmlFor="pp" className="label">Passphrase{setup && " (at least 12 characters)"}</label>
+          <label htmlFor="pp" className="label">{t("vault.passphrase")}{setup && t("vault.atLeast")}</label>
           <input id="pp" className="input" type="password" autoComplete={setup ? "new-password" : "current-password"} value={pass} onChange={(e) => setPass(e.target.value)} autoFocus />
-          {setup && pass.length > 0 && pass.length < 12 && <p className="text-sm text-muted mt-1">{12 - pass.length} more characters needed.</p>}
+          {setup && pass.length > 0 && pass.length < 12 && <p className="text-sm text-muted mt-1">{t("vault.moreChars", { n: 12 - pass.length })}</p>}
         </div>
         {setup && (
           <div>
-            <label htmlFor="pp2" className="label">Type it again</label>
+            <label htmlFor="pp2" className="label">{t("vault.again")}</label>
             <input id="pp2" className="input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-            {confirm && confirm !== pass && <p className="text-sm text-strong mt-1">The two passphrases differ.</p>}
+            {confirm && confirm !== pass && <p className="text-sm text-strong mt-1">{t("vault.differ")}</p>}
           </div>
         )}
         {setup && (
           <div className="card border-moderate text-[15px]" role="note">
-            <strong>There is no recovery.</strong> Your notes are encrypted with this passphrase. If you forget it, nobody can open them, including us. Write it down somewhere safe.
+            <strong>{t("vault.noRecoveryTitle")}</strong>{t("vault.noRecovery")}
           </div>
         )}
         {err && <p role="alert" className="text-strong text-sm">{err}</p>}
-        <button className="btn btn-primary w-full" disabled={!valid || busy}>{busy ? "One moment" : setup ? "Create diary" : "Unlock"}</button>
+        <button className="btn btn-primary w-full" disabled={!valid || busy}>{busy ? t("common.oneMoment") : setup ? t("vault.create") : t("vault.unlock")}</button>
       </form>
     </main>
   );

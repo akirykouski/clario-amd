@@ -22,35 +22,83 @@ class SafetyNotice:
         return {"level": self.level, "message": self.message, "matched": self.matched}
 
 
+# (pattern, label in English, label in Italian)
 _EMERGENCY = [
-    (r"\b(chest (pain|pressure|tightness))\b.*\b(breath|arm|jaw|sweat)", "chest pain with other warning signs"),
-    (r"\b(can'?t|cannot|unable to|struggling to) breathe\b|\bthroat (is )?(closing|swelling)\b", "trouble breathing"),
-    (r"\b(face (is )?droop|slurred speech|one side of (my|the) (body|face) (is )?(numb|weak))", "stroke signs"),
-    (r"\b(kill myself|end my life|suicid|want to die|self[- ]harm|hurt myself)\b", "thoughts of self-harm"),
-    (r"\b(coughing|vomiting|throwing up) (up )?blood\b|\bbleeding (that )?(won'?t|will not) stop\b", "serious bleeding"),
-    (r"\bseizure\b.*\b(won'?t stop|more than 5 minutes|five minutes)\b", "prolonged seizure"),
-    (r"\b(passed out|fainted|lost consciousness)\b.*\b(hit my head|chest|heart)\b", "fainting with injury or chest symptoms"),
+    (r"\b(chest (pain|pressure|tightness))\b.*\b(breath|arm|jaw|sweat)", "chest pain with other warning signs",
+     "dolore al petto con altri segnali di allarme"),
+    (r"\b(can'?t|cannot|unable to|struggling to) breathe\b|\bthroat (is )?(closing|swelling)\b", "trouble breathing",
+     "difficoltà a respirare"),
+    (r"\b(face (is )?droop|slurred speech|one side of (my|the) (body|face) (is )?(numb|weak))", "stroke signs",
+     "segni di ictus"),
+    (r"\b(kill myself|end my life|suicid|want to die|self[- ]harm|hurt myself)\b", "thoughts of self-harm",
+     "pensieri di farsi del male"),
+    (r"\b(coughing|vomiting|throwing up) (up )?blood\b|\bbleeding (that )?(won'?t|will not) stop\b", "serious bleeding",
+     "sanguinamento grave"),
+    (r"\bseizure\b.*\b(won'?t stop|more than 5 minutes|five minutes)\b", "prolonged seizure", "crisi convulsiva prolungata"),
+    (r"\b(passed out|fainted|lost consciousness)\b.*\b(hit my head|chest|heart)\b",
+     "fainting with injury or chest symptoms", "svenimento con trauma o sintomi al petto"),
     # Italian
-    (r"\b(dolore al petto)\b.*\b(respir|braccio|mascella|sudor)", "dolore al petto con altri segnali"),
-    (r"\b(non riesco a respirare|gola (che )?si chiude)\b", "difficoltà a respirare"),
-    (r"\b(voglio morire|farla finita|uccidermi|farmi del male)\b", "pensieri di farsi del male"),
+    (r"\b(dolore al petto)\b.*\b(respir|braccio|mascella|sudor)", "chest pain with other warning signs",
+     "dolore al petto con altri segnali di allarme"),
+    (r"\b(non riesco a respirare|gola (che )?si chiude)\b", "trouble breathing", "difficoltà a respirare"),
+    (r"\b(voglio morire|farla finita|uccidermi|farmi del male)\b", "thoughts of self-harm", "pensieri di farsi del male"),
+    (r"\b(sputo sangue|vomito sangue|emorragia che non si ferma)\b", "serious bleeding", "sanguinamento grave"),
 ]
 
 _SELF_HARM_KEYS = ("self-harm", "pensieri di farsi")
+TELEFONO_AMICO = "02 2327 2327"
 
 
-def check_entry(text: str) -> SafetyNotice | None:
+_MED = (r"(?:ibuprofen\w*|paracetamol\w*|acetaminophen|aspirin\w*|naproxen\w*|cortisone|prednison\w*|steroid\w*|antibiotic\w*|"
+        r"pills?|meds?|medic\w+|dos(?:e|es|age)|tablets?|capsules?|drugs?|mg|farmac\w+|pastigli\w+|compress\w+|pillol\w+|"
+        r"dosi|terapia|ibuprofene|paracetamolo|aspirina|antibiotic\w*|antidolorific\w*|antinfiammator\w*)")
+_CHANGE = (r"(?:take|taking|use|double|increase|decrease|reduce|skip|stop|quit|start|switch|mix|combine|"
+           r"prendere|prendo|aumentare|ridurre|raddoppiare|smettere|sospendere|saltare|assumere|usare|combinare)")
+_Q_CUE = r"(?:\?|\b(?:can|could|should|may|is it|are they|safe|ok to|okay to|posso|potrei|devo|dovrei|conviene|si può|è sicuro|e se)\b)"
+# (pattern, label en, label it). A dosing or medicine-change QUESTION, not a note that mentions a medicine.
+_DOSING = [
+    (rf"\b(?:can|could|should|may|do) i\b[^.?!]{{0,30}}\b{_CHANGE}\b[^.?!]{{0,40}}\b{_MED}\b", "medicine question", "domanda sui farmaci"),
+    (rf"\b(?:is it|are they) (?:ok|okay|safe)\b[^.?!]{{0,20}}\b{_CHANGE}\b[^.?!]{{0,40}}\b{_MED}\b", "medicine question", "domanda sui farmaci"),
+    (rf"\bhow (?:much|many)\b[^.?!]{{0,30}}\b{_MED}\b[^.?!]{{0,20}}\b(?:should|can|do) i\b", "medicine question", "domanda sui farmaci"),
+    (rf"\b(?:posso|potrei|devo|dovrei|conviene|si può)\b[^.?!]{{0,40}}\b{_CHANGE}\b[^.?!]{{0,50}}\b{_MED}\b", "medicine question", "domanda sui farmaci"),
+    (rf"\b(?:smetto|sospendo|salto|raddoppio|aumento|riduco|prendo)\b[^.?!]{{0,40}}\b{_MED}\b[^.!]{{0,20}}\?", "medicine question", "domanda sui farmaci"),
+    (rf"\b(?:e se|se) (?:smetto|sospendo|salto|raddoppio|aumento|riduco)\b", "medicine question", "domanda sui farmaci"),
+    (rf"\b(?:pregnan\w*|breastfeeding|trying to conceive|incinta|gravidanza|allatt\w+)\b[^.!]{{0,80}}\b{_MED}\b[^.!]{{0,60}}{_Q_CUE}",
+     "medicine in pregnancy", "farmaci in gravidanza"),
+    (rf"{_Q_CUE}[^.!]{{0,60}}\b{_MED}\b[^.!]{{0,80}}\b(?:pregnan\w*|breastfeeding|trying to conceive|incinta|gravidanza|allatt\w+)\b",
+     "medicine in pregnancy", "farmaci in gravidanza"),
+]
+
+
+def check_entry(text: str, lang: str = "en") -> SafetyNotice | None:
+    """Red-flag interceptor. Runs on the raw text before any model call. `lang` only picks the wording of the notice."""
     low = text.lower()
-    for pat, label in _EMERGENCY:
+    it = lang == "it"
+    for pat, label_en, label_it in _EMERGENCY:
         if re.search(pat, low):
-            if any(k in label for k in _SELF_HARM_KEYS):
-                msg = (f"You wrote something that sounds like thoughts of hurting yourself. You do not have to "
+            label = label_it if it else label_en
+            if label_en == "thoughts of self-harm":
+                msg = (f"Hai scritto qualcosa che sembra il pensiero di farti del male. Non devi affrontarlo da sola o da solo. "
+                       f"Se sei in pericolo adesso, chiama il {EMERGENCY_NUMBER}. In Italia puoi anche chiamare Telefono Amico "
+                       f"{TELEFONO_AMICO}." if it else
+                       f"You wrote something that sounds like thoughts of hurting yourself. You do not have to "
                        f"handle this alone. If you are in danger now, call {EMERGENCY_NUMBER}. In Italy you can "
-                       f"also call Telefono Amico 02 2327 2327.")
+                       f"also call Telefono Amico {TELEFONO_AMICO}.")
             else:
-                msg = (f"What you wrote can be a sign of an emergency ({label}). If it is happening now, call "
+                msg = (f"Quello che hai scritto può essere il segno di un'emergenza ({label}). Se sta succedendo adesso, chiama il "
+                       f"{EMERGENCY_NUMBER}. Clario è un diario e non può aiutare in un'emergenza." if it else
+                       f"What you wrote can be a sign of an emergency ({label}). If it is happening now, call "
                        f"{EMERGENCY_NUMBER}. Clario is a diary and cannot help in an emergency.")
             return SafetyNotice("emergency", msg, label)
+    for pat, label_en, label_it in _DOSING:
+        if re.search(pat, low):
+            msg = ("Le domande su dosi, su smettere o cambiare un farmaco, o su farmaci in gravidanza sono per il medico o il "
+                   "farmacista: Clario non può rispondere. Parlane con loro prima di cambiare qualcosa. La nota è stata salvata "
+                   "e non viene inviata a nessun modello." if lang == "it" else
+                   "Questions about doses, stopping or changing a medicine, or medicines in pregnancy are for your clinician "
+                   "or pharmacist. Clario cannot answer them. Talk to them before you change anything. Your note was saved "
+                   "and is not sent to any model.")
+            return SafetyNotice("advice", msg, label_it if lang == "it" else label_en)
     return None
 
 
@@ -62,8 +110,14 @@ _BANNED = [
     r"\b\d+\s?(mg|mcg|ml)\b",
     r"\b(prescribe|treatment plan|cure|you should take)\b",
     r"\b\d{1,3}\s?%",
+    # Italian
+    r"\b(soffri|soffre) di\b|\b(sei|è) (affett[oa]|malat[oa]) (da|di)\b",
+    r"\bdiagnos\w+|\b(conferma\w*|confermato|sicuramente|certamente|senza dubbio)\b",
+    r"\b(inizia\w*|inizi|smett\w+|aument\w+|ridu\w+|assum\w+|prend\w+)\b[^.]{0,30}\b(dose|dosi|farmac\w+|medicin\w+|compress\w+|pillol\w+|mg)\b",
+    r"\b(prescriv\w+|piano terapeutico|terapia consigliata|dovresti prendere|deve prendere)\b",
 ]
-_HEDGES = re.compile(r"\b(resembl|may|might|could|worth discussing|consider|pattern|overlap|similar)\w*", re.I)
+_HEDGES = re.compile(r"\b(resembl|may|might|could|worth discussing|consider|pattern|overlap|similar|somigli|potrebb|forse|"
+                     r"vale la pena|da valutare|da discutere|schem[ai]|sovrappon|simil|compatibil|ricorda)\w*", re.I)
 
 
 def hedge_problems(text: str) -> list[str]:
