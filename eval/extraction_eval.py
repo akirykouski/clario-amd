@@ -10,6 +10,7 @@
 Pass --confidence to use the prompt variant that asks for a confidence field (needed for ECE and review_curve.py).
 """
 import importlib.util
+import json
 import os
 import sys
 
@@ -31,4 +32,11 @@ if __name__ == "__main__":
     argv = sys.argv[1:]
     if "--out-dir" not in argv:
         argv += ["--out-dir", os.path.join(HERE, "results")]
-    core.main(argv)
+    res = core.main(argv)
+    # Provenance: add the hardware record (env CLARIO_HARDWARE from bootstrap.sh, else amd-smi on this host).
+    sys.path.insert(0, HERE)
+    import hardware
+    path = os.path.join(argv[argv.index("--out-dir") + 1], f"extraction_{res['label']}.json")
+    res["hardware"] = ({"gpu_name": "none (offline dry run)", "gpu_count": None, "vram_total_gb": None, "source": "none"}
+                       if res.get("dry_run") else hardware.detect())
+    json.dump(res, open(path, "w"), indent=2)

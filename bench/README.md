@@ -6,7 +6,10 @@ Measures an OpenAI-compatible endpoint on two Clario workloads:
 
 Records per concurrency level: req/s, aggregate output tokens/s, p50/p95 latency, TTFT (with `--stream`), errors, mean prompt/output tokens. Output: `results/<label>-<timestamp>.json` plus a `.md` table.
 
+Workloads in `--workload`: `extract`, `brief`, `both` (default), `sc`, `all`. `sc` is the self-consistency path: the extract prompt with `n=--sc-n` (default 5) samples per request at temperature 0.7. The result carries `self_consistency` rows: latency, output tokens per item and items per second as multiples of plain `extract` at the same concurrency. GPU utilisation and peak VRAM per level come from `--gpu-samples FILE` (the host sampler `python3 eval/hardware.py sample --out FILE`, used by `deploy/amd/bootstrap.sh`) or, when amd-smi is on PATH, from an in-process 1 Hz sampler. Every run also writes `eval/results/bench_<label>.json` with `hardware`. anthropic.com is refused.
+
 ## AMD numbers
+`deploy/amd/bootstrap.sh --step bench` runs the command below with the sampler attached.
 **AMD MI300X numbers exist only if this is run on the droplet against the real vLLM endpoint.** Nothing in `results/` labelled `amd-*` may come from anywhere else. Run on the droplet (see `deploy/amd/README.md`):
 ```bash
 LLM_API_KEY=$VLLM_API_KEY uv run --with openai --with httpx python bench/bench.py \

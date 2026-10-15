@@ -35,6 +35,9 @@ python train_grpo.py --dry-run                                        # toy rewa
 ```
 Offline rows come from a fixed template, not a model. They test the pipeline and are never a result.
 
+## One command on the droplet
+`deploy/amd/bootstrap.sh --all` runs synth, prep, train (E4B LoRA r16), eval (base vs tuned, review curve), bench and the results table with a resumable stamp per step; see `deploy/amd/README.md`. Each result file in `eval/results/` carries n, dataset, model, backend, date and `hardware`. The manual steps below are the same commands for debugging one piece.
+
 ## MI300X droplet, step by step
 1. Create an AMD Developer Cloud MI300X droplet (ROCm + Docker image). Confirm: `rocm-smi`, `docker ps`.
 2. `git clone` / copy `train/` to the droplet. `export HF_TOKEN=...` (Gemma 4 weights are on HF; accept the license if prompted). Never write the token to a file.

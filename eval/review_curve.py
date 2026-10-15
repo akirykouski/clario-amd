@@ -66,7 +66,7 @@ def item_points(items):
 def build(res):
     items = res["per_item"]
     ep, ip = entity_points(items), item_points(items)
-    out = {k: res[k] for k in ("label", "dataset", "model", "backend") if k in res}
+    out = {k: res[k] for k in ("label", "dataset", "model", "backend", "hardware") if k in res}
     out.update({"date": datetime.date.today().isoformat(), "source_result": f"extraction_{res['label']}.json",
                 "n": res["n"], "n_entities_with_confidence": len(ep), "n_items_scored": len(ip),
                 "unrouted_misses": res.get("fn"),
