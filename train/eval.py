@@ -1,12 +1,23 @@
-"""Score any OpenAI-compatible endpoint on the val split. Usage:
-  python eval.py --dry-run
-  python eval.py --base-url http://localhost:8000/v1 --model NAME --label base --api-key-env KEY --limit 20
+"""Score any OpenAI-compatible endpoint on extraction v3 gold rows. Usage:
+  python eval.py --dry-run                                  # gold vs gold, offline, must print F1 1.000
+  python eval.py --base-url http://localhost:8000/v1 --model NAME --label base-e4b --api-key-env KEY
+  python eval.py --base-url https://api.anthropic.com/v1/ --model claude-haiku-5-5 --api-key-env ANTHROPIC_API_KEY \
+      --label haiku-baseline            # eval-only comparator; Claude output never becomes training data
+
+Writes <out-dir>/extraction_<label>.json with n, dataset, model, backend, date and every metric.
+Metrics: entity F1 (HPO id), fuzzy-name F1, HPO-ID accuracy, negation / family-history / onset /
+severity accuracy on matched entities, quote grounding, JSON validity (lenient parse) and strict
+v3 schema validity, ECE and Brier when the model emits confidence, latency p50/p95.
+Gold rows: {"diary", "target": {"entities": [...]}} in v3 or the older dataset shape.
+A row with "gold_complete": false (PsyTAR) means unlabelled mentions exist, so precision is a lower bound.
 """
-import argparse, difflib, json, os, statistics, sys, time
+import argparse, datetime, difflib, json, os, sys, time
 from concurrent.futures import ThreadPoolExecutor
-from prompt import build_messages, from_dataset_entities, parse
+from prompt import build_messages, from_dataset_entities, parse, strict_valid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_OUT = os.path.join(os.path.dirname(HERE), "eval", "results")
+DEFAULT_DATA = os.path.join(HERE, "data", "v3", "test.jsonl")
 
 
 def _norm(s):
@@ -20,6 +31,12 @@ def _prf(tp, fp, fn):
     return p, r, f
 
 
+def ekey(e):
+    """Identity of an entity: its HPO id, or the normalised quote when it has none (triggers)."""
+    h = (e.get("hpo_id") or "").upper()
+    return h if h else "Q:" + _norm(e.get("quote", ""))
+
+
 def match_counts(gold, pred, key):
     """Multiset match on key(entity). Returns tp, fp, fn."""
     g = [key(e) for e in gold]; tp = 0
@@ -28,6 +45,30 @@ def match_counts(gold, pred, key):
         if k in g:
             g.remove(k); tp += 1
     return tp, len(pred) - tp, len(gold) - tp
+
+
+def pred_correct(gold, pred, key=ekey):
+    """Per-prediction tp flag under the multiset match on key (first come, first served)."""
+    g = [key(e) for e in gold]; flags = []
+    for e in pred:
+        k = key(e)
+        ok = k in g
+        if ok:
+            g.remove(k)
+        flags.append(ok)
+    return flags
+
+
+def pair_entities(gold, pred):
+    """One-to-one (gold, pred) pairs: same key first, then same normalised quote."""
+    pairs, gf, pf = [], list(range(len(gold))), list(range(len(pred)))
+    for rule in (lambda e: ekey(e), lambda e: _norm(e.get("quote", ""))):
+        for gi in list(gf):
+            for pi in pf:
+                if rule(gold[gi]) == rule(pred[pi]):
+                    pairs.append((gold[gi], pred[pi])); gf.remove(gi); pf.remove(pi)
+                    break
+    return pairs
 
 
 def fuzzy_counts(gold, pred, thr=0.85):
@@ -48,54 +89,120 @@ def grounded(diary, quote):
     return bool(quote) and quote.lower() in diary.lower()
 
 
+def calibration(points, bins=10):
+    """points: [(confidence, correct)] -> (ece, brier). Equal-width bins; None when there are no points."""
+    if not points:
+        return None, None
+    n = len(points); ece = 0.0; table = {}
+    for c, ok in points:
+        b = min(bins - 1, int(c * bins))
+        table.setdefault(b, []).append((c, ok))
+    for rows in table.values():
+        conf = sum(c for c, _ in rows) / len(rows); acc = sum(ok for _, ok in rows) / len(rows)
+        ece += abs(conf - acc) * len(rows) / n
+    return ece, sum((c - ok) ** 2 for c, ok in points) / n
+
+
+def _acc(num, den):
+    return num / den if den else None
+
+
 def score(records):
     """records: [{diary, gold:[entity], pred:[entity]|None}] -> metrics dict."""
-    hp = [0, 0, 0]; fz = [0, 0, 0]; n_valid = 0; gq = 0; nq = 0
-    idok = 0; idn = 0
+    hp = [0, 0, 0]; fz = [0, 0, 0]; n_valid = 0; n_strict = 0; gq = 0; nq = 0
+    idok = idn = 0
+    neg = [0, 0]; fam = [0, 0]; ons = [0, 0]; sev = [0, 0]
+    points = []; per_item = []; complete = True
     for r in records:
         pred = r["pred"]
         if pred is not None:
             n_valid += 1
+        if r.get("strict"):
+            n_strict += 1
         pred = pred or []
-        for i, v in enumerate(match_counts(r["gold"], pred, lambda e: e["hpo_id"].upper())): hp[i] += v
-        for i, v in enumerate(fuzzy_counts(r["gold"], pred)): fz[i] += v
+        gold = r["gold"]
+        complete = complete and r.get("gold_complete", True)
+        for i, v in enumerate(match_counts(gold, pred, ekey)): hp[i] += v
+        for i, v in enumerate(fuzzy_counts(gold, pred)): fz[i] += v
         for e in pred:
             nq += 1; gq += grounded(r["diary"], e["quote"])
-        # HPO-ID accuracy: gold entity whose quote is matched (case-insens) by a pred with the same id
-        for g in r["gold"]:
+        # HPO-ID accuracy: gold entity with an id whose quote is matched (case-insens) by a pred with the same id
+        for g in gold:
+            if not g.get("hpo_id"):
+                continue
             idn += 1
-            idok += any(_norm(p["quote"]) == _norm(g["quote"]) and p["hpo_id"].upper() == g["hpo_id"].upper() for p in pred)
+            idok += any(_norm(p["quote"]) == _norm(g["quote"]) and (p.get("hpo_id") or "").upper() == g["hpo_id"].upper()
+                        for p in pred)
+        if r.get("gold_complete", True) and not r.get("partial"):
+            for g, p in pair_entities(gold, pred):
+                neg[1] += 1; neg[0] += bool(g.get("negated")) == bool(p.get("negated"))
+                fam[1] += 1; fam[0] += bool(g.get("family_history")) == bool(p.get("family_history"))
+                if g.get("onset_hint"):
+                    ons[1] += 1; ons[0] += _norm(p.get("onset_hint") or "") == _norm(g["onset_hint"])
+                if g.get("severity") is not None:
+                    sev[1] += 1; sev[0] += p.get("severity") == g["severity"]
+        flags = pred_correct(gold, pred)
+        ents = []
+        for e, ok in zip(pred, flags):
+            if e.get("confidence") is not None:
+                points.append((e["confidence"], int(ok)))
+                ents.append({"confidence": e["confidence"], "correct": int(ok)})
+        per_item.append({"id": r.get("id"), "n_gold": len(gold), "n_pred": len(pred), "entities": ents})
     p, rc, f = _prf(*hp); fp_, fr_, ff_ = _prf(*fz)
     n = len(records)
-    return {
+    ece, brier = calibration(points)
+    out = {
         "n": n,
         "entity_precision": p, "entity_recall": rc, "entity_f1": f,
         "fuzzy_precision": fp_, "fuzzy_recall": fr_, "fuzzy_f1": ff_,
         "hpo_id_accuracy": idok / idn if idn else 1.0,
+        "negation_accuracy": _acc(*neg), "family_history_accuracy": _acc(*fam),
+        "onset_accuracy": _acc(*ons), "severity_accuracy": _acc(*sev),
         "json_validity_rate": n_valid / n if n else 0.0,
+        "schema_valid_rate": n_strict / n if n else 0.0,
         "quote_grounding_rate": gq / nq if nq else (1.0 if n else 0.0),
-        "tp": hp[0], "fp": hp[1], "fn": hp[2],
+        "ece": ece, "brier": brier, "n_confidence_entities": len(points),
+        "confidence_coverage": len(points) / nq if nq else None,
+        "tp": hp[0], "fp": hp[1], "fn": hp[2], "n_gold_entities": hp[0] + hp[2],
+        "n_matched_pairs": neg[1], "gold_complete": complete,
     }
+    if points:
+        out["per_item"] = per_item
+    return out
 
 
 def load_gold(path):
     rows = [json.loads(l) for l in open(path) if l.strip()]
-    return [{"diary": r["diary"], "gold": from_dataset_entities(r["target"]["entities"])} for r in rows]
+    return [{"id": r.get("id"), "diary": r["diary"], "gold": from_dataset_entities(r["target"]["entities"]),
+             "gold_complete": r.get("gold_complete", True), "partial": r.get("partial", False)} for r in rows]
 
 
-def call(base_url, model, key, diary, max_tokens, timeout):
-    import requests
+def make_complete(base_url, model, key, max_tokens=1024, timeout=300, confidence=False):
+    """-> complete(diary) -> (text, seconds, completion_tokens) against an OpenAI-compatible endpoint."""
+    from openai import OpenAI
+    client = OpenAI(base_url=base_url, api_key=key or "none", timeout=timeout, max_retries=2)
+
+    def complete(diary):
+        t0 = time.time()
+        r = client.chat.completions.create(model=model, messages=build_messages(diary, confidence=confidence),
+                                           temperature=0, max_tokens=max_tokens)
+        dt = time.time() - t0
+        return r.choices[0].message.content or "", dt, (r.usage.completion_tokens if r.usage else 0)
+    return complete
+
+
+def run_records(gold, complete, concurrency=4):
+    """Run complete(diary) over gold rows. Returns (records, wall_seconds)."""
+    def one(g):
+        try:
+            text, dt, toks = complete(g["diary"])
+            return {**g, "pred": parse(text), "strict": strict_valid(text), "dt": dt, "toks": toks, "raw": text, "err": None}
+        except Exception as e:
+            return {**g, "pred": None, "strict": False, "dt": 0.0, "toks": 0, "raw": "", "err": repr(e)}
     t0 = time.time()
-    resp = requests.post(base_url.rstrip("/") + "/chat/completions",
-                         headers={"Authorization": f"Bearer {key}"} if key else {},
-                         json={"model": model, "messages": build_messages(diary), "temperature": 0,
-                               "max_tokens": max_tokens}, timeout=timeout)
-    dt = time.time() - t0
-    resp.raise_for_status()
-    j = resp.json()
-    text = j["choices"][0]["message"].get("content") or ""
-    toks = (j.get("usage") or {}).get("completion_tokens", 0)
-    return text, dt, toks
+    with ThreadPoolExecutor(concurrency) as ex:
+        recs = list(ex.map(one, gold))
+    return recs, time.time() - t0
 
 
 def pct(xs, q):
@@ -103,56 +210,74 @@ def pct(xs, q):
     xs = sorted(xs); return xs[min(len(xs) - 1, int(round(q * (len(xs) - 1))))]
 
 
+def infer_backend(url):
+    u = (url or "").lower()
+    if "anthropic.com" in u: return "anthropic-openai-compat"
+    if "11434" in u: return "ollama"
+    return "openai-compatible"
+
+
 def table(label, m):
+    def f(v): return "n/a" if v is None else f"{v:.3f}"
     rows = [("entity F1 (HPO id)", m["entity_f1"]), ("precision", m["entity_precision"]), ("recall", m["entity_recall"]),
             ("fuzzy-name F1", m["fuzzy_f1"]), ("HPO-ID accuracy", m["hpo_id_accuracy"]),
-            ("JSON validity", m["json_validity_rate"]), ("quote grounding", m["quote_grounding_rate"])]
+            ("negation accuracy", m["negation_accuracy"]), ("family-history accuracy", m["family_history_accuracy"]),
+            ("onset accuracy", m["onset_accuracy"]), ("severity accuracy", m["severity_accuracy"]),
+            ("quote grounding", m["quote_grounding_rate"]), ("JSON validity", m["json_validity_rate"]),
+            ("schema valid (strict)", m["schema_valid_rate"]), ("ECE", m["ece"]), ("Brier", m["brier"])]
     out = [f"| metric ({label}, n={m['n']}) | value |", "|---|---|"]
-    out += [f"| {k} | {v:.3f} |" for k, v in rows]
+    out += [f"| {k} | {f(v)} |" for k, v in rows]
     for k in ("latency_p50_s", "latency_p95_s", "tokens_per_s"):
         if k in m: out.append(f"| {k} | {m[k]:.2f} |")
     return "\n".join(out)
 
 
-def main():
+def build_result(m, label, dataset, model, backend, **extra):
+    """Result file body: provenance fields first, then metrics. Every number in the repo traces to one of these."""
+    head = {"label": label, "dataset": dataset, "model": model, "backend": backend,
+            "date": datetime.date.today().isoformat(), "n": m["n"]}
+    return {**head, **{k: v for k, v in m.items() if k != "n"}, **extra}
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-url"); ap.add_argument("--model"); ap.add_argument("--api-key-env", default="")
-    ap.add_argument("--data", default=os.path.join(HERE, "data", "val_gold.jsonl"))
+    ap.add_argument("--data", default=DEFAULT_DATA)
+    ap.add_argument("--dataset", default="", help="dataset name recorded in the result (default: file path tail)")
+    ap.add_argument("--backend", default="", help="e.g. vllm-rocm-mi300x, ollama, lemonade (default: inferred from URL)")
     ap.add_argument("--label", default="run"); ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--confidence", action="store_true", help="ask for a confidence field (prompt variant)")
     ap.add_argument("--concurrency", type=int, default=4); ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--timeout", type=float, default=300); ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--out-dir", default=os.path.join(HERE, "results"))
-    a = ap.parse_args()
+    ap.add_argument("--out-dir", default=DEFAULT_OUT)
+    a = ap.parse_args(argv)
     gold = load_gold(a.data)
     if a.limit: gold = gold[:a.limit]
     os.makedirs(a.out_dir, exist_ok=True)
+    dataset = a.dataset or "/".join(os.path.normpath(a.data).split(os.sep)[-2:])
     if a.dry_run:
-        recs = [{**g, "pred": parse(json.dumps({"entities": g["gold"]}))} for g in gold]
-        m = score(recs); label = "dry-run-gold-vs-gold"
+        recs = [{**g, "pred": parse(json.dumps({"entities": g["gold"]})), "strict": True} for g in gold]
+        m = score(recs); label = "dryrun-gold-vs-gold"
         m.update(latency_p50_s=0.0, latency_p95_s=0.0, tokens_per_s=0.0)
+        res = build_result(m, label, dataset, "gold-copy", "offline-dry-run", dry_run=True,
+                           note="gold scored against itself, no model; checks the scorer only, not a model result")
     else:
         if not (a.base_url and a.model): ap.error("--base-url and --model required")
         key = os.environ.get(a.api_key_env, "") if a.api_key_env else "none"
-        def one(g):
-            try:
-                text, dt, toks = call(a.base_url, a.model, key, g["diary"], a.max_tokens, a.timeout)
-                return {**g, "pred": parse(text), "dt": dt, "toks": toks, "raw": text, "err": None}
-            except Exception as e:
-                return {**g, "pred": None, "dt": 0.0, "toks": 0, "raw": "", "err": repr(e)}
-        t0 = time.time()
-        with ThreadPoolExecutor(a.concurrency) as ex: recs = list(ex.map(one, gold))
-        wall = time.time() - t0
+        complete = make_complete(a.base_url, a.model, key, a.max_tokens, a.timeout, a.confidence)
+        recs, wall = run_records(gold, complete, a.concurrency)
         m = score(recs); label = a.label
         lat = [r["dt"] for r in recs if r["err"] is None]
         m.update(latency_p50_s=pct(lat, .5), latency_p95_s=pct(lat, .95),
                  tokens_per_s=sum(r["toks"] for r in recs) / wall if wall else 0.0,
-                 wall_s=wall, errors=sum(r["err"] is not None for r in recs),
-                 model=a.model, base_url=a.base_url, concurrency=a.concurrency)
-        m["samples"] = [{"diary": r["diary"], "raw": r["raw"][:600], "err": r["err"]} for r in recs[:3]]
-    m["label"] = label
-    with open(os.path.join(a.out_dir, f"{label}.json"), "w") as f: json.dump(m, f, indent=2)
-    print(table(label, m))
-    if a.dry_run and abs(m["entity_f1"] - 1.0) > 1e-9: sys.exit(1)
+                 wall_s=wall, errors=sum(r["err"] is not None for r in recs), concurrency=a.concurrency)
+        res = build_result(m, label, dataset, a.model, a.backend or infer_backend(a.base_url), dry_run=False,
+                           confidence_prompt=a.confidence, base_url=a.base_url)
+        res["samples"] = [{"diary": r["diary"], "raw": r["raw"][:600], "err": r["err"]} for r in recs[:3]]
+    with open(os.path.join(a.out_dir, f"extraction_{label}.json"), "w") as f: json.dump(res, f, indent=2)
+    print(table(label, res))
+    if a.dry_run and abs(res["entity_f1"] - 1.0) > 1e-9: sys.exit(1)
+    return res
 
 
 if __name__ == "__main__":

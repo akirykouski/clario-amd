@@ -1,5 +1,6 @@
 """PEFT LoRA SFT (TRL) for Gemma 4 on ROCm / MI300X. NOT run locally (no GPU); run on the droplet.
-  python train_rocm.py --model google/gemma-4-E4B-it --data data/train_sft.jsonl --out out/e4b-r16 --epochs 3
+Trains on the extraction_v3 chat files written by prep.py (data/v3/*_sft.jsonl). Older-format files are refused.
+  python train_rocm.py --model google/gemma-4-E4B-it --out out/e4b-r16 --epochs 3
 """
 import argparse, json, os, time
 
@@ -7,8 +8,8 @@ import argparse, json, os, time
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="google/gemma-4-26B-A4B-it")
-    ap.add_argument("--data", default="data/train_sft.jsonl")
-    ap.add_argument("--val-data", default="data/val_sft.jsonl", help="optional eval loss; '' to disable")
+    ap.add_argument("--data", default="data/v3/train_sft.jsonl")
+    ap.add_argument("--val-data", default="data/v3/val_sft.jsonl", help="optional eval loss; '' to disable")
     ap.add_argument("--out", required=True)
     ap.add_argument("--rank", type=int, default=16); ap.add_argument("--alpha", type=int, default=32)
     ap.add_argument("--dropout", type=float, default=0.05)
@@ -21,7 +22,14 @@ def main():
     ap.add_argument("--attn", default="sdpa", help="sdpa (default, safe on ROCm) | eager | flash_attention_2 if installed")
     ap.add_argument("--merge", action="store_true", help="also save merged bf16 weights for vLLM")
     ap.add_argument("--seed", type=int, default=13)
+    ap.add_argument("--skip-data-check", action="store_true", help="do not verify the files are extraction_v3 chat files")
     a = ap.parse_args()
+
+    from prep import check_sft  # stdlib only; fails fast on old-format or malformed data before any GPU work
+    if not a.skip_data_check:
+        for p in (a.data, a.val_data):
+            if p and os.path.exists(p):
+                print(p, check_sft(p))
 
     import torch
     from datasets import load_dataset
@@ -43,10 +51,12 @@ def main():
     def conv(ex):  # prompt/completion => loss on the assistant JSON only
         m = ex["messages"]
         return {"prompt": m[:-1], "completion": m[-1:]}
-    ds = load_dataset("json", data_files=a.data, split="train").map(conv, remove_columns=["messages", "source_disease"])
+    ds = load_dataset("json", data_files=a.data, split="train")
+    ds = ds.map(conv, remove_columns=ds.column_names)
     ev = None
     if a.val_data and os.path.exists(a.val_data):
-        ev = load_dataset("json", data_files=a.val_data, split="train").map(conv, remove_columns=["messages", "source_disease"])
+        ev = load_dataset("json", data_files=a.val_data, split="train")
+        ev = ev.map(conv, remove_columns=ev.column_names)
 
     tm = "all-linear" if a.target_modules == "all-linear" else a.target_modules.split(",")
     peft_cfg = LoraConfig(r=a.rank, lora_alpha=a.alpha, lora_dropout=a.dropout, target_modules=tm,
