@@ -2,7 +2,7 @@
 
 A private symptom diary for people on a long road to a diagnosis, and a review console for the clinic that receives them.
 
-Clario turns everyday notes ("my knuckles are stiff when I wake up") into clinical terms with a quoted source, asks the patient to confirm each one, and lets the patient send a clinic a sealed, expiring, patient-approved dossier before the visit. The clinic opens it on its own AMD Instinct MI300X server, where Gemma 4 31B on vLLM drafts a one-page brief. A clinician accepts, edits or rejects every AI-written line before the brief is final. Clario organises information. It does not diagnose and it gives no treatment advice.
+Clario turns everyday notes ("my knuckles are stiff when I wake up") into clinical terms with a quoted source, asks the patient to confirm each one, and lets the patient send a clinic a sealed, expiring, patient-approved dossier before the visit. The clinic opens it on its own server. The target deployment is one AMD Instinct MI300X, where Gemma 4 31B on vLLM drafts a one-page brief. A clinician accepts, edits or rejects every AI-written line before the brief is final. Clario organises information. It does not diagnose and it gives no treatment advice.
 
 Built for the lablab.ai AMD Developer Hackathon ACT III, Track 2 (Health and Wellbeing). Team: **Revived**.
 
@@ -20,7 +20,7 @@ The EURORDIS Rare Barometer survey of 6,507 people living with a rare disease in
 |---|---|---|
 | GIF 1 | `docs/media/patient-flow.gif` (TODO: record) | Write a note, confirm terms, review queue |
 | GIF 2 | `docs/media/share-and-clinic.gif` (TODO: record) | Share sealed to the clinic, open on the clinic console, brief with accept and reject |
-| GIF 3 | `docs/media/amd-import.gif` (TODO: record) | Lab PDF import with pages per second and the live MI300X chip |
+| GIF 3 | `docs/media/amd-import.gif` (TODO: record) | Lab PDF import with pages per second and the live GPU chip, once recorded on the AMD droplet |
 | Screenshot | `docs/media/cover.png` (TODO: capture) | Cover image, brief in `docs/SUBMISSION.md` |
 | Live app | `{{APP_URL_PATIENT}}` and `{{APP_URL_CLINIC}}` | Filled after `deploy/amd/bootstrap.sh --app` prints the URLs |
 
@@ -38,20 +38,20 @@ The EURORDIS Rare Barometer survey of 6,507 people living with a rare disease in
         one OpenAI-compatible client everywhere: Ollama, Lemonade (Ryzen AI), vLLM on ROCm
 ```
 
-What runs on the MI300X (see `deploy/amd/README.md`, all of it one command, `deploy/amd/bootstrap.sh`):
+What the stack is built to run on the MI300X (see `deploy/amd/README.md`, staged behind one script, `deploy/amd/bootstrap.sh`). None of these stages has run on the card yet:
 
 | Workload | Model | Where in the repo |
 |---|---|---|
 | Clinician brief and pattern re-check | Gemma 4 31B on vLLM (ROCm) | `backend/clario/brief.py`, `deploy/amd/docker-compose.yml` (`vllm-big`) |
 | Patient extraction in the public demo | Gemma 4 E4B, optional LoRA adapter, vLLM | `deploy/amd/docker-compose.yml` (`vllm-small`), `PATIENT_LLM_MODEL` |
 | Lab report import, many pages in parallel | Gemma 4 vision through the same endpoint | `backend/clario/documents.py`, `backend/clario/doc_routes.py` |
-| Synthetic training data generation | Gemma 4 31B on vLLM | `train/synth.py`, `bootstrap.sh --synth N` |
-| LoRA fine-tuning of the extractor | Gemma 4 E4B, PEFT + TRL on ROCm | `train/train_rocm.py`, `train/Dockerfile.rocm`, `bootstrap.sh --train` |
-| Throughput and latency benchmark | Gemma 4 31B | `bench/bench.py`, `bootstrap.sh --bench` |
+| Synthetic training data generation (planned) | Gemma 4 31B on vLLM | `train/synth.py`, `bootstrap.sh --synth N` |
+| LoRA fine-tuning of the extractor (planned) | Gemma 4 E4B, PEFT + TRL on ROCm | `train/train_rocm.py`, `train/Dockerfile.rocm`, `bootstrap.sh --train` |
+| Throughput and latency benchmark (planned) | Gemma 4 31B | `bench/bench.py`, `bootstrap.sh --bench` |
 
-Visible in the demo: the clinic header shows "AMD Instinct MI300X · vLLM" when the backend is AMD, brief drafting streams tokens per second and latency, and the lab import page shows pages per second next to a live GPU chip fed by `GET /api/system/gpu` (`backend/clario/gpu.py`, reads `amd-smi`).
+When the stack runs on the card, the demo shows: the clinic header reads "AMD Instinct MI300X · vLLM" when the backend is AMD, brief drafting streams tokens per second and latency, and the lab import page displays pages per second next to a live GPU chip fed by `GET /api/system/gpu` (`backend/clario/gpu.py`, reads `amd-smi`).
 
-Status of the AMD claims: the compose stack, scripts and app image were validated off-box. Results from a real MI300X run are listed in "Measured results" and stay empty until that run is done.
+Status of the AMD claims: the compose stack, scripts and app image were validated off-box. No model has been served, trained or benchmarked on an MI300X yet. Throughput, fine-tuning and data generation figures are measured on the AMD droplet by `deploy/amd/bootstrap.sh --synth N --train --eval --bench --app`; numbers land in `eval/results` and in "Measured results", which stay empty until that run is done.
 
 ## How we handle safety
 
@@ -60,12 +60,18 @@ The five Track 2 items, each mapped to a mechanism in code.
 | Track 2 item | Mechanism | Where |
 |---|---|---|
 | Incorrect or unsupported answers | Every extracted term must quote a span that exists in the entry, or it is dropped. HPO ids come from ontology candidates only and must match the words, or the id is dropped. Brief items must cite entries inside the shared package. Pattern scores are computed in code from HPO annotations (close matches only, three specific terms for a card). The patient text is a template; the model drafts brief lines only for the clinician | `backend/clario/extract.py`, `backend/clario/knowledge.py`, `backend/clario/patterns.py`, `backend/clario/brief.py` |
-| Sensitive data | Vault encrypted with Argon2id + AES-256-GCM, no recovery by design. Direct identifiers (email, phone, codice fiscale, IBAN, dates, addresses, first names) are replaced before any remote model call. Every model call is written to a hash-chained log the patient can verify. A share contains only confirmed terms and entries in a chosen period, sealed to the clinic's X25519 key, and expires. Clinic model runs on the clinic's own server | `backend/clario/vault.py`, `backend/clario/privacy.py`, `backend/clario/share.py` |
+| Sensitive data | Vault encrypted with Argon2id + AES-256-GCM, no recovery by design. Direct identifiers are replaced by rules before any remote model call, with no model involved (see "Privacy: what leaves the device"). Every model call is written to a hash-chained log the patient can verify. A share contains only confirmed terms and entries in a chosen period, sealed to the clinic's X25519 key, and expires. Clinic model runs on the clinic's own server | `backend/clario/vault.py`, `backend/clario/privacy.py`, `backend/clario/share.py` |
 | Uncertain results | Confidence from self-consistency across samples. Anything under the threshold (default 0.7) goes to a review queue and counts for nothing until a person decides. Patterns show weak, moderate or strong with evidence counts (notes) and a "not recorded yet" list, never a percentage. Condition names are clinician-only: the patient sees at most two cards titled by the features they recorded, in everyday words, and no API response to the patient carries a condition name | `backend/clario/review.py`, `backend/clario/extract.py`, `backend/clario/patterns.py` |
 | High-risk decisions | Emergency descriptions (chest pain with warning signs, trouble breathing, stroke signs, self-harm, heavy bleeding, long seizure, fainting with injury) get an immediate notice with the emergency number before anything else. A hedge validator rejects AI text with diagnostic or prescriptive language (doses, "you have", "confirms", percentages) and falls back to a template. Next-question suggestions never name a condition or medicine | `backend/clario/safety.py`, `backend/clario/next_question.py` |
 | Human review | The patient confirms terms before they count. The clinician must accept, edit or reject every AI-drafted brief item. Finalize returns 409 while any item is pending. The printed brief says "AI-drafted items reviewed by the clinician" and the markdown export contains accepted and edited items only. Items never seen by a person are marked "not reviewed by a person" | `backend/clario/review.py`, `backend/clario/brief.py`, `frontend/src/clinic/BriefPanel.tsx` |
 
 More: `docs/COMPLIANCE.md`.
+
+## Privacy: what leaves the device
+
+Before text reaches a remote model, Clario replaces direct identifiers with placeholders using rules and a first-name lexicon, with no model involved: emails, phone numbers, codice fiscale, tessera sanitaria and hospital record numbers, street addresses, full dates including dates of birth, and personal names recognised by title, label, relation, first-name list or "X said" pattern. Medical eponyms, doses, lab values, drug names and places of care are kept. On a synthetic English and Italian test set it misses 5.8% of identifiers overall (`eval/results/pii_leak.json`, test half, n = 712 identifiers in 850 documents); first names that open a sentence and are not in the lexicon are the largest gap. Scanned images and photos are sent unredacted; the preview shows the exact text the model receives.
+
+Caveat on that number: the corpus was written by the redactor's author, so it measures the formats and phrasings we thought of, and real diaries will leak more. The vocabulary and templates of the dev and test halves are disjoint and the redactor was tuned on the dev half, but a second round of generic fixes was chosen after reading test failures, so the test figure is slightly optimistic. Hard negatives (medical eponyms, drugs, places of care, lab values, number phrases; n = 220) were redacted 0 times. Per category and per language rates are in the file.
 
 ## The model and the data
 
@@ -73,7 +79,7 @@ More: `docs/COMPLIANCE.md`.
 
 **Why no public dataset fits.** We reviewed the candidate corpora (`docs/DATA_SOURCES.md`). None combines lay language, span-level symptoms, negation and HPO ids. The lay corpora that can be redistributed are small or carry other label sets, the largest well-known one (CADEC) forbids redistribution, we found no Italian lay symptom corpus, and clinical corpora (n2c2, MIMIC) cannot be shared or sent to a third-party API.
 
-**Our data.** `train/synth.py` writes diary entries whose labels come from the ontology by construction: HPO terms and the `phenotype.hpoa` annotations, with layperson phrasings (`train/lay_terms.json`), English and Italian, family history, onset and severity cues, life-event distractors and hard negatives. Code validates every row and reports reject reasons. Generation runs on Gemma 4 31B on the MI300X. The generator refuses Anthropic endpoints, and Claude output never becomes a training target. `train/prep.py` splits by source disease so no disease appears in more than one of train, validation and test.
+**Our data.** `train/synth.py` writes diary entries whose labels come from the ontology by construction: HPO terms and the `phenotype.hpoa` annotations, with layperson phrasings (`train/lay_terms.json`), English and Italian, family history, onset and severity cues, life-event distractors and hard negatives. Code validates every row and reports reject reasons. Generation is set up to run on Gemma 4 31B on the MI300X (`bootstrap.sh --synth N`); the full set has not been generated that way yet. The generator refuses Anthropic endpoints, and Claude output never becomes a training target. `train/prep.py` splits by source disease so no disease appears in more than one of train, validation and test.
 
 **Eval sets.**
 
@@ -90,7 +96,7 @@ Haiku is used for evaluation only: it drafts gold candidates for a person to rev
 
 ## Measured results
 
-Nothing below is filled yet. Every cell comes from a result file written by a real run. Offline and dry-run files exist in `eval/results/` and are labelled as such. They check the scorer and are not results.
+No extraction, throughput or training figure exists yet. Every cell comes from a result file written by a real run on the AMD droplet. Offline and dry-run files exist in `eval/results/` and are labelled as such. They check the scorer and are not results. The one measured result today is the pseudonymisation miss rate in "Privacy: what leaves the device" (`eval/results/pii_leak.json`, CPU rules, no model).
 
 Extraction, held-out synthetic test split. Source file per row: `eval/results/extraction_<label>.json`. Rendered by `python eval/make_results_md.py` into `eval/RESULTS.md`.
 
@@ -102,9 +108,9 @@ Extraction, held-out synthetic test split. Source file per row: `eval/results/ex
 
 Repeat the table for the reviewed gold set (`--dataset gold-reviewed`) and PsyTAR (`--dataset psytar-hpo`) once those files exist.
 
-Review queue: share of entities routed to review so that the auto-accepted rest stays within 1, 2 and 5 percent error: `{{review_curve.tolerances.1pct.entity.review_share}}`, `{{review_curve.tolerances.2pct.entity.review_share}}`, `{{review_curve.tolerances.5pct.entity.review_share}}` from `eval/results/review_curve_<label>.json`. This is a routing share, not accuracy or coverage, and it uses the confidence the model reports about itself (a run with `--confidence`); the file says so in `confidence_source`.
+Review queue: share of entities routed to review so that the auto-accepted rest stays within 1, 2 and 5 percent error: `{{review_curve.tolerances.1pct.entity.review_share}}`, `{{review_curve.tolerances.2pct.entity.review_share}}`, `{{review_curve.tolerances.5pct.entity.review_share}}` from `eval/results/review_curve_<label>.json`. It measures how many entities go to a person for review, which is separate from accuracy or coverage, and it uses the confidence the model reports about itself (a run with `--confidence`); the file says so in `confidence_source`.
 
-Throughput on the MI300X, Gemma 4 31B on vLLM. Source: `eval/results/bench_amd-mi300x-gemma4-31b.json` (fields n, dataset, model, backend, date, `results[]` with workload, concurrency, req_per_s, out_tok_per_s, p50_s, p95_s); the full run stays in `bench/results/`.
+Throughput on the MI300X, Gemma 4 31B on vLLM, to be measured by `bootstrap.sh --bench`. Source: `eval/results/bench_amd-mi300x-gemma4-31b.json` (fields n, dataset, model, backend, date, `results[]` with workload, concurrency, req_per_s, out_tok_per_s, p50_s, p95_s); the full run stays in `bench/results/`.
 
 | Workload | Concurrency | Requests/s | Output tokens/s | p50 / p95 latency (s) |
 |---|---|---|---|---|
@@ -113,9 +119,9 @@ Throughput on the MI300X, Gemma 4 31B on vLLM. Source: `eval/results/bench_amd-m
 | brief | 1 | `{{bench.brief.c1.req_per_s}}` | `{{bench.brief.c1.out_tok_per_s}}` | `{{bench.brief.c1.p50_s}}` / `{{bench.brief.c1.p95_s}}` |
 | brief | 32 | `{{bench.brief.c32.req_per_s}}` | `{{bench.brief.c32.out_tok_per_s}}` | `{{bench.brief.c32.p50_s}}` / `{{bench.brief.c32.p95_s}}` |
 
-Training on the MI300X: wall time `{{train.e4b-r16.train_wall_s}}`, tokens/s `{{train.e4b-r16.tokens_per_s_est}}`, peak memory GB `{{train.e4b-r16.peak_mem_gb}}`, from `eval/results/train_e4b-r16.json` (fields n, dataset, model, backend, date, train_wall_s, tokens_per_s_est, peak_mem_gb; a copy of `train/out/e4b-r16/metrics.json`).
+Training on the MI300X (to be measured by `bootstrap.sh --train`): wall time `{{train.e4b-r16.train_wall_s}}`, tokens/s `{{train.e4b-r16.tokens_per_s_est}}`, peak memory GB `{{train.e4b-r16.peak_mem_gb}}`, from `eval/results/train_e4b-r16.json` (fields n, dataset, model, backend, date, train_wall_s, tokens_per_s_est, peak_mem_gb; a copy of `train/out/e4b-r16/metrics.json`).
 
-Lab import: pages per second on the MI300X `{{documents.pages_per_sec}}`, from the lab import run output of `backend/scripts/eval_documents.py` once saved to `eval/results/`.
+Lab import: pages per second on the MI300X (to be measured on the droplet) `{{documents.pages_per_sec}}`, from the lab import run output of `backend/scripts/eval_documents.py` once saved to `eval/results/`.
 
 ## Run it
 
@@ -164,7 +170,7 @@ vLLM never gets a public port. The demo instances set `CLARIO_DEMO_INSTANCE=1`, 
 | PsyTAR (only if used for the real-text eval) | CC BY 4.0. Zolnoori M, Fung KW, Patrick TB, et al. A systematic approach for developing a corpus of patient reported adverse drug events. J Biomed Inform 90 (2019). doi:10.1016/j.jbi.2018.12.005. Source: https://www.askapatient.com/research/pharmacovigilance/corpus-ades-psychiatric-medications.asp |
 | Third-party libraries | Their own licences, see `backend/pyproject.toml` and `frontend/package.json` |
 
-Per-dataset licence verdicts and the reasoning for what was left out: `docs/DATA_SOURCES.md` (an engineering reading, not legal advice).
+Per-dataset licence verdicts and the reasoning for what was left out: `docs/DATA_SOURCES.md` (an engineering reading that is not legal advice).
 
 ## Documents
 
