@@ -1,0 +1,457 @@
+{
+  "task": "pseudonymisation_leak",
+  "n": 1700,
+  "n_test": 850,
+  "n_dev": 850,
+  "dataset": "synthetic templates v1, seed 20261016",
+  "model": "clario-privacy d38ab8e",
+  "backend": "cpu",
+  "date": "2026-10-16",
+  "split_note": "Two halves with disjoint vocabulary (names, surnames, eponyms, drugs, places, street names, email domains), disjoint template wording and disjoint number formats. The redactor was tuned on the dev half only. The headline numbers are the test half. The first-name lexicon (clario/data/first_names.txt) is a resource of the redactor and belongs to neither half.",
+  "vocab_and_templates_disjoint": true,
+  "definition": "recall: a gold span counts as found only when every letter and digit of it lies inside a replacement. leak_rate = 1 - recall. false_redaction rate: share of hard-negative spans that overlap any replacement. Scanned images are not part of this corpus and are not redacted.",
+  "metrics": {
+    "test": {
+      "per_category": {
+        "name_first": {
+          "n": 75,
+          "recall": 0.6533,
+          "leak_rate": 0.3467,
+          "partially_redacted": 0
+        },
+        "name_surname": {
+          "n": 82,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "name_full": {
+          "n": 75,
+          "recall": 0.8267,
+          "leak_rate": 0.1733,
+          "partially_redacted": 0
+        },
+        "phone": {
+          "n": 75,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "email": {
+          "n": 60,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "codice_fiscale": {
+          "n": 60,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "address": {
+          "n": 75,
+          "recall": 0.9733,
+          "leak_rate": 0.0267,
+          "partially_redacted": 0
+        },
+        "date_of_birth": {
+          "n": 75,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "tessera_sanitaria": {
+          "n": 75,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "record_number": {
+          "n": 60,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        }
+      },
+      "overall_identifiers": {
+        "n": 712,
+        "recall": 0.9424,
+        "leak_rate": 0.0576
+      },
+      "by_language": {
+        "en": {
+          "n": 453,
+          "leak_rate": 0.0596
+        },
+        "it": {
+          "n": 259,
+          "leak_rate": 0.0541
+        }
+      },
+      "false_redaction": {
+        "eponym": {
+          "n": 60,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "drug": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "place_of_care": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "lab_value": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "number_phrase": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        }
+      }
+    },
+    "dev": {
+      "per_category": {
+        "name_first": {
+          "n": 60,
+          "recall": 0.8667,
+          "leak_rate": 0.1333,
+          "partially_redacted": 0
+        },
+        "name_surname": {
+          "n": 68,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "name_full": {
+          "n": 90,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "phone": {
+          "n": 75,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "email": {
+          "n": 60,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "codice_fiscale": {
+          "n": 75,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "address": {
+          "n": 75,
+          "recall": 0.9067,
+          "leak_rate": 0.0933,
+          "partially_redacted": 0
+        },
+        "date_of_birth": {
+          "n": 90,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "tessera_sanitaria": {
+          "n": 60,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "record_number": {
+          "n": 75,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        }
+      },
+      "overall_identifiers": {
+        "n": 728,
+        "recall": 0.9794,
+        "leak_rate": 0.0206
+      },
+      "by_language": {
+        "en": {
+          "n": 477,
+          "leak_rate": 0.0126
+        },
+        "it": {
+          "n": 251,
+          "leak_rate": 0.0359
+        }
+      },
+      "false_redaction": {
+        "eponym": {
+          "n": 60,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "drug": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "place_of_care": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "lab_value": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "number_phrase": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        }
+      }
+    }
+  },
+  "test_leak_rates_before_reading_test_failures": {
+    "overall": 0.108,
+    "name_first": 0.347,
+    "name_surname": 0.095,
+    "name_full": 0.173,
+    "phone": 0.053,
+    "email": 0.0,
+    "codice_fiscale": 0.0,
+    "address": 0.187,
+    "date_of_birth": 0.133,
+    "tessera_sanitaria": 0.0,
+    "record_number": 0.033
+  },
+  "held_out_caveat": "The corpus is written by the redactor's author, so it measures the formats and phrasings we thought of; real diaries will leak more. The first round of tuning used the dev half only (rates above); a second round of generic fixes was chosen after reading test failures, so the headline test numbers are slightly optimistic.",
+  "baseline_before_this_work": {
+    "ref": "606ffb7",
+    "note": "privacy.py as of that commit, same corpus",
+    "test": {
+      "per_category": {
+        "name_first": {
+          "n": 75,
+          "recall": 0.3467,
+          "leak_rate": 0.6533,
+          "partially_redacted": 0
+        },
+        "name_surname": {
+          "n": 82,
+          "recall": 0.4024,
+          "leak_rate": 0.5976,
+          "partially_redacted": 0
+        },
+        "name_full": {
+          "n": 75,
+          "recall": 0.5467,
+          "leak_rate": 0.4533,
+          "partially_redacted": 8
+        },
+        "phone": {
+          "n": 75,
+          "recall": 0.7333,
+          "leak_rate": 0.2667,
+          "partially_redacted": 0
+        },
+        "email": {
+          "n": 60,
+          "recall": 0.7833,
+          "leak_rate": 0.2167,
+          "partially_redacted": 0
+        },
+        "codice_fiscale": {
+          "n": 60,
+          "recall": 0.4,
+          "leak_rate": 0.6,
+          "partially_redacted": 0
+        },
+        "address": {
+          "n": 75,
+          "recall": 0.1867,
+          "leak_rate": 0.8133,
+          "partially_redacted": 13
+        },
+        "date_of_birth": {
+          "n": 75,
+          "recall": 0.72,
+          "leak_rate": 0.28,
+          "partially_redacted": 10
+        },
+        "tessera_sanitaria": {
+          "n": 75,
+          "recall": 0.0,
+          "leak_rate": 1.0,
+          "partially_redacted": 2
+        },
+        "record_number": {
+          "n": 60,
+          "recall": 0.25,
+          "leak_rate": 0.75,
+          "partially_redacted": 0
+        }
+      },
+      "overall_identifiers": {
+        "n": 712,
+        "recall": 0.434,
+        "leak_rate": 0.566
+      },
+      "by_language": {
+        "en": {
+          "n": 453,
+          "leak_rate": 0.5497
+        },
+        "it": {
+          "n": 259,
+          "leak_rate": 0.5946
+        }
+      },
+      "false_redaction": {
+        "eponym": {
+          "n": 60,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "drug": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "place_of_care": {
+          "n": 40,
+          "rate": 0.075,
+          "redacted": 3
+        },
+        "lab_value": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "number_phrase": {
+          "n": 40,
+          "rate": 0.3,
+          "redacted": 12
+        }
+      }
+    },
+    "dev": {
+      "per_category": {
+        "name_first": {
+          "n": 60,
+          "recall": 0.7333,
+          "leak_rate": 0.2667,
+          "partially_redacted": 0
+        },
+        "name_surname": {
+          "n": 68,
+          "recall": 0.7059,
+          "leak_rate": 0.2941,
+          "partially_redacted": 1
+        },
+        "name_full": {
+          "n": 90,
+          "recall": 0.6667,
+          "leak_rate": 0.3333,
+          "partially_redacted": 30
+        },
+        "phone": {
+          "n": 75,
+          "recall": 0.8133,
+          "leak_rate": 0.1867,
+          "partially_redacted": 2
+        },
+        "email": {
+          "n": 60,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "codice_fiscale": {
+          "n": 75,
+          "recall": 0.6933,
+          "leak_rate": 0.3067,
+          "partially_redacted": 0
+        },
+        "address": {
+          "n": 75,
+          "recall": 0.7467,
+          "leak_rate": 0.2533,
+          "partially_redacted": 0
+        },
+        "date_of_birth": {
+          "n": 90,
+          "recall": 1.0,
+          "leak_rate": 0.0,
+          "partially_redacted": 0
+        },
+        "tessera_sanitaria": {
+          "n": 60,
+          "recall": 0.0,
+          "leak_rate": 1.0,
+          "partially_redacted": 0
+        },
+        "record_number": {
+          "n": 75,
+          "recall": 0.0,
+          "leak_rate": 1.0,
+          "partially_redacted": 0
+        }
+      },
+      "overall_identifiers": {
+        "n": 728,
+        "recall": 0.647,
+        "leak_rate": 0.353
+      },
+      "by_language": {
+        "en": {
+          "n": 477,
+          "leak_rate": 0.3983
+        },
+        "it": {
+          "n": 251,
+          "leak_rate": 0.2669
+        }
+      },
+      "false_redaction": {
+        "eponym": {
+          "n": 60,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "drug": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "place_of_care": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "lab_value": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        },
+        "number_phrase": {
+          "n": 40,
+          "rate": 0.0,
+          "redacted": 0
+        }
+      }
+    }
+  }
+}
