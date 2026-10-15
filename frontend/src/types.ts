@@ -81,6 +81,7 @@ export type BriefView = { audience?: "clinician" | "patient"; lang?: "en" | "it"
 export interface Brief {
   package_id: string; items: BriefItem[]; model: string | null; backend: string | null;
   lang?: "en" | "it"; audience?: "clinician" | "patient";
+  review_seconds?: number | null; finalized_at?: string | null;
   finalized: boolean; stats: { latency_ms?: number; tokens_per_s?: number; tokens?: number } & Record<string, unknown>;
 }
 
@@ -153,3 +154,9 @@ export interface NextQuestion {
 export interface RankedPattern { card_id: string; label: string; score: number; rank: number }
 export interface AnswerResult { before: RankedPattern[]; after: RankedPattern[]; entry_id: string | null }
 export type Answer = "yes" | "no" | "unsure";
+
+export interface DecisionCounts { accepted: number; edited: number; rejected: number }
+export interface BriefDecisions extends DecisionCounts { package_id: string; finalized_at: string; review_seconds: number | null }
+export interface ClinicMetrics {
+  briefs: BriefDecisions[]; totals: DecisionCounts; finalized: number; timed: number; mean_review_seconds: number | null;
+}

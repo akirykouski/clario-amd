@@ -1,5 +1,5 @@
 import type {
-  AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
+  AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicMetrics, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
   ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState,
 } from "./types";
 
@@ -75,7 +75,9 @@ export const api = {
   brief: (id: string, v?: BriefView) => request<Brief>("GET", `/inbox/${encodeURIComponent(id)}/brief`, { params: v }),
   reviewItem: (pkg: string, item: string, b: { review: BriefItem["review"]; text?: string }) =>
     request<BriefItem>("PATCH", `/brief-items/${encodeURIComponent(pkg)}/${encodeURIComponent(item)}`, { body: b }),
-  finalize: (id: string) => request<Brief>("POST", `/inbox/${encodeURIComponent(id)}/brief/finalize`),
+  finalize: (id: string, seconds?: number) =>
+    request<Brief>("POST", `/inbox/${encodeURIComponent(id)}/brief/finalize`, seconds === undefined ? {} : { body: { seconds } }),
+  clinicMetrics: () => request<ClinicMetrics>("GET", "/clinic/metrics"),
   briefMdUrl: (id: string, v?: BriefView) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.md`, v),
   privacyPreview: (entryId: string) => request<PrivacyPreview>("GET", "/privacy/preview", { params: { entry_id: entryId } }),
   privacyCalls: (limit = 50) => request<AiCall[]>("GET", "/privacy/calls", { params: { limit: String(limit) } }),

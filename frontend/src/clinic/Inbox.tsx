@@ -4,6 +4,7 @@ import { fmtDate } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { useT, type Key } from "../i18n";
+import { InboxMetrics } from "./Metrics";
 
 const stateKey: Record<string, Key> = { none: "inbox.state.none", draft: "inbox.state.draft", drafted: "inbox.state.draft", final: "inbox.state.final", finalized: "inbox.state.final" };
 
@@ -15,7 +16,8 @@ export default function Inbox() {
   if (data.length === 0) return <Empty title={t("inbox.emptyTitle")}>{t("inbox.emptyText")}</Empty>;
   return (
     <section>
-      <h1 className="text-3xl mb-3">{t("inbox.title")}</h1>
+      <h1 className="text-3xl mb-1">{t("inbox.title")}</h1>
+      <InboxMetrics />
       <div className="overflow-x-auto card p-0">
         <table className="w-full text-[15px]">
           <thead><tr className="text-left text-muted border-b border-line">

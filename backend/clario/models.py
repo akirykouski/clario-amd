@@ -188,6 +188,35 @@ class Brief(BaseModel):
     stats: dict = Field(default_factory=dict, description="latency_ms, tokens_per_s, tokens")
     lang: Literal["en", "it"] = Field("en", description="Language of the text: the AI items are drafted in it; patient-origin items are rendered in it")
     audience: Literal["clinician", "patient"] = "clinician"
+    review_seconds: float | None = Field(
+        None, description="Seconds from opening the package in the clinic UI to finalize, as measured by the UI; set at finalize")
+    finalized_at: str | None = None
+
+
+class DecisionCounts(BaseModel):
+    """Clinician decisions on AI-drafted brief lines. Counts only, never text."""
+
+    accepted: int = 0
+    edited: int = 0
+    rejected: int = 0
+
+
+class BriefDecisions(DecisionCounts):
+    """One finalized brief's row in the decision log (`decisions.jsonl` in the clinic data dir)."""
+
+    package_id: str
+    finalized_at: str
+    review_seconds: float | None = None
+
+
+class ClinicMetrics(BaseModel):
+    """GET /api/clinic/metrics: pilot metric. Lines are AI-drafted brief items; patient-origin lines are not counted."""
+
+    briefs: list[BriefDecisions] = Field(default_factory=list, description="Finalized briefs, newest first")
+    totals: DecisionCounts = Field(default_factory=DecisionCounts)
+    finalized: int = 0
+    timed: int = Field(0, description="Finalized briefs that carry review_seconds")
+    mean_review_seconds: float | None = Field(None, description="Mean over timed briefs; null when none")
 
 
 class PrivacyReplacement(BaseModel):

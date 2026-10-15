@@ -376,4 +376,11 @@ export const it: Record<Key, string> = {
   "brief.chipLatency": "{s} s",
   "brief.chipGpu": "GPU {name}",
   "brief.flagged": "Citazione non corrispondente",
+  "metrics.lines": "Righe accettate {a} · modificate {e} · scartate {r}",
+  "metrics.finalizeTime": "{d} per rendere definitivo",
+  "metrics.avgTime": "{d} in media per rendere definitivo",
+  "metrics.briefs_one": "{n} bozza resa definitiva",
+  "metrics.briefs_other": "{n} bozze rese definitive",
+  "metrics.duration.min": "{m} min {s} s",
+  "metrics.duration.sec": "{s} s",
 };
