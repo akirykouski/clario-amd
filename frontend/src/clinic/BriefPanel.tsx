@@ -36,18 +36,20 @@ export function RunChips({ model, backend, tokensPerS, latencyMs }: { model?: st
   );
 }
 
-export function FinalizeButton({ items, onClick, busy }: { items: BriefItem[]; onClick: () => void; busy?: boolean }) {
+export function FinalizeButton({ items, onClick, busy, pendingLabs = 0 }: { items: BriefItem[]; onClick: () => void; busy?: boolean; pendingLabs?: number }) {
   const { t } = useT();
   const pending = items.filter((i) => i.review === "pending").length;
   return (
     <div>
-      <button className="btn btn-primary" onClick={onClick} disabled={!canFinalize(items) || busy}>{t("brief.finalize")}</button>
+      <button className="btn btn-primary" onClick={onClick} disabled={!canFinalize(items) || pendingLabs > 0 || busy}>{t("brief.finalize")}</button>
       {pending > 0 && <p className="text-sm text-muted mt-1" aria-live="polite">{tn("brief.pending", pending)}</p>}
+      {pendingLabs > 0 && <p className="text-sm text-muted mt-1" aria-live="polite" data-testid="labs-pending">{tn("pkg.labsPending", pendingLabs)}</p>}
     </div>
   );
 }
 
 export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief: Brief | null; setBrief: (b: Brief) => void }) {
+  const pendingLabs = pkg.labs.filter((l) => !l.reviewed && !l.decision).length;
   const { t, lang } = useT();
   const { state, start } = useRun();
   const [err, setErr] = useState<string | null>(null);
@@ -130,7 +132,7 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
                   );
                 })}
                 <div className="flex items-start gap-3 flex-wrap">
-                  {!shown.finalized && <FinalizeButton items={shown.items} onClick={finalize} busy={busy} />}
+                  {!shown.finalized && <FinalizeButton items={shown.items} onClick={finalize} busy={busy} pendingLabs={pendingLabs} />}
                   {shown.finalized && (
                     <>
                       <a className="btn" href={api.briefMdUrl(pkg.package_id)} target="_blank" rel="noreferrer">{t("brief.openMd")}</a>

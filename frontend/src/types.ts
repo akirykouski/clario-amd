@@ -60,6 +60,7 @@ export interface SharedEntity {
 export interface SharedLab {
   test_name: string; value_numeric: number | null; value_text: string | null; unit: string; ref_low: number | null;
   ref_high: number | null; flag: LabFlag | null; date: string; page: number; entry_id: string | null; reviewed: boolean;
+  id: string; test_key: string; name_en: string | null; abnormal: boolean; decision: "accepted" | "rejected" | null;
 }
 
 export interface SharePackage {
