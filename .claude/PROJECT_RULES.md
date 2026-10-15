@@ -51,3 +51,6 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 - Personas: `giulia`, `giulia_it` (`demo.py`); `POST /api/demo/documents` imports the 3 shipped referti.
 - Tooling quirks (worktree shells): use `/usr/bin/git -C <worktree>`, no heredocs with git, no word "eval" in a command line; write scripts to the scratchpad and run them.
 - One sqlite connection serves the thread pool: every Vault read and write takes `_lock` (a race gave HTTP 500 on GET /api/entries).
+## AMD run (one command)
+- `deploy/amd/bootstrap.sh --all` runs preflight, serve, health, smoke, synth, prep, train, eval, bench and results; stamps in `deploy/amd/logs/stamps/`, `--step NAME` reruns one, `FORCE=1` redoes all. `--fallback` runs against any OpenAI-compatible BASE_URL/API_KEY/MODEL (anthropic.com refused).
+- Real results in eval/results need a `hardware` field; `eval/make_results_md.py --check` enforces it.
