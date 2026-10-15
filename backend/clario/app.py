@@ -23,6 +23,7 @@ from sse_starlette.sse import EventSourceResponse
 from . import brief as briefing
 from . import privacy
 from . import doc_routes
+from . import gpu as gpumetrics
 from . import share as sharing
 from .config import Settings
 from .demo import giulia_entries
@@ -140,10 +141,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health() -> dict:
         out = {"ok": True, "mode": s.mode, "ontology": {"terms": onto.n_terms, "diseases": onto.n_diseases},
                "llm": {"backend": llm.backend, "model": llm.model, "base_url_host": s.llm_host, "is_amd": llm.is_amd,
-                       "pseudonymize": privacy.should_pseudonymize(s)}}
+                       "pseudonymize": privacy.should_pseudonymize(s)},
+               "demo_instance": s.demo_instance}
         if s.mode == "patient":
             out["locked"] = vault.locked
         return out
+
+    @app.get("/api/system/gpu")
+    async def system_gpu():
+        """GPU summary {gpu_name, util_pct, vram_used_gb, vram_total_gb}, or null when there is no telemetry."""
+        if s.gpu_metrics_url:
+            try:
+                async with httpx.AsyncClient(timeout=4) as c:
+                    r = await c.get(s.gpu_metrics_url)
+                    r.raise_for_status()
+                    return JSONResponse(r.json())
+            except (httpx.HTTPError, ValueError):
+                return JSONResponse(None)
+        return JSONResponse(await asyncio.to_thread(gpumetrics.read_cached))
 
     @app.get("/api/runs/{rid}/events")
     async def run_events(rid: str):

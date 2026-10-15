@@ -33,3 +33,7 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 - Review kinds are handlers in `app.state.review_kinds` (see `review.py`); a lab kind registers there. Every decision writes a `correction_log` vault record.
 - Env: CLARIO_SC_N (5), CLARIO_TRUST_MODEL_CONFIDENCE, CLARIO_HPO_PICK (1), CLARIO_REVIEW_THRESHOLD (0.7). OfflineLLM: a phrase in a "maybe/forse" sentence appears in every other sample, so confidence is 0.6 and it lands in the queue.
 - Never `pkill -f clario.app`: other sessions run servers from the same module. Kill by PID.
+- Deploy: `deploy/amd/bootstrap.sh` (one command on the MI300X droplet) + `deploy/amd/docker-compose.yml`; runbook in deploy/amd/README.md. Root `Dockerfile` builds the app (`docker build -t clario-app .`). `.env.example` lists every variable. Validate compose: `PUBLIC_HOST=x.sslip.io VLLM_API_KEY=x HF_TOKEN=x docker compose -f deploy/amd/docker-compose.yml config -q`.
+- GPU telemetry: `GET /api/system/gpu` (backend/clario/gpu.py, stdlib only, also the sidecar server). amd-smi JSON shape is from AMD docs, unverified on hardware.
+- `CLARIO_DEMO_INSTANCE=1` shows the synthetic-data banner in both apps (health.demo_instance).
+- Tooling quirk: worktree-isolated shells refuse compound commands containing git/globs/heredocs; use plain commands and the Write/Edit tools.

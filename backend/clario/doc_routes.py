@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -55,7 +55,8 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
             if getattr(r, "path", None) == GPU_ROUTE and hasattr(r, "endpoint"):
                 try:
                     out = r.endpoint()
-                    return await out if inspect.isawaitable(out) else out
+                    out = await out if inspect.isawaitable(out) else out
+                    return json.loads(out.body) if isinstance(out, Response) else out  # route may return JSONResponse
                 except Exception:  # noqa: BLE001 - telemetry must never break the import
                     return None
         return None

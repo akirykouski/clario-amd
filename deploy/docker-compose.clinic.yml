@@ -3,7 +3,8 @@
 #   docker compose -f deploy/docker-compose.clinic.yml up -d --build
 # Optional fine-tuned adapter: see the LoRA note on the vllm command below.
 # Only Caddy publishes ports (80/443). vLLM and Clario are on the internal network only.
-# Assumes a Dockerfile at the repo root that runs the app with CLARIO_MODE=clinic on :8800.
+# Uses the root Dockerfile (CLARIO_HOST=0.0.0.0, port 8800, data in /data); this file sets CLARIO_MODE=clinic.
+# Clinic-only, single model. For the full demo (31B + E4B, patient app, GPU panel) use deploy/amd/docker-compose.yml.
 services:
   vllm:
     image: ${VLLM_IMAGE:-vllm/vllm-openai-rocm:v0.31.0}
@@ -59,8 +60,9 @@ services:
       LLM_BASE_URL: http://vllm:8001/v1
       LLM_API_KEY: ${VLLM_API_KEY}
       LLM_MODEL: ${LLM_MODEL:-google/gemma-4-31B-it}
+      LLM_IS_AMD: "1"
     volumes:
-      - clario-data:/data   # TODO: match the data dir the clinic mode actually writes to
+      - clario-data:/data   # the root Dockerfile sets CLARIO_DATA_DIR=/data
     expose:
       - "8800"
     networks: [internal]

@@ -3,6 +3,7 @@ import { api } from "./api";
 import type { Health } from "./types";
 import { ErrorBox, Loading } from "./components/ui";
 import PatientApp from "./patient/PatientApp";
+import { DemoBanner } from "./patient/DemoBanner";
 import ClinicApp from "./clinic/ClinicApp";
 
 export default function App() {
@@ -12,5 +13,10 @@ export default function App() {
   useEffect(load, []);
   if (err) return <div className="max-w-md mx-auto p-6"><ErrorBox error={`Cannot reach the Clario server. ${err}`} retry={load} /></div>;
   if (!health) return <Loading label="Connecting" />;
-  return health.mode === "clinic" ? <ClinicApp health={health} /> : <PatientApp />;
+  return (
+    <>
+      {health.demo_instance && <DemoBanner />}
+      {health.mode === "clinic" ? <ClinicApp health={health} /> : <PatientApp />}
+    </>
+  );
 }

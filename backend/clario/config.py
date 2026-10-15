@@ -42,6 +42,8 @@ class Settings:
     sc_n: int = 5  # self-consistency samples; 1 disables
     trust_model_confidence: bool = False
     hpo_pick: bool = True  # second call: model picks the HPO id from ontology candidates
+    demo_instance: bool = False
+    gpu_metrics_url: str | None = None
 
     @property
     def llm_host(self) -> str | None:
@@ -89,5 +91,7 @@ class Settings:
             trust_model_confidence=(e.get("CLARIO_TRUST_MODEL_CONFIDENCE") or "").strip() in ("1", "true", "yes"),
             hpo_pick=(e.get("CLARIO_HPO_PICK") or "1").strip().lower() not in ("0", "false", "no"),
             review_threshold=float(e.get("CLARIO_REVIEW_THRESHOLD") or 0.7),
+            demo_instance=(e.get("CLARIO_DEMO_INSTANCE") or "").strip().lower() in ("1", "true", "yes"),
+            gpu_metrics_url=(e.get("CLARIO_GPU_METRICS_URL") or "").strip() or None,
         )
         return replace(s, **overrides) if overrides else s
