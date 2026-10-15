@@ -60,6 +60,7 @@ export default function PrivacyPage() {
     <div className="space-y-4">
       <h1 className="text-3xl">{t("privacy.title")}</h1>
       <p className="text-muted">{t("privacy.intro")}</p>
+      <p className="text-sm text-muted">{t("cloud.pagesNote")}</p>
       <CallLogPanel />
     </div>
   );

@@ -78,7 +78,7 @@ def check_entry(text: str, lang: str = "en") -> SafetyNotice | None:
         if re.search(pat, low):
             label = label_it if it else label_en
             if label_en == "thoughts of self-harm":
-                msg = (f"Hai scritto qualcosa che sembra il pensiero di farti del male. Non devi affrontarlo da sola o da solo. "
+                msg = (f"Da quello che hai scritto sembra che tu stia pensando di farti del male. Non devi affrontarlo senza nessuno accanto. "
                        f"Se sei in pericolo adesso, chiama il {EMERGENCY_NUMBER}. In Italia puoi anche chiamare Telefono Amico "
                        f"{TELEFONO_AMICO}." if it else
                        f"You wrote something that sounds like thoughts of hurting yourself. You do not have to "

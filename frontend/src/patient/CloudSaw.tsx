@@ -52,6 +52,7 @@ export function CloudSawView({ p }: { p: PrivacyPreview }) {
         <Column title={t("cloud.wrote")} segs={orig} testId="cloud-original" />
         <Column title={p.applied ? t("cloud.saw") : t("cloud.wouldSee")} segs={sent} testId="cloud-sent" />
       </div>
+      <p className="text-sm text-muted" data-testid="cloud-pages-note">{t("cloud.pagesNote")}</p>
     </div>
   );
 }

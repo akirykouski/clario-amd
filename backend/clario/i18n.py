@@ -44,7 +44,7 @@ def disease_name(name: str, lang: str) -> str:
 
 
 PATTERNS_NOTE = {
-    "en": ("Patterns worth discussing with your doctor. Not a diagnosis.",
+    "en": ("Patterns worth discussing with your clinician. Not a diagnosis.",
            "Confirm at least 3 terms in your entries to look for patterns."),
     "it": ("Schemi da discutere con il medico. Non è una diagnosi.",
            "Conferma almeno 3 termini nelle tue note per cercare degli schemi."),
