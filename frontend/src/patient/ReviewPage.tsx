@@ -1,28 +1,40 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, ChevronDown, Pencil, X } from "lucide-react";
 import { api } from "../api";
 import type { ReviewItem } from "../types";
-import { confidencePct, notifyReview, splitQuotes } from "../lib";
+import { notifyReview, splitQuotes } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { entityName, termLabel, useT } from "../i18n";
-import { refText } from "./LabsPage";
+import { isOfflineBackend, useHealth } from "../components/useHealth";
+import { labName, qualText, refText } from "./LabsPage";
 import { TermFix } from "./EntryPage";
 
+/** Reading quality in words. Percentages stay out of patient screens, and out of the offline demo model entirely. */
 export function ConfidenceBar({ value }: { value: number | null }) {
   const { t } = useT();
-  const pct = confidencePct(value);
-  if (pct === null) return <p className="text-sm text-muted">{t("conf.none")}</p>;
-  return (
-    <div>
-      <p className="text-sm text-muted">{t("conf.sure", { pct })}</p>
-      <div role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={t("conf.aria", { pct })}
-        className="mt-1 h-2 w-full max-w-xs rounded-full bg-line overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "var(--moderate)" }} />
-      </div>
-    </div>
-  );
+  const offline = isOfflineBackend(useHealth());
+  if (value === null) return <p className="text-sm text-muted">{t("conf.none")}</p>;
+  return <p className="text-sm font-bold" style={{ color: "var(--moderate)" }}>{offline ? t("conf.check") : t("conf.sure")}</p>;
+}
+
+const GROUP_FROM = 4;  // this many lab items with the same confidence collapse under one line
+
+type Row = { item: ReviewItem } | { group: ReviewItem[]; conf: number };
+
+function rowsOf(items: ReviewItem[]): Row[] {
+  const byConf = new Map<number, ReviewItem[]>();
+  for (const i of items) if (i.kind === "lab" && i.confidence !== null) byConf.set(i.confidence, [...(byConf.get(i.confidence) ?? []), i]);
+  const grouped = new Set<number>([...byConf].filter(([, l]) => l.length >= GROUP_FROM).map(([c]) => c));
+  const rows: Row[] = [];
+  const seen = new Set<number>();
+  for (const i of items) {
+    if (i.kind === "lab" && i.confidence !== null && grouped.has(i.confidence)) {
+      if (!seen.has(i.confidence)) { seen.add(i.confidence); rows.push({ group: byConf.get(i.confidence)!, conf: i.confidence }); }
+    } else rows.push({ item: i });
+  }
+  return rows;
 }
 
 export default function ReviewPage() {
@@ -54,39 +66,60 @@ export default function ReviewPage() {
         <Empty title={t("review.emptyTitle")}>{t("review.emptyText")}<Link className="underline" to="/">{t("review.back")}</Link></Empty>
       ) : (
         <ul className="space-y-3" aria-label={t("review.listAria")}>
-          {items.map((i) => <ReviewCard key={`${i.kind}:${i.id}`} item={i} onAct={(a, v) => act(i, a, v)} />)}
+          {rowsOf(items).map((r) => "item" in r
+            ? <ReviewCard key={`${r.item.kind}:${r.item.id}`} item={r.item} onAct={(a, v) => act(r.item, a, v)} />
+            : (
+              <li key={`group:${r.conf}`}>
+                <details className="card group" style={{ borderColor: "var(--moderate)" }} data-testid="review-group">
+                  <summary className="cursor-pointer min-h-[44px] flex items-center justify-between gap-3 font-bold">
+                    {t("review.labGroup", { n: r.group.length })}
+                    <ChevronDown size={18} aria-hidden className="shrink-0 transition-transform group-open:rotate-180" />
+                  </summary>
+                  <ul className="space-y-3 mt-2">
+                    {r.group.map((i) => <ReviewCard key={`${i.kind}:${i.id}`} item={i} grouped onAct={(a, v) => act(i, a, v)} />)}
+                  </ul>
+                </details>
+              </li>
+            ))}
         </ul>
       )}
     </div>
   );
 }
 
-function ReviewCard({ item, onAct }: { item: ReviewItem; onAct: (a: "confirm" | "correct" | "reject", v?: string) => void }) {
-  const { t } = useT();
+function ReviewCard({ item, onAct, grouped = false }: { item: ReviewItem; grouped?: boolean; onAct: (a: "confirm" | "correct" | "reject", v?: string) => void }) {
+  const { t, lang } = useT();
   const [fixing, setFixing] = useState(false);
   const [text, setText] = useState("");
   const lab = item.kind === "lab";
   const segs = splitQuotes(item.source_excerpt, item.quote ? [item.quote] : []);
-  const name = lab ? (item.canonical ?? item.display) : `${item.negated ? t("term.absent") : ""}${entityName({ hpo_id: item.value, canonical: item.canonical ?? item.display, quote: item.quote })}`;
+  const name = lab ? labName(item.canonical ?? item.display, lang) : null;
+  const termName = lab ? "" : `${item.negated ? t("term.absent") : ""}${entityName({ hpo_id: item.value, canonical: item.canonical ?? item.display, quote: item.quote })}`;
+  const qual = lab && qualText(item.value ?? "") !== (item.value ?? "");
   const range = lab ? refText({ ref_low: item.ref_low ?? null, ref_high: item.ref_high ?? null }) : "";
   return (
-    <li className="card" style={{ borderColor: "var(--moderate)" }}>
+    <li className={grouped ? "rounded-lg border border-line p-3" : "card"} style={grouped ? undefined : { borderColor: "var(--moderate)" }}>
       <p className="text-sm text-muted">{lab ? t("review.fromReport") : t("review.youWrote")}</p>
-      <p className="whitespace-pre-wrap" aria-label={t("review.sourceAria")}>
-        {segs.map((s, k) => s.quoted ? <mark key={k} className="quote text-ink">{s.text}</mark> : <span key={k}>{s.text}</span>)}
+      {/* A lab item is already one line (name, value, range): the value is shown once, below. */}
+      {!lab && (
+        <p className="whitespace-pre-wrap" aria-label={t("review.sourceAria")}>
+          {segs.map((s, k) => s.quoted ? <mark key={k} className="quote text-ink">{s.text}</mark> : <span key={k}>{s.text}</span>)}
+        </p>
+      )}
+      <p className={lab ? "font-bold" : "mt-3 font-bold"}>
+        {lab && name ? <>{name.main}: {qualText(item.value ?? "")}{name.printed && <span className="ml-2 text-sm font-normal text-muted">{name.printed}</span>}</> : termName}
       </p>
-      <p className="mt-3 font-bold">{lab ? `${name}: ${item.value}` : name}</p>
       <p className="text-sm text-muted">
         {lab
-          ? [range && t("labs.printedRange", { range }), item.flag === "high" ? t("labs.high") : item.flag === "low" ? t("labs.low") : "", item.page ? t("review.page", { n: item.page }) : ""].filter(Boolean).join(" · ")
+          ? [range && t("labs.printedRange", { range }), qual ? "" : item.flag === "high" ? t("labs.high") : item.flag === "low" ? t("labs.low") : "", item.page ? t("review.page", { n: item.page }) : ""].filter(Boolean).join(" · ")
           : item.value ? `${termLabel(item.value, item.hpo_label ?? "")} (${item.value})` : t("entryPage.noCode")}
         {item.family_history && t("review.relative")}
       </p>
-      <div className="mt-2"><ConfidenceBar value={item.confidence} /></div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button className="btn" onClick={() => onAct("confirm")}><Check size={16} aria-hidden /> {t("common.confirm")}</button>
-        <button className="btn" onClick={() => setFixing(!fixing)} aria-expanded={fixing}><Pencil size={16} aria-hidden /> {t("common.correct")}</button>
-        <button className="btn" onClick={() => onAct("reject")}><X size={16} aria-hidden /> {t("common.reject")}</button>
+      {!grouped && <div className="mt-2"><ConfidenceBar value={item.confidence} /></div>}
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <button className="btn !px-2 whitespace-nowrap" onClick={() => onAct("confirm")}><Check size={16} aria-hidden /> {t("common.confirm")}</button>
+        <button className="btn !px-2 whitespace-nowrap" onClick={() => setFixing(!fixing)} aria-expanded={fixing}><Pencil size={16} aria-hidden /> {t("common.correct")}</button>
+        <button className="btn !px-2 whitespace-nowrap" onClick={() => onAct("reject")}><X size={16} aria-hidden /> {t("common.reject")}</button>
       </div>
       {fixing && (item.kind === "entity" ? (
         <TermFix onPick={(term) => { onAct("correct", term.hpo_id); setFixing(false); }} />

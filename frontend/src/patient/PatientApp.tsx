@@ -55,18 +55,18 @@ export default function PatientApp() {
     `flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-xs font-bold ${isActive ? "text-accent" : "text-muted"}`;
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
+    <div className="min-h-screen pb-24 lg:pb-8">
       <header className="sticky top-[var(--demo-h,0px)] z-20 bg-paper/95 backdrop-blur border-b border-line">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="font-display text-xl sm:text-2xl">Clario</span>
-          <nav className="hidden md:flex gap-5 text-[15px] font-bold" aria-label={t("nav.main")}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4 lg:gap-8">
+          <span className="font-display text-xl sm:text-2xl shrink-0">Clario</span>
+          <nav className="hidden lg:flex flex-1 min-w-0 gap-6 text-[15px] font-bold whitespace-nowrap" aria-label={t("nav.main")}>
             {([["/", t("nav.today")], ["/timeline", t("nav.timeline")], ["/patterns", t("nav.patterns")], ["/labs", t("nav.labs")], ["/share", t("nav.share")]] as const).map(([to, l]) => (
               <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => (isActive ? "text-accent" : "text-muted")}>{l}</NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
             {toReview > 0 && (
-              <Link to="/review" className="chip chip-review font-bold min-h-[44px] px-2.5 text-[13px] sm:text-sm" aria-label={t("nav.toReview", { n: toReview })}>{t("nav.toReview", { n: toReview })}</Link>
+              <Link to="/review" className="chip chip-review font-bold min-h-[44px] px-2.5 text-[13px] sm:text-sm whitespace-nowrap" aria-label={t("nav.toReview", { n: toReview })}>{t("nav.toReview", { n: toReview })}</Link>
             )}
             <LangSwitch />
             <NavLink to="/privacy" className="btn !px-0 w-11" aria-label={t("nav.privacy")} title={t("nav.privacy")}><ShieldCheck size={18} aria-hidden /></NavLink>
@@ -88,7 +88,7 @@ export default function PatientApp() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <nav aria-label={t("nav.main")} className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-panel border-t border-line flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <nav aria-label={t("nav.main")} className="lg:hidden fixed bottom-0 inset-x-0 z-20 bg-panel border-t border-line flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         <NavLink to="/" end className={tab}><BookOpen size={20} aria-hidden />{t("nav.today")}</NavLink>
         <NavLink to="/timeline" className={tab}><CalendarDays size={20} aria-hidden />{t("nav.timeline")}</NavLink>
         <NavLink to="/patterns" className={tab}><Waypoints size={20} aria-hidden />{t("nav.patterns")}</NavLink>

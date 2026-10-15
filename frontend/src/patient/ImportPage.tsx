@@ -4,6 +4,7 @@ import { Cpu, FileUp } from "lucide-react";
 import { api } from "../api";
 import { ErrorBox } from "../components/ui";
 import { useEventStream } from "../components/useEventStream";
+import { isOfflineBackend, useHealth } from "../components/useHealth";
 import { useT } from "../i18n";
 import { notifyReview } from "../lib";
 import type { BatchEvent, BatchStarted } from "../types";
@@ -64,6 +65,10 @@ export default function ImportPage() {
 
   const pct = ev && ev.pages_total ? Math.round((ev.pages_done / ev.pages_total) * 100) : 0;
   const load = ev ? gpuLoad(ev.gpu) : null;
+  // Pages per second means nothing on the offline fixtures or before enough pages have been read.
+  const offline = isOfflineBackend(useHealth());
+  const showSpeed = !!ev && !offline && ev.pages_done >= 10;
+  const realGpu = !!ev?.gpu && !offline && (load !== null || (typeof ev.gpu.gpu_name === "string" && !!ev.gpu.gpu_name) || (typeof ev.gpu.name === "string" && !!ev.gpu.name));
   return (
     <div className="space-y-5">
       <header>
@@ -91,11 +96,17 @@ export default function ImportPage() {
       )}
       {ev && (
         <section className="card text-center space-y-3 py-8" aria-live="polite" data-testid="progress">
-          {ev.gpu && (
+          {realGpu && ev.gpu && (
             <span className="chip font-bold" data-testid="gpu-chip"><Cpu size={14} aria-hidden /> {gpuName(ev.gpu)}{load !== null ? `, ${t("import.gpu", { load })}` : ""}</span>
           )}
-          <p className="font-display leading-none text-7xl tabular-nums" data-testid="pps">{ev.pages_per_sec.toFixed(1)}</p>
-          <p className="text-muted font-bold">{t("import.pps")}</p>
+          {showSpeed ? (
+            <>
+              <p className="font-display leading-none text-7xl tabular-nums" data-testid="pps">{ev.pages_per_sec.toFixed(1)}</p>
+              <p className="text-muted font-bold">{t("import.pps")}</p>
+            </>
+          ) : (
+            <p className="font-display text-2xl" data-testid="pps-wait">{t(offline ? "import.demoModel" : "import.reading")}</p>
+          )}
           <div className="h-2 rounded-full bg-line overflow-hidden mx-auto max-w-sm" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
             <div className="h-full bg-accent transition-[width]" style={{ width: `${pct}%` }} />
           </div>

@@ -7,7 +7,7 @@ import { SignalPill } from "../components/ui";
 import { FinalizeButton } from "../clinic/BriefPanel";
 import { HeatStrip } from "../components/HeatStrip";
 import { buildHeat, weekStart, splitQuotes } from "../lib";
-import { LabRow, refText, valueText } from "../patient/LabsPage";
+import { LabRow, qualKind, refText, valueText } from "../patient/LabsPage";
 import { gpuLoad } from "../patient/ImportPage";
 import type { BriefItem, Brief, LabValue } from "../types";
 
@@ -113,14 +113,16 @@ const lab = (o: Partial<LabValue> = {}): LabValue => ({ id: "l1", date: "2026-03
 describe("lab rows", () => {
   it("formats values and ranges", () => {
     expect(valueText(lab())).toBe("57");
-    expect(valueText(lab({ value_numeric: null, value_text: "Positivo 1:160" }))).toBe("Positivo 1:160");
+    expect(valueText(lab({ value_numeric: null, value_text: "Positivo 1:160" }))).toBe("Positive 1:160");
+    expect(valueText(lab({ value_numeric: null, value_text: "Negativo" }))).toBe("Negative");
+    expect(qualKind(lab({ value_numeric: null, value_text: "Positivo 1:80" }))).toBe("pos");
     expect(refText({ ref_low: 10, ref_high: 40 })).toBe("10 to 40");
     expect(refText({ ref_low: null, ref_high: 5 })).toBe("up to 5");
   });
   it("needs_review rows show confirm, correct and reject; others do not", async () => {
     const onAct = vi.fn().mockResolvedValue(undefined);
     const { unmount } = render(<ul><LabRow v={lab()} unit="mg/dL" onAct={onAct} /></ul>);
-    expect(screen.getByText(/Needs a look, 55% sure/)).toBeInTheDocument();
+    expect(screen.getByText("Uncertain reading")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
     expect(onAct).toHaveBeenCalledWith("l1", { action: "confirm" });
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));

@@ -33,9 +33,10 @@ describe("review", () => {
     expect(segs.find((s) => s.quoted)?.text).toBe("knees ache");
   });
 
-  it("shows a meter for the confidence, and a note when it was not measured", () => {
-    const { rerender } = render(<ConfidenceBar value={0.6} />);
-    expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "60");
+  it("says the reading quality in words, never as a percent, and notes when it was not measured", () => {
+    const { rerender, container } = render(<ConfidenceBar value={0.6} />);
+    expect(screen.getByText("Uncertain reading")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/%/);
     rerender(<ConfidenceBar value={null} />);
     expect(screen.getByText("Confidence not measured")).toBeInTheDocument();
   });
@@ -44,7 +45,7 @@ describe("review", () => {
     vi.spyOn(api, "review").mockResolvedValue({ items: [item], count: 1 });
     const act = vi.spyOn(api, "reviewAct").mockResolvedValue({ ok: true, count: 0 });
     render(<MemoryRouter><ReviewPage /></MemoryRouter>);
-    expect(await screen.findByText("We are 60% sure")).toBeInTheDocument();
+    expect(await screen.findByText("Uncertain reading")).toBeInTheDocument();
     expect(document.querySelector("mark")?.textContent).toBe("knees ache");
     await userEvent.click(screen.getByRole("button", { name: /confirm/i }));
     expect(act).toHaveBeenCalledWith("entity", "ent_1", "confirm", undefined);

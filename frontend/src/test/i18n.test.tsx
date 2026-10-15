@@ -125,7 +125,7 @@ describe("Italian screens", () => {
     expect(screen.getByText("Colesterolo totale: 264 mg/dL")).toBeInTheDocument();
     expect(screen.getByText(/intervallo stampato da 0 a 200 · Alto · Pagina 1/)).toBeInTheDocument();
     expect(screen.getByText("Assente: Febbre")).toBeInTheDocument();
-    expect(screen.getByText("Siamo sicuri al 55%")).toBeInTheDocument();
+    expect(screen.getAllByText("Lettura incerta")).toHaveLength(2);
     const buttons = screen.getAllByRole("button", { name: /Conferma/ });
     await userEvent.click(buttons[1]);
     expect(act).toHaveBeenCalledWith("lab", "l1", "confirm", undefined);

@@ -5,11 +5,41 @@ import { api } from "../api";
 import { fmtDate, locale, notifyReview } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
+import { isOfflineBackend, useHealth } from "../components/useHealth";
 import { t, useT } from "../i18n";
 import type { LabPatch, LabTest, LabValue } from "../types";
 
 const num = (n: number) => (Math.round(n * 1000) / 1000).toLocaleString(locale(), { useGrouping: false, maximumFractionDigits: 3 });
-export const valueText = (v: LabValue) => (v.value_numeric !== null ? num(v.value_numeric) : v.value_text ?? "");
+/** "Positivo 1:160" -> "pos", "Negativo" -> "neg": a qualitative result, never "High" or "Low". */
+export function qualKind(v: Pick<LabValue, "value_numeric" | "value_text">): "pos" | "neg" | null {
+  if (v.value_numeric !== null || !v.value_text) return null;
+  if (/^\s*posit/i.test(v.value_text)) return "pos";
+  if (/^\s*negat/i.test(v.value_text)) return "neg";
+  return null;
+}
+/** "Positivo 1:160" -> "Positive 1:160" in English; the Italian word stays. Any other text is unchanged. */
+export function qualText(text: string): string {
+  const q = qualKind({ value_numeric: null, value_text: text });
+  return q ? text.replace(/^\s*\w+/, q === "pos" ? t("labs.positive") : t("labs.negative")) : text;
+}
+export const valueText = (v: LabValue) => {
+  if (v.value_numeric !== null) return num(v.value_numeric);
+  return qualText(v.value_text ?? "");
+};
+
+// Test names as the report prints them (Italian) -> English, for the generator's tests.
+const LAB_EN: Record<string, string> = {
+  "proteine urinarie": "Urine protein", "sodio": "Sodium", "pcr": "CRP", "glicemia": "Glucose", "emoglobina": "Hemoglobin",
+  "neutrofili": "Neutrophils", "ematocrito": "Hematocrit", "ves": "ESR", "potassio": "Potassium", "creatinina": "Creatinine",
+  "piastrine": "Platelets", "vitamina d": "Vitamin D", "colesterolo totale": "Total cholesterol", "sideremia": "Serum iron",
+  "globuli bianchi": "White blood cells", "globuli rossi": "Red blood cells", "azotemia": "Blood urea nitrogen",
+  "linfociti": "Lymphocytes",
+};
+/** Name to show, and the report's own name when it differs (English UI only). */
+export function labName(name: string, lang: string): { main: string; printed: string | null } {
+  const en = lang === "en" ? LAB_EN[name.trim().toLowerCase()] : undefined;
+  return en && en.toLowerCase() !== name.trim().toLowerCase() ? { main: en, printed: name } : { main: name, printed: null };
+}
 export function refText(r: Pick<LabTest, "ref_low" | "ref_high">): string {
   if (r.ref_low !== null && r.ref_high !== null) return t("labs.rangeBoth", { lo: num(r.ref_low), hi: num(r.ref_high) });
   if (r.ref_high !== null) return t("labs.rangeUpTo", { hi: num(r.ref_high) });
@@ -17,11 +47,14 @@ export function refText(r: Pick<LabTest, "ref_low" | "ref_high">): string {
   return "";
 }
 
-function FlagPill({ flag }: { flag: LabValue["flag"] }) {
-  if (flag !== "low" && flag !== "high") return null;
+function FlagPill({ v }: { v: LabValue }) {
+  const q = qualKind(v);
+  // A qualitative result says "Positive" in its own value; it never gets a High or Low pill.
+  const word = q ? "" : v.flag === "high" ? t("labs.high") : v.flag === "low" ? t("labs.low") : "";
+  if (!word) return null;
   return (
-    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold"
-      style={{ color: "var(--strong)", borderColor: "var(--strong)" }}>{flag === "high" ? t("labs.high") : t("labs.low")}</span>
+    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold whitespace-nowrap"
+      style={{ color: "var(--strong)", borderColor: "var(--strong)" }}>{word}</span>
   );
 }
 
@@ -41,6 +74,7 @@ function Spark({ values }: { values: LabValue[] }) {
 
 export function LabRow({ v, unit, onAct }: { v: LabValue; unit: string; onAct: (id: string, b: LabPatch) => Promise<void> }) {
   const { t: tt } = useT();
+  const offline = isOfflineBackend(useHealth());
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(valueText(v));
   const [u, setU] = useState(unit);
@@ -56,10 +90,10 @@ export function LabRow({ v, unit, onAct }: { v: LabValue; unit: string; onAct: (
     <li data-testid="lab-row" data-review={v.review} className="py-2 px-2 -mx-2 rounded-lg"
       style={review ? { background: "color-mix(in srgb, var(--moderate) 14%, transparent)" } : undefined}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-sm text-muted w-16">{fmtDate(v.date, { day: "numeric", month: "short", year: "2-digit" })}</span>
-        <span className="font-bold tabular-nums">{valueText(v)} <span className="font-normal text-muted text-sm">{unit}</span></span>
-        <FlagPill flag={v.flag} />
-        {review && <span className="text-sm font-bold" style={{ color: "var(--moderate)" }}>{v.confidence !== null ? tt("labs.needsLookSure", { pct: Math.round(v.confidence * 100) }) : tt("labs.needsLook")}</span>}
+        <span className="text-sm text-muted whitespace-nowrap min-w-[4.75rem]">{fmtDate(v.date, { day: "numeric", month: "short", year: "2-digit" })}</span>
+        <span className="font-bold tabular-nums" style={qualKind(v) === "pos" ? { color: "var(--strong)" } : undefined}>{valueText(v)} <span className="font-normal text-muted text-sm">{unit}</span></span>
+        <FlagPill v={v} />
+        {review && <span className="text-sm font-bold" style={{ color: "var(--moderate)" }}>{v.confidence !== null && !offline ? tt("labs.needsLookSure") : tt("labs.needsLook")}</span>}
         {v.review === "confirmed" && <span className="text-sm text-muted">{tt("common.confirmed")}</span>}
         {v.review === "corrected" && <span className="text-sm text-muted">{tt("labs.corrected")}</span>}
       </div>
@@ -83,7 +117,7 @@ export function LabRow({ v, unit, onAct }: { v: LabValue; unit: string; onAct: (
 }
 
 export default function LabsPage() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const { data, error, loading, reload, setData } = useAsync(() => api.labs(), []);
   const [err, setErr] = useState<string | null>(null);
   if (loading && !data) return <Loading />;
@@ -109,13 +143,14 @@ export default function LabsPage() {
       ) : (
         <>
           <p className="text-sm text-muted" data-testid="lab-summary">
-            {t("labs.summary", { n: data.n_results, tests: data.tests.length, out: data.out_of_range, review: data.needs_review })}
+            {t("labs.summary", { n: data.n_results, tests: data.tests.length, out: data.out_of_range })}
+            {data.needs_review > 0 && t("labs.summaryReview", { review: data.needs_review })}
           </p>
-          {data.tests.map((x) => (
-            <article key={x.test_key} className="card space-y-2" aria-label={x.test_name}>
+          {data.tests.map((x) => { const nm = labName(x.test_name, lang); return (
+            <article key={x.test_key} className="card space-y-2" aria-label={nm.main}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="text-xl">{x.test_name}</h2>
+                  <h2 className="text-xl">{nm.main}{nm.printed && <span className="ml-2 text-sm font-sans text-muted">{nm.printed}</span>}</h2>
                   <p className="text-sm text-muted">{x.unit}{x.unit && refText(x) ? ", " : ""}{refText(x) && t("labs.printedRange", { range: refText(x) })}</p>
                 </div>
                 <Spark values={x.values} />
@@ -124,7 +159,7 @@ export default function LabsPage() {
                 {x.values.map((v) => <LabRow key={v.id} v={v} unit={x.unit} onAct={act} />)}
               </ul>
             </article>
-          ))}
+          ); })}
         </>
       )}
     </div>

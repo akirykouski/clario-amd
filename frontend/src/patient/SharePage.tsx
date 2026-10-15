@@ -74,7 +74,7 @@ export default function SharePage() {
           <option value={24}>{t("share.day1")}</option><option value={72}>{t("share.day3")}</option><option value={168}>{t("share.day7")}</option><option value={720}>{t("share.day30")}</option>
         </select></div>
       {err && <ErrorBox error={err} />}
-      <div className="sticky bottom-[72px] md:static py-2 bg-paper/90">
+      <div className="sticky bottom-[72px] lg:static py-2 bg-paper/90">
         <button className="btn btn-primary w-full" onClick={send} disabled={busy || !key}>{busy ? t("common.sending") : key ? t("share.send") : t("share.checkFirst")}</button>
       </div>
     </div>
@@ -94,9 +94,9 @@ function Success({ res, onAgain }: { res: ShareResult; onAgain: () => void }) {
     <div className="space-y-4">
       <h1 className="text-3xl">{t("share.sent")}</h1>
       <div className="card space-y-1" role="status">
-        <p>{t("share.package")} <span className="font-mono">{res.package_id}</span></p>
+        <p className="font-bold text-lg">{t("share.validUntil", { date: fmtDate(res.expires_at, { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) })}</p>
         <p>{t("share.counts", { entries: res.entries, entities: res.entities })}</p>
-        <p>{t("share.expiresAt", { date: fmtDate(res.expires_at, { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) })}</p>
+        <p className="text-xs text-muted">{t("share.package")} <span className="font-mono break-all">{res.package_id}</span></p>
       </div>
       <div className="card flex flex-col items-center gap-2">
         {img ? <img src={img} alt={t("share.qrAlt")} width={240} height={240} className="bg-white p-2 rounded" /> : <p className="text-sm text-muted">{t("share.qrFail")}</p>}

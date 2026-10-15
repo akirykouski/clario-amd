@@ -60,7 +60,7 @@ export default function Today() {
           </div>
         )}
         {saveErr && <p role="alert" className="text-strong text-sm">{saveErr}</p>}
-        <div className="sticky bottom-[72px] md:static py-2 bg-paper/90">
+        <div className="sticky bottom-[72px] lg:static py-2 bg-paper/90">
           <button className="btn btn-primary w-full" disabled={busy || !text.trim()}>{busy ? t("today.saving") : t("today.save")}</button>
         </div>
       </form>

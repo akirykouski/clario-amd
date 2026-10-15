@@ -74,6 +74,24 @@ def test_medical_terms_untouched(text):
     assert red == text and reps == []
 
 
+@pytest.mark.parametrize("full,leaked", [
+    ("Giulia Rossi", "Rossi"), ("Dott. Bianchi", "Bianchi"), ("Maria De Luca", "Luca"), ("Sig.ra Verdi", "Verdi"),
+    ("Dott.ssa Anna Della Valle", "Valle"),
+])
+def test_whole_personal_name_span_is_redacted(full, leaked):
+    red, reps = privacy.pseudonymize(f"I saw {full} yesterday, then lupus flared.")
+    assert leaked not in red and red == "I saw [NAME] yesterday, then lupus flared.", red
+    assert len(reps) == 1
+
+
+@pytest.mark.parametrize("text", ["Sjogren and Raynaud noted", "Maria Lupus", "Giulia Raynaud", "Marco Sjogren"])
+def test_medical_eponyms_survive_next_to_names(text):
+    red, _ = privacy.pseudonymize(text)
+    for term in ("Lupus", "Raynaud", "Sjogren"):
+        if term in text:
+            assert term in red, red
+
+
 def test_names_file_size():
     names = privacy._NAMES_FILE.read_text().split()
     assert 250 <= len(names) <= 400
