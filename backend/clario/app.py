@@ -151,7 +151,10 @@ def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
         out = {"ok": True, "mode": s.mode, "ontology": {"terms": onto.n_terms, "diseases": onto.n_diseases},
                "llm": {"backend": llm.backend, "model": llm.model, "base_url_host": s.llm_host, "is_amd": llm.is_amd,
                        "pseudonymize": privacy.should_pseudonymize(s)},
-               "demo_instance": s.demo_instance}
+               "demo_instance": s.demo_instance,
+               "review": {"threshold": s.review_threshold, "source": s.review_source, "alpha": s.review_alpha,
+                          "delta": s.review_delta, "calibration_n": s.review_calibration_n,
+                          "calibration_status": s.review_calibration_status}}
         if s.mode == "patient":
             out["locked"] = vault.locked
         return out

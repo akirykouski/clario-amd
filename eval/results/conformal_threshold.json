@@ -1,0 +1,48 @@
+{
+  "n": 2400,
+  "dataset": "synthetic-dry-run-fixture",
+  "model": "none",
+  "backend": "offline-dry-run",
+  "date": "2026-10-16",
+  "dry_run": true,
+  "alpha": 0.05,
+  "delta": 0.1,
+  "threshold": 1.0,
+  "status": "certified",
+  "auto_accept_rate": 0.1825,
+  "heldout_error": 0.0,
+  "n_calibration": 1200,
+  "n_heldout": 1200,
+  "grid": 20,
+  "split_seed": 0,
+  "split_fraction": 0.5,
+  "split_unit": "diary (all entities of one diary on the same side)",
+  "confidence_source": "invented numbers (no model)",
+  "method": "split calibration + Learn-then-Test (arXiv:2110.01052): exact binomial p-value on the accepted set, Bonferroni over the threshold grid",
+  "by_alpha": {
+    "0.05": {
+      "alpha": 0.05,
+      "threshold": 1.0,
+      "status": "certified",
+      "n_accepted_cal": 230,
+      "n_wrong_cal": 2,
+      "p_value": 0.0006474516655852974,
+      "auto_accept_rate": 0.1825,
+      "heldout_n_accepted": 219,
+      "heldout_error": 0.0
+    },
+    "0.1": {
+      "alpha": 0.1,
+      "threshold": 1.0,
+      "status": "certified",
+      "n_accepted_cal": 230,
+      "n_wrong_cal": 2,
+      "p_value": 1.051776885162398e-08,
+      "auto_accept_rate": 0.1825,
+      "heldout_n_accepted": 219,
+      "heldout_error": 0.0
+    }
+  },
+  "guarantee": "with probability >= 0.9 over the calibration draw, the error rate of auto-accepted entities is <= alpha, for data like the calibration set. Precision of accepted entities only: entities the model never output are not covered.",
+  "note": "synthetic fixture, no model; checks the code path only. The app ignores this file."
+}

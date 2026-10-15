@@ -10,7 +10,8 @@
 #   core      preflight, pull images, start vllm-big (Gemma 4 31B), wait healthy, smoke.sh
 #   --synth N train/synth.py against vllm-big, N accepted rows, then train/prep.py
 #   --train   train/Dockerfile.rocm image, train_rocm.py on Gemma 4 E4B (LoRA r16)
-#   --eval    serve E4B + the adapter on vllm-small, train/eval.py for base and LoRA
+#   --eval    serve E4B + the adapter on vllm-small, train/eval.py for base and LoRA, then the conformal review threshold
+#             (self-consistency run -> eval/results/conformal_threshold.json, which the app picks up)
 #   --bench   bench/bench.py against vllm-big
 #   --app     compose up clinic + patient-demo + gpu-metrics + caddy, prints the public URLs
 # Idempotent: re-running skips finished stages (FORCE=1 redoes them). Logs: deploy/amd/logs/bootstrap-<time>.log.
@@ -32,7 +33,7 @@ while [ $# -gt 0 ]; do
     --bench) DO_BENCH=1; shift ;;
     --app) DO_APP=1; shift ;;
     --skip-smoke) DO_SMOKE=0; shift ;;
-    -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown flag: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -195,6 +196,21 @@ if [ "$DO_EVAL" = 1 ]; then
     else echo "skip ft-e4b-r16 (results exist)"; fi
   else
     echo "WARN: no adapter found (run --train first); evaluated the base model only"
+  fi
+  # Review threshold with a guarantee: score the app's own signal (self-consistency over CLARIO_SC_N samples, same prompt
+  # as the app, no --confidence), then certify a threshold on half the diaries and check it on the other half.
+  # Writes eval/results/conformal_threshold.json (n, dataset, model, backend, date, alpha, delta, threshold, ...).
+  # The app reads it from eval/results (mounted read-only in compose); GET /api/health "review" shows which threshold is live.
+  if [ -n "${LORA_PATH:-}" ]; then
+    SC_LABEL="ft-e4b-r16-sc"
+    if [ "$FORCE" = 1 ] || [ ! -f "$REPO/eval/results/conformal_threshold.json" ] || [ ! -f "$REPO/eval/results/extraction_$SC_LABEL.json" ]; then
+      pyrun eval/extraction_eval.py --base-url "$SMALL_URL" --model clario-extract --label "$SC_LABEL" --backend vllm-rocm-mi300x \
+        --api-key-env VLLM_API_KEY --concurrency 8 --sc-n "${CLARIO_SC_N:-5}"
+      pyrun eval/review_curve.py "eval/results/extraction_$SC_LABEL.json"
+      pyrun eval/conformal.py "eval/results/extraction_$SC_LABEL.json" --alpha "${CLARIO_REVIEW_ALPHA:-0.05}" --alpha 0.10 --delta 0.1
+    else echo "skip conformal threshold (eval/results/conformal_threshold.json exists, FORCE=1 to redo)"; fi
+  else
+    echo "WARN: no adapter, so no conformal threshold; the app keeps CLARIO_REVIEW_THRESHOLD"
   fi
 fi
 

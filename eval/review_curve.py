@@ -8,16 +8,19 @@ auto-accepted part stays within the tolerance.
   entity level: error = share of auto-accepted entities that are wrong (false positives under the HPO-id match).
   item level:   an item is auto-accepted when its LOWEST entity confidence passes; error = share of
                 auto-accepted items that contain a wrong entity. Items with no predicted entity are skipped.
-CONFIDENCE SOURCE. The confidence in a `--confidence` run is what the model SAYS about itself (a probability it was
-asked to write), not a measured self-consistency. Treat the curve as valid only as far as that number is calibrated:
-the output carries `confidence_source` and the run's `ece` so a reader can judge. The app itself routes by
-self-consistency across samples (backend/clario/extract.py); `eval/extraction_eval.py` measures that path.
+CONFIDENCE SOURCE. The app routes on self-consistency: the share of n sampled answers that hold the same
+(term, negated) pair (backend/clario/extract.py). Run the eval with `--sc-n N` to score that same signal; the run
+then stores it as `confidence` per entity. A run with only `--confidence` carries what the model SAYS about itself
+(a probability it was asked to write), which is a comparison, not the app's signal. With both flags the file holds
+both numbers (`confidence` = self-consistency, `confidence_verbalized`). `--source sc|verbalized|auto` picks the
+column (auto: self-consistency when the run has it); the output names it in `confidence_source`.
 The figure is the share ROUTED TO REVIEW, not coverage and not accuracy.
 Misses (gold entities the model never output) carry no confidence and cannot be routed; they are reported as
 `unrouted_misses` so the curve is not read as a recall guarantee.
 
     python eval/review_curve.py                          # every extraction_*.json that has per_item
     python eval/review_curve.py eval/results/extraction_ft.json
+    python eval/review_curve.py --source verbalized eval/results/extraction_ft.json   # the model's own number
 Writes eval/results/review_curve_<label>.json (n, dataset, model, backend, date, curves).
 """
 import datetime
@@ -54,23 +57,42 @@ def review_share(points, tol):
     return best
 
 
-def entity_points(items):
-    return [(e["confidence"], e["correct"]) for it in items for e in it["entities"]]
+def pick_field(res, source="auto"):
+    """-> (entity field holding the confidence, confidence_source label). Raises ValueError when the run lacks it."""
+    run_sc = (res.get("sc_n") or 0) > 1
+    if source == "verbalized":
+        if not (res.get("confidence_prompt") or any("confidence_verbalized" in e for it in res["per_item"] for e in it["entities"])):
+            raise ValueError("run has no verbalized confidence (run it with --confidence)")
+        return ("confidence_verbalized" if run_sc else "confidence"), "verbalized"
+    if source == "sc":
+        if not run_sc:
+            raise ValueError("run has no self-consistency (run it with --sc-n N)")
+        return "confidence", "self_consistency"
+    return ("confidence", "self_consistency") if run_sc else ("confidence", "verbalized")
 
 
-def item_points(items):
-    return [(min(e["confidence"] for e in it["entities"]), int(all(e["correct"] for e in it["entities"])))
-            for it in items if it["entities"]]
+def entity_points(items, field="confidence"):
+    return [(e[field], e["correct"]) for it in items for e in it["entities"] if e.get(field) is not None]
 
 
-def build(res):
+def item_points(items, field="confidence"):
+    rows = [[e for e in it["entities"] if e.get(field) is not None] for it in items]
+    return [(min(e[field] for e in r), int(all(e["correct"] for e in r))) for r in rows if r]
+
+
+SOURCE_TEXT = {"self_consistency": "self-consistency: agreement rate across n sampled answers (the signal the app routes on)",
+               "verbalized": "model self-reported (prompt asked for a probability); not self-consistency"}
+
+
+def build(res, source="auto"):
     items = res["per_item"]
-    ep, ip = entity_points(items), item_points(items)
+    field, src = pick_field(res, source)
+    ep, ip = entity_points(items, field), item_points(items, field)
     out = {k: res[k] for k in ("label", "dataset", "model", "backend") if k in res}
     out.update({"date": datetime.date.today().isoformat(), "source_result": f"extraction_{res['label']}.json",
                 "n": res["n"], "n_entities_with_confidence": len(ep), "n_items_scored": len(ip),
                 "unrouted_misses": res.get("fn"),
-                "confidence_source": "model self-reported (prompt asked for a probability); not self-consistency",
+                "confidence_source": SOURCE_TEXT[src], "confidence_kind": src, "sc_n": res.get("sc_n") or None,
                 "ece": res.get("ece"), "metric": "share of entities routed to review (not coverage, not accuracy)",
                 "tolerances": {}})
     for tol in TOLERANCES:
@@ -79,7 +101,7 @@ def build(res):
     return out
 
 
-def main(paths):
+def main(paths, source="auto"):
     paths = paths or sorted(glob.glob(os.path.join(HERE, "results", "extraction_*.json")))
     done = 0
     for p in paths:
@@ -87,8 +109,13 @@ def main(paths):
         if not res.get("per_item"):
             print(f"skip {os.path.basename(p)}: no per-item confidence (run the eval with --confidence)")
             continue
-        out = build(res)
-        dest = os.path.join(os.path.dirname(os.path.abspath(p)), f"review_curve_{res['label']}.json")
+        try:
+            out = build(res, source)
+        except ValueError as e:
+            print(f"skip {os.path.basename(p)}: {e}")
+            continue
+        suffix = "" if out["confidence_kind"] == "self_consistency" or source == "auto" else "_" + out["confidence_kind"]
+        dest = os.path.join(os.path.dirname(os.path.abspath(p)), f"review_curve_{res['label']}{suffix}.json")
         json.dump(out, open(dest, "w"), indent=2)
         for k, v in out["tolerances"].items():
             print(f"{res['label']} @ {k}: entity review share {v['entity']['review_share']:.3f}, item {v['item']['review_share']:.3f}")
@@ -98,4 +125,10 @@ def main(paths):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    args = sys.argv[1:]
+    src = "auto"
+    if "--source" in args:
+        i = args.index("--source")
+        src = args[i + 1]
+        args = args[:i] + args[i + 2:]
+    main(args, src)
