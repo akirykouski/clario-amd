@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { BookOpen, CalendarDays, Lock, Send, Waypoints } from "lucide-react";
+import { BookOpen, CalendarDays, FlaskConical, Lock, Send, Waypoints } from "lucide-react";
 import { api, onLocked } from "../api";
 import type { VaultState } from "../types";
 import { ErrorBox, Loading } from "../components/ui";
@@ -10,6 +10,8 @@ import EntryPage from "./EntryPage";
 import TimelinePage from "./TimelinePage";
 import PatternsPage from "./PatternsPage";
 import SharePage from "./SharePage";
+import LabsPage from "./LabsPage";
+import ImportPage from "./ImportPage";
 
 export default function PatientApp() {
   const nav = useNavigate();
@@ -42,7 +44,7 @@ export default function PatientApp() {
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <span className="font-display text-2xl">Clario</span>
           <nav className="hidden md:flex gap-5 text-[15px] font-bold" aria-label="Main">
-            {[["/", "Today"], ["/timeline", "Timeline"], ["/patterns", "Patterns"], ["/share", "Share"]].map(([to, l]) => (
+            {[["/", "Today"], ["/timeline", "Timeline"], ["/patterns", "Patterns"], ["/labs", "Labs"], ["/share", "Share"]].map(([to, l]) => (
               <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => (isActive ? "text-accent" : "text-muted")}>{l}</NavLink>
             ))}
           </nav>
@@ -55,6 +57,8 @@ export default function PatientApp() {
           <Route path="/entry/:id" element={<EntryPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/patterns" element={<PatternsPage />} />
+          <Route path="/labs" element={<LabsPage />} />
+          <Route path="/import" element={<ImportPage />} />
           <Route path="/share" element={<SharePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -63,6 +67,7 @@ export default function PatientApp() {
         <NavLink to="/" end className={tab}><BookOpen size={20} aria-hidden />Today</NavLink>
         <NavLink to="/timeline" className={tab}><CalendarDays size={20} aria-hidden />Timeline</NavLink>
         <NavLink to="/patterns" className={tab}><Waypoints size={20} aria-hidden />Patterns</NavLink>
+        <NavLink to="/labs" className={tab}><FlaskConical size={20} aria-hidden />Labs</NavLink>
         <NavLink to="/share" className={tab}><Send size={20} aria-hidden />Share</NavLink>
       </nav>
     </div>

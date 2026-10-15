@@ -113,8 +113,8 @@ class OpenAICompat(LLM):
         kw.pop("response_format")
         return True
 
-    def _kw(self, messages, json_mode, max_tokens) -> dict:
-        kw: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0.1}
+    def _kw(self, messages, json_mode, max_tokens, model: str | None = None) -> dict:
+        kw: dict[str, Any] = {"model": model or self.model, "messages": messages, "temperature": 0.1}
         if max_tokens:
             kw["max_tokens"] = max_tokens
         if json_mode and self._json_ok:
@@ -124,7 +124,8 @@ class OpenAICompat(LLM):
     async def _complete(self, task, messages, json_mode, max_tokens, payload):
         import openai
 
-        kw = self._kw(messages, json_mode, max_tokens)
+        # messages may carry image parts; payload["_model"] picks a vision model for this call
+        kw = self._kw(messages, json_mode, max_tokens, (payload or {}).get("_model"))
         t0 = time.perf_counter()
         try:
             try:

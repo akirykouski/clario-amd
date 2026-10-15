@@ -1,0 +1,178 @@
+{
+ "doc_id": "ref_7_002",
+ "lab": {
+  "name": "Centro Diagnostico Borgo Alto",
+  "street": "Via dei Tigli 14",
+  "city": "10100 Torino (TO)"
+ },
+ "patient": {
+  "name": "Giulia Ferrante",
+  "born": "12/02/1992"
+ },
+ "date": "2025-09-15",
+ "date_it": "15/09/2025",
+ "scan_noise": false,
+ "pages": [
+  {
+   "page": 1,
+   "tests": [
+    {
+     "test_name": "PCR",
+     "value_numeric": 0.5,
+     "value_text": null,
+     "value": 0.5,
+     "unit": "mg/L",
+     "shown": "0,5",
+     "ref_low": 0.0,
+     "ref_high": 5.0,
+     "ref_text": "0,0 - 5,0",
+     "flag": "normal"
+    },
+    {
+     "test_name": "VES",
+     "value_numeric": 5.0,
+     "value_text": null,
+     "value": 5.0,
+     "unit": "mm/h",
+     "shown": "5",
+     "ref_low": 0.0,
+     "ref_high": 20.0,
+     "ref_text": "0 - 20",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Vitamina D",
+     "value_numeric": 125.1,
+     "value_text": null,
+     "value": 125.1,
+     "unit": "ng/mL",
+     "shown": "125,1",
+     "ref_low": 30.0,
+     "ref_high": 100.0,
+     "ref_text": "30,0 - 100,0",
+     "flag": "high"
+    },
+    {
+     "test_name": "FT3",
+     "value_numeric": 2.85,
+     "value_text": null,
+     "value": 2.85,
+     "unit": "pg/mL",
+     "shown": "2,85",
+     "ref_low": 2.0,
+     "ref_high": 4.4,
+     "ref_text": "2,00 - 4,40",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Emoglobina",
+     "value_numeric": 10.5,
+     "value_text": null,
+     "value": 10.5,
+     "unit": "g/dL",
+     "shown": "10,5",
+     "ref_low": 12.0,
+     "ref_high": 16.0,
+     "ref_text": "12,0 - 16,0",
+     "flag": "low"
+    },
+    {
+     "test_name": "Creatinina",
+     "value_numeric": 0.78,
+     "value_text": null,
+     "value": 0.78,
+     "unit": "mg/dL",
+     "shown": "0,78",
+     "ref_low": 0.5,
+     "ref_high": 0.9,
+     "ref_text": "0,50 - 0,90",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Globuli bianchi",
+     "value_numeric": 8.78,
+     "value_text": null,
+     "value": 8.78,
+     "unit": "10^3/uL",
+     "shown": "8,78",
+     "ref_low": 4.0,
+     "ref_high": 10.0,
+     "ref_text": "4,00 - 10,00",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Azotemia",
+     "value_numeric": 34.0,
+     "value_text": null,
+     "value": 34.0,
+     "unit": "mg/dL",
+     "shown": "34",
+     "ref_low": 15.0,
+     "ref_high": 45.0,
+     "ref_text": "15 - 45",
+     "flag": "normal"
+    },
+    {
+     "test_name": "C3",
+     "value_numeric": 128.0,
+     "value_text": null,
+     "value": 128.0,
+     "unit": "mg/dL",
+     "shown": "128",
+     "ref_low": 90.0,
+     "ref_high": 180.0,
+     "ref_text": "90 - 180",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Linfociti",
+     "value_numeric": 2.46,
+     "value_text": null,
+     "value": 2.46,
+     "unit": "10^3/uL",
+     "shown": "2,46",
+     "ref_low": 1.0,
+     "ref_high": 4.0,
+     "ref_text": "1,00 - 4,00",
+     "flag": "normal"
+    },
+    {
+     "test_name": "ANA",
+     "value_numeric": null,
+     "value_text": "Positivo 1:160",
+     "value": "Positivo 1:160",
+     "unit": "",
+     "shown": "Positivo 1:160",
+     "ref_low": null,
+     "ref_high": null,
+     "ref_text": "Negativo",
+     "flag": "high"
+    },
+    {
+     "test_name": "Colesterolo totale",
+     "value_numeric": 223.0,
+     "value_text": null,
+     "value": 223.0,
+     "unit": "mg/dL",
+     "shown": "223",
+     "ref_low": null,
+     "ref_high": 200.0,
+     "ref_text": "< 200",
+     "flag": "high"
+    },
+    {
+     "test_name": "C4",
+     "value_numeric": 48.0,
+     "value_text": null,
+     "value": 48.0,
+     "unit": "mg/dL",
+     "shown": "48",
+     "ref_low": 10.0,
+     "ref_high": 40.0,
+     "ref_text": "10 - 40",
+     "flag": "high"
+    }
+   ]
+  }
+ ]
+}

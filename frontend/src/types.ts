@@ -78,3 +78,30 @@ export interface RunEvent {
   stage: string; message?: string; progress?: number; backend?: string; model?: string;
   tokens_per_s?: number; latency_ms?: number; payload?: unknown;
 }
+
+export type LabReview = "auto" | "needs_review" | "confirmed" | "corrected" | "rejected";
+export type LabFlag = "low" | "high" | "normal";
+export interface LabValue {
+  id: string; date: string; value_numeric: number | null; value_text: string | null; flag: LabFlag | null;
+  review: LabReview; confidence: number | null; page: number; batch_id: string;
+}
+export interface LabTest {
+  test_key: string; test_name: string; unit: string; ref_low: number | null; ref_high: number | null;
+  latest: LabValue; out_of_range: boolean; values: LabValue[];
+}
+export interface LabsResponse { tests: LabTest[]; n_results: number; needs_review: number; out_of_range: number }
+export interface LabPatch {
+  action: "confirm" | "correct" | "reject";
+  value_numeric?: number | null; value_text?: string | null; unit?: string | null;
+  ref_low?: number | null; ref_high?: number | null;
+}
+export interface BatchStarted { batch_id: string; pages: number; entry_id: string }
+export interface BatchEvent {
+  batch_id: string; pages_done: number; pages_total: number; pages_per_sec: number;
+  gpu: Record<string, unknown> | null; errors: number; labs: number; needs_review: number; done: boolean;
+}
+export interface LabResult {
+  id: string; batch_id: string; test_name: string; test_key: string; value_numeric: number | null;
+  value_text: string | null; unit: string; ref_low: number | null; ref_high: number | null; flag: LabFlag | null;
+  date: string; page: number; confidence: number | null; review: LabReview; model: string | null;
+}

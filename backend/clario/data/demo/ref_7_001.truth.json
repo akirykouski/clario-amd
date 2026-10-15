@@ -1,0 +1,310 @@
+{
+ "doc_id": "ref_7_001",
+ "lab": {
+  "name": "Centro Diagnostico Borgo Alto",
+  "street": "Via dei Tigli 14",
+  "city": "10100 Torino (TO)"
+ },
+ "patient": {
+  "name": "Giulia Ferrante",
+  "born": "12/02/1992"
+ },
+ "date": "2025-04-07",
+ "date_it": "07/04/2025",
+ "scan_noise": false,
+ "pages": [
+  {
+   "page": 1,
+   "tests": [
+    {
+     "test_name": "Proteine urinarie",
+     "value_numeric": 2.0,
+     "value_text": null,
+     "value": 2.0,
+     "unit": "mg/dL",
+     "shown": "2",
+     "ref_low": null,
+     "ref_high": 15.0,
+     "ref_text": "< 15",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Sodio",
+     "value_numeric": 149.0,
+     "value_text": null,
+     "value": 149.0,
+     "unit": "mmol/L",
+     "shown": "149",
+     "ref_low": 136.0,
+     "ref_high": 145.0,
+     "ref_text": "136 - 145",
+     "flag": "high"
+    },
+    {
+     "test_name": "PCR",
+     "value_numeric": 1.8,
+     "value_text": null,
+     "value": 1.8,
+     "unit": "mg/L",
+     "shown": "1,8",
+     "ref_low": 0.0,
+     "ref_high": 5.0,
+     "ref_text": "0,0 - 5,0",
+     "flag": "normal"
+    },
+    {
+     "test_name": "MCV",
+     "value_numeric": 88.3,
+     "value_text": null,
+     "value": 88.3,
+     "unit": "fL",
+     "shown": "88,3",
+     "ref_low": 80.0,
+     "ref_high": 98.0,
+     "ref_text": "80,0 - 98,0",
+     "flag": "normal"
+    },
+    {
+     "test_name": "C3",
+     "value_numeric": 63.0,
+     "value_text": null,
+     "value": 63.0,
+     "unit": "mg/dL",
+     "shown": "63",
+     "ref_low": 90.0,
+     "ref_high": 180.0,
+     "ref_text": "90 - 180",
+     "flag": "low"
+    },
+    {
+     "test_name": "Glicemia",
+     "value_numeric": 63.0,
+     "value_text": null,
+     "value": 63.0,
+     "unit": "mg/dL",
+     "shown": "63",
+     "ref_low": 70.0,
+     "ref_high": 100.0,
+     "ref_text": "70 - 100",
+     "flag": "low"
+    },
+    {
+     "test_name": "Emoglobina",
+     "value_numeric": 14.7,
+     "value_text": null,
+     "value": 14.7,
+     "unit": "g/dL",
+     "shown": "14,7",
+     "ref_low": 12.0,
+     "ref_high": 16.0,
+     "ref_text": "12,0 - 16,0",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Anti-dsDNA",
+     "value_numeric": 159.0,
+     "value_text": null,
+     "value": 159.0,
+     "unit": "UI/mL",
+     "shown": "159",
+     "ref_low": 0.0,
+     "ref_high": 100.0,
+     "ref_text": "0 - 100",
+     "flag": "high"
+    },
+    {
+     "test_name": "Neutrofili",
+     "value_numeric": 9.46,
+     "value_text": null,
+     "value": 9.46,
+     "unit": "10^3/uL",
+     "shown": "9,46",
+     "ref_low": 1.8,
+     "ref_high": 7.0,
+     "ref_text": "1,80 - 7,00",
+     "flag": "high"
+    },
+    {
+     "test_name": "Ematocrito",
+     "value_numeric": 47.0,
+     "value_text": null,
+     "value": 47.0,
+     "unit": "%",
+     "shown": "47,0",
+     "ref_low": 36.0,
+     "ref_high": 46.0,
+     "ref_text": "36,0 - 46,0",
+     "flag": "high"
+    },
+    {
+     "test_name": "FT3",
+     "value_numeric": 3.71,
+     "value_text": null,
+     "value": 3.71,
+     "unit": "pg/mL",
+     "shown": "3,71",
+     "ref_low": 2.0,
+     "ref_high": 4.4,
+     "ref_text": "2,00 - 4,40",
+     "flag": "normal"
+    },
+    {
+     "test_name": "TSH",
+     "value_numeric": 3.28,
+     "value_text": null,
+     "value": 3.28,
+     "unit": "mIU/L",
+     "shown": "3,28",
+     "ref_low": 0.4,
+     "ref_high": 4.0,
+     "ref_text": "0,40 - 4,00",
+     "flag": "normal"
+    },
+    {
+     "test_name": "VES",
+     "value_numeric": 13.0,
+     "value_text": null,
+     "value": 13.0,
+     "unit": "mm/h",
+     "shown": "13",
+     "ref_low": 0.0,
+     "ref_high": 20.0,
+     "ref_text": "0 - 20",
+     "flag": "normal"
+    },
+    {
+     "test_name": "C4",
+     "value_numeric": 27.0,
+     "value_text": null,
+     "value": 27.0,
+     "unit": "mg/dL",
+     "shown": "27",
+     "ref_low": 10.0,
+     "ref_high": 40.0,
+     "ref_text": "10 - 40",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Potassio",
+     "value_numeric": 4.7,
+     "value_text": null,
+     "value": 4.7,
+     "unit": "mmol/L",
+     "shown": "4,7",
+     "ref_low": 3.5,
+     "ref_high": 5.1,
+     "ref_text": "3,5 - 5,1",
+     "flag": "normal"
+    },
+    {
+     "test_name": "ANA",
+     "value_numeric": null,
+     "value_text": "Positivo 1:80",
+     "value": "Positivo 1:80",
+     "unit": "",
+     "shown": "Positivo 1:80",
+     "ref_low": null,
+     "ref_high": null,
+     "ref_text": "Negativo",
+     "flag": "high"
+    },
+    {
+     "test_name": "ALT",
+     "value_numeric": 22.0,
+     "value_text": null,
+     "value": 22.0,
+     "unit": "U/L",
+     "shown": "22",
+     "ref_low": 0.0,
+     "ref_high": 35.0,
+     "ref_text": "0 - 35",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Creatinina",
+     "value_numeric": 0.39,
+     "value_text": null,
+     "value": 0.39,
+     "unit": "mg/dL",
+     "shown": "0,39",
+     "ref_low": 0.5,
+     "ref_high": 0.9,
+     "ref_text": "0,50 - 0,90",
+     "flag": "low"
+    },
+    {
+     "test_name": "Piastrine",
+     "value_numeric": 339.0,
+     "value_text": null,
+     "value": 339.0,
+     "unit": "10^3/uL",
+     "shown": "339",
+     "ref_low": 150.0,
+     "ref_high": 400.0,
+     "ref_text": "150 - 400",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Vitamina D",
+     "value_numeric": 129.9,
+     "value_text": null,
+     "value": 129.9,
+     "unit": "ng/mL",
+     "shown": "129,9",
+     "ref_low": 30.0,
+     "ref_high": 100.0,
+     "ref_text": "30,0 - 100,0",
+     "flag": "high"
+    },
+    {
+     "test_name": "Colesterolo totale",
+     "value_numeric": 264.0,
+     "value_text": null,
+     "value": 264.0,
+     "unit": "mg/dL",
+     "shown": "264",
+     "ref_low": null,
+     "ref_high": 200.0,
+     "ref_text": "< 200",
+     "flag": "high"
+    },
+    {
+     "test_name": "Sideremia",
+     "value_numeric": 157.0,
+     "value_text": null,
+     "value": 157.0,
+     "unit": "ug/dL",
+     "shown": "157",
+     "ref_low": 37.0,
+     "ref_high": 145.0,
+     "ref_text": "37 - 145",
+     "flag": "high"
+    },
+    {
+     "test_name": "Globuli bianchi",
+     "value_numeric": 5.22,
+     "value_text": null,
+     "value": 5.22,
+     "unit": "10^3/uL",
+     "shown": "5,22",
+     "ref_low": 4.0,
+     "ref_high": 10.0,
+     "ref_text": "4,00 - 10,00",
+     "flag": "normal"
+    },
+    {
+     "test_name": "Globuli rossi",
+     "value_numeric": 5.84,
+     "value_text": null,
+     "value": 5.84,
+     "unit": "10^6/uL",
+     "shown": "5,84",
+     "ref_low": 4.0,
+     "ref_high": 5.2,
+     "ref_text": "4,00 - 5,20",
+     "flag": "high"
+    }
+   ]
+  }
+ ]
+}

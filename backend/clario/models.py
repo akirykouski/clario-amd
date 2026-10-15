@@ -126,3 +126,57 @@ class Health(BaseModel):
     llm: dict
     locked: bool | None = None
     ontology: dict = Field(default_factory=dict)
+
+
+LabReview = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
+LabFlag = Literal["low", "high", "normal"]
+
+
+class LabResult(BaseModel):
+    """One row read from a lab report page. Low-confidence rows wait for a person (needs_review)."""
+
+    id: str
+    batch_id: str
+    test_name: str = Field(description="As printed on the page")
+    test_key: str = Field(description="Folded name used to group the same test across documents")
+    value_numeric: float | None = None
+    value_text: str | None = Field(None, description="Printed result when it is not a plain number, e.g. 'Positivo 1:160'")
+    unit: str = ""
+    ref_low: float | None = None
+    ref_high: float | None = None
+    flag: LabFlag | None = Field(None, description="Recomputed in code from value and range when both exist")
+    date: str = Field(description="ISO collection date; falls back to the import date")
+    page: int = Field(description="Page number within the batch")
+    confidence: float | None = Field(None, ge=0, le=1, description="Self-consistency or model confidence")
+    review: LabReview = "auto"
+    model: str | None = None
+
+
+class LabValue(BaseModel):
+    id: str
+    date: str
+    value_numeric: float | None
+    value_text: str | None
+    flag: LabFlag | None
+    review: LabReview
+    confidence: float | None
+    page: int
+    batch_id: str
+
+
+class LabTest(BaseModel):
+    test_key: str
+    test_name: str
+    unit: str
+    ref_low: float | None
+    ref_high: float | None
+    latest: LabValue
+    out_of_range: bool = Field(description="Latest value is flagged low or high")
+    values: list[LabValue] = Field(description="Oldest first")
+
+
+class LabsResponse(BaseModel):
+    tests: list[LabTest]
+    n_results: int
+    needs_review: int
+    out_of_range: int

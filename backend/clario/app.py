@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from . import brief as briefing
+from . import doc_routes
 from . import share as sharing
 from .config import Settings
 from .demo import giulia_entries
@@ -316,6 +317,8 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         note = ("Patterns worth discussing with your doctor. Not a diagnosis."
                 if pats else "Confirm at least 3 terms in your entries to look for patterns.")
         return {"patterns": pats, "confirmed_terms": len(ev), "note": note}
+
+    doc_routes.register(app, s, vault, llm, spawn)
 
     @app.post("/api/demo")
     async def demo(body: DemoIn):
