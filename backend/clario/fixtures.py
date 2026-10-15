@@ -29,6 +29,9 @@ PHRASES = [
 ]
 
 
+HEDGE = re.compile(r"\b(maybe|perhaps|i think|not sure|forse|mi sembra)\b")
+
+
 def _stats(tokens: int = 60) -> Stats:
     return Stats("offline-fixtures", "offline-fixture-v1", 5.0, tokens, None)
 
@@ -41,6 +44,9 @@ class OfflineLLM(LLM):
         payload = payload or {}
         if task == "extract":
             return json.dumps(self._extract(payload["text"])), _stats()
+        if task == "hpo_pick":
+            ids = {c["id"] for c in payload.get("candidates", [])}
+            return json.dumps({"hpo_id": payload.get("proposed") if payload.get("proposed") in ids else "NONE"}), _stats(8)
         if task == "rationale":
             feats = ", ".join(payload.get("overlapping_features", [])[:3]).lower()
             return json.dumps({"rationale": f"What you recorded ({feats}) resembles some typical features of "
@@ -51,13 +57,23 @@ class OfflineLLM(LLM):
             return json.dumps(self._brief(payload)), _stats(300)
         return "{}", _stats()
 
+    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None):
+        """n deterministic samples. In extraction, a phrase in a hedged sentence ("maybe", "forse") shows up only in
+        every other sample, so self-consistency confidence is below 1 and the review queue can be exercised offline."""
+        if task != "extract":
+            return await super().samples(task, messages, n, temperature=temperature, schema=schema, payload=payload)
+        outs = [json.dumps(self._extract(payload["text"], i)) for i in range(max(1, n))]
+        return outs, _stats(60 * len(outs))
+
     @staticmethod
-    def _extract(text: str) -> dict:
+    def _extract(text: str, sample: int = 0) -> dict:
         low = text.lower()
         ents = []
         for phrase, canonical, hpo in PHRASES:
             i = low.find(phrase)
             if i < 0:
+                continue
+            if sample % 2 and HEDGE.search(re.split(r"[.!?\n]", low[:i])[-1] + low[i:].split(".")[0]):
                 continue
             quote = text[i:i + len(phrase)]
             sev = re.search(r"(\d+)/10", text)

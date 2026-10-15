@@ -26,3 +26,10 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 
 ## Safety rails
 - No push without explicit yes. Secrets only via env.
+
+## Extraction v3 and review queue (T4/T5)
+- `Entity.review` (auto|needs_review|confirmed|corrected|rejected) is the single state field; legacy `status` is only accepted on PATCH and in old vault records. Patterns and shares count `confirmed`/`corrected` only (`models.COUNTED`), never negated, family_history, needs_review or rejected.
+- LLM calls that need n samples or a JSON schema go through `LLM.samples(...)`; OpenAICompat steps json_schema -> guided_json -> plain parsing on 400/422/501.
+- Review kinds are handlers in `app.state.review_kinds` (see `review.py`); a lab kind registers there. Every decision writes a `correction_log` vault record.
+- Env: CLARIO_SC_N (5), CLARIO_TRUST_MODEL_CONFIDENCE, CLARIO_HPO_PICK (1), CLARIO_REVIEW_THRESHOLD (0.7). OfflineLLM: a phrase in a "maybe/forse" sentence appears in every other sample, so confidence is 0.6 and it lands in the queue.
+- Never `pkill -f clario.app`: other sessions run servers from the same module. Kill by PID.

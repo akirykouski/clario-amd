@@ -22,7 +22,7 @@ function Review({ initial }: { initial: Entry }) {
   const [local, setLocal] = useState<Record<string, Entity>>({});
   const [err, setErr] = useState<string | null>(null);
   const ents = entry.entities.map((e) => local[e.id] ?? e);
-  const segs = splitQuotes(entry.text, ents.filter((e) => e.status !== "rejected").map((e) => e.quote));
+  const segs = splitQuotes(entry.text, ents.filter((e) => e.review !== "rejected").map((e) => e.quote));
 
   const patch = async (e: Entity, body: Parameters<typeof api.patchEntity>[1]) => {
     setErr(null);
@@ -56,24 +56,30 @@ function Review({ initial }: { initial: Entry }) {
 
 function EntityRow({ e, onPatch }: { e: Entity; onPatch: (b: Parameters<typeof api.patchEntity>[1]) => void }) {
   const [fixing, setFixing] = useState(false);
+  const decided = e.review === "confirmed" || e.review === "corrected";
   return (
-    <li className="card" style={e.status === "rejected" ? { opacity: 0.6 } : undefined}>
+    <li className="card" style={e.review === "rejected" ? { opacity: 0.6 } : undefined}>
       <p className="text-sm text-muted">You wrote: <mark className="quote text-ink">{e.quote}</mark></p>
-      <p className="mt-1 font-bold">{e.negated && "No "}{e.canonical}</p>
+      <p className="mt-1 font-bold">{e.negated && "No "}{e.family_history && "Relative: "}{e.canonical}</p>
+      {e.review === "needs_review" && (
+        <p className="text-sm mt-1 rounded-lg border px-2 py-1 chip-review">
+          We are not sure about this one. <Link className="underline" to="/review">Open the review list</Link>
+        </p>
+      )}
       <p className="text-sm text-muted">{e.hpo_id ? `${e.hpo_label ?? ""} (${e.hpo_id})` : "No ontology code"}</p>
       {e.flags.map((f) => <p key={f} className="text-sm mt-1" style={{ color: "var(--moderate)" }}>{flagNote[f] ?? f.replace(/_/g, " ")}</p>)}
       <div className="mt-3 flex flex-wrap gap-2">
-        <button className="btn" aria-pressed={e.status === "confirmed"} onClick={() => onPatch({ status: "confirmed" })}
-          style={e.status === "confirmed" ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}><Check size={16} aria-hidden /> {e.status === "confirmed" ? "Confirmed" : "Confirm"}</button>
-        <button className="btn" aria-pressed={e.status === "rejected"} onClick={() => onPatch({ status: "rejected" })}><X size={16} aria-hidden /> Not right</button>
+        <button className="btn" aria-pressed={decided} onClick={() => onPatch({ review: "confirmed" })}
+          style={decided ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}><Check size={16} aria-hidden /> {decided ? "Confirmed" : "Confirm"}</button>
+        <button className="btn" aria-pressed={e.review === "rejected"} onClick={() => onPatch({ review: "rejected" })}><X size={16} aria-hidden /> Not right</button>
         <button className="btn-quiet btn" onClick={() => setFixing(!fixing)} aria-expanded={fixing}>Fix term</button>
       </div>
-      {fixing && <TermFix onPick={(t) => { onPatch({ hpo_id: t.hpo_id, canonical: t.label, status: "confirmed" }); setFixing(false); }} />}
+      {fixing && <TermFix onPick={(t) => { onPatch({ hpo_id: t.hpo_id, canonical: t.label }); setFixing(false); }} />}
     </li>
   );
 }
 
-function TermFix({ onPick }: { onPick: (t: Term) => void }) {
+export function TermFix({ onPick }: { onPick: (t: Term) => void }) {
   const [q, setQ] = useState("");
   const [res, setRes] = useState<Term[]>([]);
   const [err, setErr] = useState<string | null>(null);

@@ -37,12 +37,13 @@ class DraftOut(BaseModel):
     items: list[DraftItem] = Field(default_factory=list)
 
 
+NOT_REVIEWED = "not reviewed by a person"
 SECTIONS = {"summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"}
 
 
 def model_input(pkg: SharePackage) -> str:
     entries = [{"id": e.id, "date": e.occurred_on, "text": e.text} for e in pkg.entries]
-    terms = Counter((x.canonical, x.hpo_id) for x in pkg.entities if not x.negated)
+    terms = Counter((x.canonical, x.hpo_id) for x in pkg.entities if not x.negated and not x.family_history)
     pats = [{"name": p.disease_name, "signal": p.signal, "overlap": [m.label for m in p.matched]} for p in pkg.patterns]
     return json.dumps({"period": pkg.period, "patient_note": pkg.note, "entries": entries,
                        "confirmed_terms": [{"term": t, "hpo": h, "times": n} for (t, h), n in terms.most_common()],
@@ -55,16 +56,21 @@ def patient_items(pkg: SharePackage) -> list[BriefItem]:
         items.append(BriefItem(id=_id(), section="summary", text=f"Patient's question for this visit: {pkg.note}",
                                origin="patient", review="accepted"))
     by_term: dict[tuple[str, str | None], list[str]] = {}
+    unreviewed: set[tuple[str, str | None]] = set()
     for x in pkg.entities:
         if x.negated:
             continue
         sec = {"lab": "labs", "medication": "medications"}.get(x.type, "symptoms")
-        by_term.setdefault((sec, x.canonical + (f" ({x.hpo_id})" if x.hpo_id else "")), []).append(x.entry_id)
+        label = ("Family history: " if x.family_history else "") + x.canonical + (f" ({x.hpo_id})" if x.hpo_id else "")
+        by_term.setdefault((sec, label), []).append(x.entry_id)
+        if not x.reviewed:
+            unreviewed.add((sec, label))
     dates = {e.id: e.occurred_on for e in pkg.entries}
     for (sec, label), cites in sorted(by_term.items(), key=lambda kv: -len(kv[1])):
         ds = sorted(dates[c] for c in cites if c in dates)
         span = f"{ds[0]} to {ds[-1]}" if ds and ds[0] != ds[-1] else (ds[0] if ds else "")
-        items.append(BriefItem(id=_id(), section=sec, text=f"{label}: recorded {len(cites)}x, {span}",
+        mark = f" ({NOT_REVIEWED})" if (sec, label) in unreviewed else ""
+        items.append(BriefItem(id=_id(), section=sec, text=f"{label}: recorded {len(cites)}x, {span}{mark}",
                                cites=sorted(set(cites)), origin="patient", review="accepted"))
     return items
 

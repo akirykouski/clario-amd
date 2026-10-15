@@ -119,7 +119,7 @@ async def test_extraction_grounds_on_a_redacted_entry(tmp_path):
     assert "rash on my cheeks" in quotes
     assert "Giulia's knees ache" in quotes  # placeholder quote restored from the in-memory map
     assert "12/03/2026 Giulia called" in quotes
-    assert log.verify()["ok"] and log.calls()[0]["purpose"] == "extract" and log.calls()[0]["redacted"] is True
+    assert log.verify()["ok"] and all(c["purpose"] == "extract" and c["redacted"] is True for c in log.calls())
 
 
 async def test_local_backend_is_not_redacted_but_still_logged(tmp_path):
@@ -128,7 +128,7 @@ async def test_local_backend_is_not_redacted_but_still_logged(tmp_path):
     log = privacy.CallLog(privacy.FileStore(tmp_path / "log.jsonl"))
     await extract(privacy.PrivacyLLM(fake, log, False), "e1", text, Ontology.load())
     assert fake.seen[0] == text
-    rec = log.calls()[0]
+    rec = log.calls()[-1]  # oldest: the extraction call itself
     assert rec["redacted"] is False and "Giulia" not in rec["redacted_preview"]  # preview is always redacted
     assert rec["payload_sha256"] == privacy.sha256(json.dumps(
         [{"role": m["role"], "content": m["content"]} for m in
@@ -227,10 +227,11 @@ def test_patient_flow_logs_redacts_and_previews(remote_patient):
     assert all(x["quote"] in text for x in e["entities"])
 
     calls = c.get("/api/privacy/calls").json()
-    assert len(calls) == 1 and calls[0]["purpose"] == "extract" and calls[0]["redacted"] is True
-    assert calls[0]["replacements"] == 3 and calls[0]["backend"] == "offline-fixtures"
-    assert "[NAME]" in calls[0]["redacted_preview"] and "Giulia" not in json.dumps(calls)
-    assert c.get("/api/privacy/verify").json() == {"ok": True, "broken_at": None, "count": 1}
+    first = calls[-1]  # extraction may add self-consistency and HPO-pick calls; all are logged
+    assert all(x["purpose"] == "extract" and x["redacted"] is True for x in calls)
+    assert first["replacements"] == 3 and first["backend"] == "offline-fixtures"
+    assert "[NAME]" in first["redacted_preview"] and "Giulia" not in json.dumps(calls)
+    assert c.get("/api/privacy/verify").json() == {"ok": True, "broken_at": None, "count": len(calls)}
 
     p = c.get("/api/privacy/preview", params={"entry_id": eid}).json()
     assert p["original"] == text and p["applied"] is True
@@ -240,7 +241,7 @@ def test_patient_flow_logs_redacts_and_previews(remote_patient):
 
     # re-run adds a second link; the log never stores the raw text
     assert c.post(f"/api/entries/{eid}/extract").status_code == 200
-    assert c.get("/api/privacy/verify").json()["count"] == 2
+    assert c.get("/api/privacy/verify").json()["count"] > len(calls)
     raw = json.dumps(c.get("/api/privacy/calls?limit=1").json())
     assert "giulia@example.com" not in raw
 
@@ -259,7 +260,7 @@ def test_local_default_leaves_text_alone_but_logs(unlocked):
     unlocked.post("/api/entries", json={"text": "Giulia knees ache"})
     wait_extracted(unlocked)
     calls = unlocked.get("/api/privacy/calls").json()
-    assert len(calls) == 1 and calls[0]["redacted"] is False and calls[0]["redacted_preview"].startswith("[NAME]")
+    assert calls and all(x["redacted"] is False for x in calls) and calls[-1]["redacted_preview"].startswith("[NAME]")
 
 
 def test_clinic_keeps_its_own_log(tmp_path):

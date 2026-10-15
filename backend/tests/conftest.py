@@ -42,7 +42,7 @@ def wait_extracted(client, timeout=10):
 def confirm_all(client):
     for e in client.get("/api/entries").json():
         for x in e["entities"]:
-            client.patch(f"/api/entities/{x['id']}", json={"status": "confirmed"})
+            client.patch(f"/api/entities/{x['id']}", json={"review": "confirmed"})
 
 
 def sse(client, rid):

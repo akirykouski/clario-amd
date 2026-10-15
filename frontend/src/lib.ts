@@ -91,5 +91,12 @@ export function daysAgo(n: number): string {
 }
 export const flagNote: Record<string, string> = {
   hpo_dropped: "Ontology code removed: it did not match your words.",
+  negation_from_text: "Marked as absent because your words say you do not have it.",
+  family_history_from_text: "Marked as a relative's, not yours.",
   quote_not_found: "We could not find these exact words in your note.",
 };
+
+/** Confidence as a whole-number percent for the bar; null when it was not measured. */
+export function confidencePct(c: number | null): number | null {
+  return c === null ? null : Math.round(Math.max(0, Math.min(1, c)) * 100);
+}

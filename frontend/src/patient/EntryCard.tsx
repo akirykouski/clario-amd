@@ -23,7 +23,7 @@ export function useLiveEntry(initial: Entry, onChange?: (e: Entry) => void) {
 
 export function EntryCard({ initial, onChange }: { initial: Entry; onChange?: (e: Entry) => void }) {
   const entry = useLiveEntry(initial, onChange);
-  const terms = entry.entities.filter((e) => e.status !== "rejected");
+  const terms = entry.entities.filter((e) => e.review !== "rejected");
   return (
     <article className="card">
       <div className="flex justify-between text-sm text-muted">
@@ -35,9 +35,15 @@ export function EntryCard({ initial, onChange }: { initial: Entry; onChange?: (e
         {entry.extraction === "pending" && <Spinner label="Reading your note" />}
         {entry.extraction === "failed" && <span className="text-sm text-muted">We could not read this note automatically. You can try again from the review page.</span>}
         {entry.extraction === "done" && terms.length === 0 && <span className="text-sm text-muted">No terms found.</span>}
-        {terms.map((t) => (
-          <span key={t.id} className="chip" style={t.status === "confirmed" ? { borderColor: "var(--accent)" } : undefined}>
-            {t.negated && <span className="text-muted">no </span>}{t.canonical}{t.status === "suggested" && <span className="text-muted text-xs"> (to check)</span>}
+        {terms.map((t) => t.review === "needs_review" ? (
+          <Link key={t.id} to="/review" className="chip chip-review" title="We are not sure about this one. Open the review list.">
+            {t.negated && <span className="text-muted">no </span>}{t.family_history && <span className="text-muted">relative: </span>}{t.canonical}
+            <span className="text-xs font-bold"> (to review)</span>
+          </Link>
+        ) : (
+          <span key={t.id} className="chip" style={t.review === "confirmed" || t.review === "corrected" ? { borderColor: "var(--accent)" } : undefined}>
+            {t.negated && <span className="text-muted">no </span>}{t.family_history && <span className="text-muted">relative: </span>}{t.canonical}
+            {t.review === "auto" && <span className="text-muted text-xs"> (to check)</span>}
           </span>
         ))}
       </div>

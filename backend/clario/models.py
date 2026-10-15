@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 EntityType = Literal["symptom", "finding", "lab", "medication", "trigger", "body_site"]
 Signal = Literal["weak", "moderate", "strong"]
+Review = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
+COUNTED = ("confirmed", "corrected")  # decided by a person and kept: counts toward patterns and sharing
 
 
 class Term(BaseModel):
@@ -29,9 +31,23 @@ class Entity(BaseModel):
     hpo_label: str | None = None
     negated: bool = Field(False, description="'no fever today' -> negated")
     severity: int | None = Field(None, ge=0, le=10)
-    status: Literal["suggested", "confirmed", "rejected"] = "suggested"
+    family_history: bool = Field(False, description="'my mother has lupus' -> about a relative, not the patient")
+    onset_hint: str | None = Field(None, description="ISO date or relative phrase from the text ('since Tuesday')")
+    confidence: float | None = Field(None, ge=0, le=1, description="Self-consistency share, or the model's own; null if not measured")
+    review: Review = Field("auto", description="auto: not looked at; needs_review: confidence below threshold; "
+                                               "confirmed, corrected, rejected: decided by the patient")
     flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, quote_not_found")
     model: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_status(cls, d):
+        """Records saved before `review` existed carried status suggested|confirmed|rejected."""
+        if isinstance(d, dict) and "status" in d:
+            d = dict(d)
+            st = d.pop("status")
+            d.setdefault("review", st if st in ("confirmed", "rejected") else "auto")
+        return d
 
 
 class Entry(BaseModel):
@@ -83,7 +99,9 @@ class SharedEntity(BaseModel):
     canonical: str
     hpo_id: str | None = None
     negated: bool = False
+    family_history: bool = False
     severity: int | None = None
+    reviewed: bool = Field(True, description="False: no person has checked it; the brief says so")
 
 
 class SharePackage(BaseModel):

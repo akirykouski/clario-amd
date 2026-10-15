@@ -24,6 +24,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from .llm import extract_json
 from .vault import Locked, Vault
 
 GENESIS = "0" * 64
@@ -366,6 +367,7 @@ class PrivacyLLM:
     def _log(self, task: str, sent: list[dict], preview: str, purpose: str | None, red: Redaction) -> None:
         images = sum(1 for m in sent if isinstance(m.get("content"), list)
                      for p in m["content"] if isinstance(p, dict) and p.get("type") != "text")
+        task = "extract" if task == "hpo_pick" else task  # the HPO pick is part of extraction
         p = purpose or (task if task in PURPOSES else "other")
         self.log.append(backend=self._inner.backend, model=self._inner.model, purpose=p, preview=preview,
                         sent_text=json.dumps(sent, ensure_ascii=False, sort_keys=True), redacted=self.pseudonymize,
@@ -388,8 +390,19 @@ class PrivacyLLM:
 
     async def samples(self, task, messages, *args, purpose=None, payload=None, **kw):
         msgs, pl, red = self._prepare(task, messages, payload, purpose)
-        res = await self._inner.samples(task, msgs, *args, payload=pl, **kw)
-        return red.restore_in(res)
+        texts, st = await self._inner.samples(task, msgs, *args, payload=pl, **kw)
+        return [self._restore_text(t, red) for t in texts], st
+
+    @staticmethod
+    def _restore_text(text: str, red: Redaction) -> str:
+        """Raw JSON text from samples(): restore placeholders inside `quote` fields, leave the rest as sent."""
+        if not red.count:
+            return text
+        try:
+            obj = extract_json(text)
+        except ValueError:
+            return text
+        return json.dumps(red.restore_in(obj), ensure_ascii=False)
 
 
 def wrap(inner, s, log: CallLog) -> PrivacyLLM:

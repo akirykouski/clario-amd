@@ -1,5 +1,5 @@
 import type {
-  AiCall, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, PatternsResponse, SafetyNotice,
+  AiCall, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
   ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState,
 } from "./types";
 
@@ -53,8 +53,11 @@ export const api = {
   entry: (id: string) => request<Entry>("GET", `/entries/${encodeURIComponent(id)}`),
   deleteEntry: (id: string) => request<{ ok: boolean }>("DELETE", `/entries/${encodeURIComponent(id)}`),
   extract: (id: string) => request<Entry>("POST", `/entries/${encodeURIComponent(id)}/extract`),
-  patchEntity: (id: string, b: Partial<Pick<Entity, "status" | "canonical" | "hpo_id" | "severity" | "negated">>) =>
+  patchEntity: (id: string, b: Partial<Pick<Entity, "review" | "canonical" | "hpo_id" | "severity" | "negated">>) =>
     request<Entity>("PATCH", `/entities/${encodeURIComponent(id)}`, { body: b }),
+  review: () => request<ReviewQueue>("GET", "/review"),
+  reviewAct: (kind: string, id: string, action: ReviewAction, value?: string) =>
+    request<{ ok: boolean; count: number }>("POST", `/review/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { body: { action, value } }),
   searchTerms: (q: string) => request<Term[]>("GET", "/terms/search", { params: { q } }),
   timeline: () => request<Timeline>("GET", "/timeline"),
   patterns: () => request<PatternsResponse>("GET", "/patterns"),

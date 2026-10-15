@@ -39,6 +39,9 @@ class Settings:
         if self.doc_concurrency:
             return self.doc_concurrency
         return 32 if self.llm_backend in ("amd-vllm", "openai-compatible") else 4
+    sc_n: int = 5  # self-consistency samples; 1 disables
+    trust_model_confidence: bool = False
+    hpo_pick: bool = True  # second call: model picks the HPO id from ontology candidates
 
     @property
     def llm_host(self) -> str | None:
@@ -82,6 +85,9 @@ class Settings:
             llm_vision_model=(e.get("LLM_VISION_MODEL") or "").strip() or None,
             doc_concurrency=max(1, int(e["CLARIO_DOC_CONCURRENCY"])) if e.get("CLARIO_DOC_CONCURRENCY") else None,
             doc_samples=max(1, int(e.get("CLARIO_DOC_SAMPLES") or 3)),
+            sc_n=max(1, int(e.get("CLARIO_SC_N") or 5)),
+            trust_model_confidence=(e.get("CLARIO_TRUST_MODEL_CONFIDENCE") or "").strip() in ("1", "true", "yes"),
+            hpo_pick=(e.get("CLARIO_HPO_PICK") or "1").strip().lower() not in ("0", "false", "no"),
             review_threshold=float(e.get("CLARIO_REVIEW_THRESHOLD") or 0.7),
         )
         return replace(s, **overrides) if overrides else s

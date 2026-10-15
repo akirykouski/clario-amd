@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BookOpen, CalendarDays, FlaskConical, Lock, Send, ShieldCheck, Waypoints } from "lucide-react";
 import { api, onLocked } from "../api";
 import type { VaultState } from "../types";
@@ -13,16 +13,28 @@ import SharePage from "./SharePage";
 import PrivacyPage from "./PrivacyPage";
 import LabsPage from "./LabsPage";
 import ImportPage from "./ImportPage";
+import ReviewPage, { REVIEW_EVENT } from "./ReviewPage";
 
 export default function PatientApp() {
   const nav = useNavigate();
   const loc = useLocation();
   const [vault, setVault] = useState<VaultState | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [toReview, setToReview] = useState(0);
 
   const refresh = () => api.vault().then(setVault).catch((e: Error) => setErr(e.message));
   useEffect(() => { refresh(); }, []);
   useEffect(() => onLocked(() => { setVault((v) => (v ? { ...v, locked: true } : v)); nav("/unlock", { replace: true }); }), [nav]);
+
+  const open0 = !!vault && vault.initialized && !vault.locked;
+  useEffect(() => {
+    if (!open0) return;
+    const load = () => api.review().then((r) => setToReview(r.count)).catch(() => {});
+    load();
+    window.addEventListener(REVIEW_EVENT, load);
+    const t = setInterval(load, 5000); // extraction runs in the background; new items can appear
+    return () => { window.removeEventListener(REVIEW_EVENT, load); clearInterval(t); };
+  }, [open0, loc.pathname]);
 
   if (err) return <div className="max-w-md mx-auto p-6"><ErrorBox error={err} retry={refresh} /></div>;
   if (!vault) return <Loading />;
@@ -50,6 +62,9 @@ export default function PatientApp() {
             ))}
           </nav>
           <div className="flex items-center gap-2">
+            {toReview > 0 && (
+              <Link to="/review" className="chip chip-review font-bold min-h-[44px] px-3" aria-label={`${toReview} to review`}>{toReview} to review</Link>
+            )}
             <NavLink to="/privacy" className="btn" aria-label="What left this device" title="What left this device"><ShieldCheck size={18} aria-hidden /></NavLink>
             <button className="btn" onClick={lock} aria-label="Lock diary"><Lock size={16} aria-hidden /> Lock</button>
           </div>
@@ -65,6 +80,7 @@ export default function PatientApp() {
           <Route path="/import" element={<ImportPage />} />
           <Route path="/share" element={<SharePage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/review" element={<ReviewPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
