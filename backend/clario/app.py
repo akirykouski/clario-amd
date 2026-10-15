@@ -591,7 +591,10 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             t0 = time.perf_counter()
             async for delta, st in llm.stream("brief", msgs, max_tokens=1500,
                                               payload={"lang": lang,
-                                                       "entries": [{"id": e.id, "date": e.occurred_on} for e in pkg.entries]}):
+                                                       "entries": [{"id": e.id, "date": e.occurred_on} for e in pkg.entries],
+                                                       "entry_terms": {e.id: sorted({x.canonical for x in pkg.entities if x.entry_id == e.id
+                                                                                    and not x.negated and not x.family_history})
+                                                                       for e in pkg.entries}}):
                 if st:
                     stats = st
                     continue

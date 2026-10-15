@@ -72,7 +72,7 @@ export type BriefReview = "pending" | "accepted" | "rejected" | "edited";
 
 export interface BriefItem {
   id: string; section: BriefSection; text: string; cites: string[];
-  origin: "patient" | "ai"; review: BriefReview;
+  origin: "patient" | "ai"; review: BriefReview; flag?: "citation_mismatch" | null;
 }
 
 export type Persona = "giulia" | "giulia_it";

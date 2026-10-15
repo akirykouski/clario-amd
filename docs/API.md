@@ -61,7 +61,7 @@ Extraction env (patient mode): `CLARIO_SC_N` (self-consistency samples, default 
 | POST | `/api/inbox/{id}/brief` | `?lang=en\|it` | `{run_id}`: drafts the brief with the clinic model; SSE events on `/api/runs/{run_id}/events` |
 | GET | `/api/runs/{run_id}/events` | | SSE `{stage, message, progress, backend, model, tokens_per_s, latency_ms, payload}`; final `done` payload = `Brief` |
 | GET | `/api/inbox/{id}/brief` | `?audience=clinician\|patient&lang=it\|en` | `Brief` (carries `lang`, `audience`). Default: the stored clinician brief. `clinician`: clinical terms, HPO ids, severity and onset, family history marked. `patient`: plain words (the patient's own quotes and Italian names where shipped), no condition names, only AI items a clinician accepted or edited that were drafted in the same `lang`; 409 until the brief is finalized |
-| PATCH | `/api/brief-items/{package_id}/{item_id}` | `{review, text?}` | `BriefItem` |
+| PATCH | `/api/brief-items/{package_id}/{item_id}` | `{review, text?}` | `BriefItem` (`flag: "citation_mismatch" \| null`, set in code when the text names a term that none of its cited entries confirms; flagged items stay `pending` and never reach the patient copy) |
 | POST | `/api/inbox/{id}/brief/finalize` | | `Brief` (409 while any item is `pending`) |
 | GET | `/api/inbox/{id}/brief.md` | `?audience&lang` as above | text/markdown of accepted and edited items only, with citations |
 | GET | `/api/bench` | | latest `bench/results/*.json` |

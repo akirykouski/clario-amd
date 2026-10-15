@@ -175,6 +175,8 @@ class BriefItem(BaseModel):
     cites: list[str] = Field(default_factory=list, description="entry ids")
     origin: Literal["patient", "ai"] = "ai"
     review: Literal["pending", "accepted", "rejected", "edited"] = "pending"
+    flag: Literal["citation_mismatch"] | None = Field(
+        None, description="Set by code when the item names a term that none of its cited entries confirms; the clinician sees it")
 
 
 class Brief(BaseModel):

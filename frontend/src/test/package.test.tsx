@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { api } from "../api";
 import PackagePage from "../clinic/PackagePage";
+import { RunChips } from "../clinic/BriefPanel";
 import type { SharePackage } from "../types";
 
 afterEach(() => vi.restoreAllMocks());
@@ -46,5 +47,26 @@ describe("clinic package page", () => {
     const weak = screen.getByText("Weaker signals (1)").closest("details") as HTMLElement;
     expect(within(weak).getByText("Weak one")).toBeInTheDocument();
     expect(within(weak).queryByText("Strong one")).toBeNull();
+  });
+});
+
+describe("run chips", () => {
+  it("shows model, speed, latency and GPU for a real backend", async () => {
+    vi.spyOn(api, "gpu").mockResolvedValue({ gpu_name: "AMD Instinct MI300X", util_pct: 71 });
+    render(<RunChips backend="vllm" model="gemma-4" tokensPerS={42.3} latencyMs={2500} />);
+    const chips = await screen.findByTestId("run-chips");
+    await screen.findByText(/MI300X/);
+    expect(chips).toHaveTextContent("vllm · gemma-4");
+    expect(chips).toHaveTextContent("42.3 tokens/s");
+    expect(chips).toHaveTextContent("2.5 s");
+    expect(chips).toHaveTextContent("71%");
+  });
+  it("says Demo model (offline) and hides the speed for the offline fixtures", async () => {
+    vi.spyOn(api, "gpu").mockResolvedValue(null);
+    render(<RunChips backend="offline-fixtures" model="offline-fixture-v1" tokensPerS={60} latencyMs={5} />);
+    const chips = await screen.findByTestId("run-chips");
+    expect(chips).toHaveTextContent("Demo model (offline)");
+    expect(chips).not.toHaveTextContent("offline-fixture-v1");
+    expect(chips).not.toHaveTextContent("tokens/s");
   });
 });

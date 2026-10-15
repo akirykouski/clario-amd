@@ -113,3 +113,42 @@ def test_demo_referti_latest_date_is_pinned():
             if off:
                 best = max(best, off['date'])
     assert best == REFERTI_LATEST.isoformat()
+
+
+def test_citation_mismatch_flags_a_term_no_cited_entry_confirms():
+    from clario.brief import DraftItem, DraftOut, check_ai_items
+
+    e1 = Entry(id="e1", created_at="x", occurred_on="2026-10-01", text="Knees ache", entities=[ent(1, "Arthralgia", "HP:0002829")])
+    e2 = Entry(id="e2", created_at="x", occurred_on="2026-10-02", text="Tired", entities=[
+        Entity(id="x9", entry_id="e2", type="symptom", quote="Tired", canonical="Fatigue", hpo_id="HP:0012378", review="confirmed")])
+    pkg = build_package([e1, e2], "2026-09-01", "2026-10-31", "Ash-001", None, [], 1)
+    draft = DraftOut(items=[
+        DraftItem(section="timeline", text="2026-10-01: fatigue first noted.", cites=["e1"]),  # e1 has no fatigue
+        DraftItem(section="timeline", text="2026-10-02: fatigue noted.", cites=["e2"]),
+        DraftItem(section="timeline", text="2026-10-01: arthralgia noted, fatigue later.", cites=["e1", "e2"])])
+    out = check_ai_items(pkg, draft)
+    assert [i.flag for i in out] == ["citation_mismatch", None, None]
+    assert all(i.review == "pending" for i in out)  # flagged or not, a clinician decides
+
+
+def test_demo_brief_wrong_line_is_flagged_and_stays_out_of_the_patient_copy(unlocked, clinic_server, tmp_path):
+    unlocked.post("/api/demo", json={"persona": "giulia"})
+    wait_extracted(unlocked)
+    confirm_all(unlocked)
+    today = date.today()
+    body = {"clinic_url": clinic_server, "since": (today - timedelta(days=56)).isoformat(), "until": today.isoformat()}
+    pid = unlocked.post("/api/share", json=body).json()["package_id"]
+    with TestClient(create_app(settings(tmp_path, "clinic"))) as clinic:
+        events = sse(clinic, clinic.post(f"/api/inbox/{pid}/brief").json()["run_id"])
+        items = events[-1]["payload"]["items"]
+        bad = [i for i in items if i["flag"] == "citation_mismatch"]
+        assert len(bad) == 1 and "fatigue first noted" in bad[0]["text"] and bad[0]["review"] == "pending"
+        good = [i for i in items if i["origin"] == "ai" and not i["flag"]]
+        assert any("fatigue noted" in i["text"] for i in good)  # the correct dated line passes the check
+        for i in items:
+            if i["origin"] == "ai":
+                r = "rejected" if i["flag"] else "accepted"
+                assert clinic.patch(f"/api/brief-items/{pid}/{i['id']}", json={"review": r}).status_code == 200
+        assert clinic.post(f"/api/inbox/{pid}/brief/finalize").json()["finalized"] is True
+        md = clinic.get(f"/api/inbox/{pid}/brief.md").text
+        assert "fatigue first noted" not in md

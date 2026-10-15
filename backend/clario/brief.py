@@ -9,11 +9,13 @@ summary text must pass the hedge validator. Every AI item starts `pending` and n
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from collections import Counter
 
 from pydantic import BaseModel, Field
 
+from .i18n import hpo_it
 from .models import Brief, BriefItem, SharePackage
 from .safety import hedge_problems
 
@@ -214,9 +216,33 @@ def render_brief(pkg: SharePackage, brief: Brief, audience: str, lang: str, onto
         items = patient_items(pkg, lang) + ai
     else:
         keep = [i for i in ai if i.review in ("accepted", "edited") and i.section in ("summary", "timeline")
-                and brief.lang == lang and not names_condition(i.text, onto)]
+                and brief.lang == lang and not i.flag and not names_condition(i.text, onto)]
         items = patient_view_items(pkg, lang, onto) + keep
     return brief.model_copy(update={"items": items, "audience": audience, "lang": lang})
+
+
+def _term_names(pkg: SharePackage) -> dict[str, set[str]]:
+    """Every way the package names one of the patient's terms (clinical name, Italian name) -> the term keys it can mean."""
+    names: dict[str, set[str]] = {}
+    for x in pkg.entities:
+        if x.negated or x.family_history or x.type == "lab":
+            continue
+        key = x.hpo_id or x.canonical.lower()
+        for n in (x.canonical, hpo_it().get(x.hpo_id or "", "")):
+            if len(n.strip()) >= 4:
+                names.setdefault(n.strip().lower(), set()).add(key)
+    return names
+
+
+def citation_mismatch(pkg: SharePackage, text: str, cites: list[str]) -> bool:
+    """True when the text names a term of the patient that none of the cited entries confirms."""
+    low = text.lower()
+    supported = {x.hpo_id or x.canonical.lower() for x in pkg.entities
+                 if x.entry_id in cites and not x.negated and not x.family_history}
+    for name, keys in _term_names(pkg).items():
+        if re.search(rf"\b{re.escape(name)}\b", low) and not (keys & supported):
+            return True
+    return False
 
 
 def check_ai_items(pkg: SharePackage, draft: DraftOut) -> list[BriefItem]:
@@ -235,7 +261,8 @@ def check_ai_items(pkg: SharePackage, draft: DraftOut) -> list[BriefItem]:
             continue  # pattern notes must be hedged
         if any(p != "no hedging language" for p in problems):
             continue  # diagnostic or prescriptive language
-        out.append(BriefItem(id=_id(), section=sec, text=text, cites=cites, origin="ai", review="pending"))
+        flag = "citation_mismatch" if cites and citation_mismatch(pkg, text, cites) else None  # never accepted without a clinician
+        out.append(BriefItem(id=_id(), section=sec, text=text, cites=cites, origin="ai", review="pending", flag=flag))
     return out
 
 
