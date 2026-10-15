@@ -43,3 +43,14 @@ Shapes: `backend/clario/models.py`. One codebase, two modes: `CLARIO_MODE=patien
 | POST | `/api/inbox/{id}/brief/finalize` | | `Brief` (409 while any item is `pending`) |
 | GET | `/api/inbox/{id}/brief.md` | | text/markdown of accepted and edited items only, with citations |
 | GET | `/api/bench` | | latest `bench/results/*.json` |
+
+## Privacy (both modes)
+Text is pseudonymized (`backend/clario/privacy.py`) before a model call when `CLARIO_PSEUDONYMIZE=1`, or by default in patient mode when `LLM_BASE_URL` is not localhost. Email, phone, codice fiscale, IBAN, absolute dates, street addresses and first names become `[EMAIL]` `[PHONE]` `[CODICE_FISCALE]` `[IBAN]` `[DATE]` `[ADDRESS]` `[NAME]`. Medical terms, doses, lab values and scores are untouched. Quotes returned by the model are mapped back to the original text (the map lives in memory for the call). Every call is logged on every backend, redacted or not: patient mode in the vault (kind `ai_call`), clinic mode in `ai_calls.jsonl` in the clinic data dir.
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/api/privacy/calls` | `?limit=50` (max 500). `AiCall[]` newest first |
+| GET | `/api/privacy/verify` | `PrivacyVerify` = `{ok, broken_at: id \| null, count}`. Recomputes the chain; any edited, removed or reordered record gives `ok=false` and the first bad id |
+| GET | `/api/privacy/preview` | patient only. `?entry_id=` returns `PrivacyPreview` = `{original, redacted, replacements: [{type, start, end, out_start, out_end}], applied, backend}` |
+
+`/api/health` `llm.pseudonymize` reports whether redaction is active. The log stores a 200 char redacted preview and the sha256 of the exact payload sent, never the raw text. Deleting the newest records (tail truncation) is not detectable by the chain alone.

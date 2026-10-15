@@ -10,6 +10,11 @@ from urllib.parse import urlparse
 DEFAULT_LOCAL_BASE = "http://localhost:11434/v1"  # Ollama's OpenAI-compatible API
 
 
+def _flag(v: str | None) -> bool | None:
+    v = (v or "").strip().lower()
+    return None if not v else v in ("1", "true", "yes", "on")
+
+
 @dataclass(frozen=True)
 class Settings:
     mode: str = "patient"  # "patient" | "clinic"
@@ -23,6 +28,7 @@ class Settings:
     clinic_name: str = "Clario clinic"
     frontend_dist: Path | None = None
     auto_lock_minutes: int = 15
+    pseudonymize: bool | None = None  # None = auto: on in patient mode when the model is remote
 
     @property
     def llm_host(self) -> str | None:
@@ -62,5 +68,6 @@ class Settings:
             clinic_name=e.get("CLARIO_CLINIC_NAME") or "Clario clinic",
             frontend_dist=Path(dist) if dist else here.parent / "frontend" / "dist",
             auto_lock_minutes=int(e.get("CLARIO_AUTO_LOCK_MINUTES") or 15),
+            pseudonymize=_flag(e.get("CLARIO_PSEUDONYMIZE")),
         )
         return replace(s, **overrides) if overrides else s

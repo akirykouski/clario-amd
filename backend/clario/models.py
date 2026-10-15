@@ -120,6 +120,48 @@ class Brief(BaseModel):
     stats: dict = Field(default_factory=dict, description="latency_ms, tokens_per_s, tokens")
 
 
+class PrivacyReplacement(BaseModel):
+    """One redaction. Positions only, never the original value. start/end index the original, out_* the sent text."""
+
+    type: Literal["email", "phone", "codice_fiscale", "iban", "date", "address", "name"]
+    start: int
+    end: int
+    out_start: int
+    out_end: int
+
+
+class PrivacyPreview(BaseModel):
+    original: str
+    redacted: str
+    replacements: list[PrivacyReplacement]
+    applied: bool = Field(description="True when redaction runs before calls on this server's backend")
+    backend: str
+
+
+class AiCall(BaseModel):
+    """One model call in the tamper-evident log. hash = sha256(prev_hash + payload_sha256 + ts + backend + model + purpose)."""
+
+    id: str
+    seq: int
+    ts: str
+    backend: str
+    model: str
+    purpose: Literal["extract", "rationale", "brief", "next_question", "document", "other"]
+    redacted_preview: str = Field(description="First 200 chars of the redacted text")
+    payload_sha256: str
+    prev_hash: str
+    hash: str
+    redacted: bool = Field(False, description="Whether text was pseudonymized before this call")
+    replacements: int = 0
+    images: int = 0
+
+
+class PrivacyVerify(BaseModel):
+    ok: bool
+    broken_at: str | None = None
+    count: int = 0
+
+
 class Health(BaseModel):
     ok: bool
     mode: Literal["patient", "clinic"]

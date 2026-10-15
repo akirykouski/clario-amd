@@ -4,6 +4,7 @@ import { api } from "../api";
 import type { Entry } from "../types";
 import { fmtDate } from "../lib";
 import { Spinner } from "../components/ui";
+import { CloudSaw } from "./CloudSaw";
 
 /** Polls GET /api/entries/{id} every 2s while extraction is pending. */
 export function useLiveEntry(initial: Entry, onChange?: (e: Entry) => void) {
@@ -40,7 +41,10 @@ export function EntryCard({ initial, onChange }: { initial: Entry; onChange?: (e
           </span>
         ))}
       </div>
-      <div className="mt-2"><Link className="btn-quiet btn px-0" to={`/entry/${entry.id}`}>Review terms</Link></div>
+      <div className="mt-2 flex flex-wrap items-start gap-x-5">
+        <Link className="btn-quiet btn px-0" to={`/entry/${entry.id}`}>Review terms</Link>
+        <CloudSaw entryId={entry.id} compact />
+      </div>
     </article>
   );
 }

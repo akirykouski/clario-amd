@@ -5,6 +5,7 @@ import type { Health } from "../types";
 import { useAsync } from "../components/useAsync";
 import Inbox from "./Inbox";
 import PackagePage from "./PackagePage";
+import PrivacyPage from "../patient/PrivacyPage";
 
 export function ComputeBadge({ llm }: { llm: Health["llm"] }) {
   const amd = !!llm.is_amd;
@@ -25,6 +26,7 @@ export default function ClinicApp({ health }: { health: Health }) {
         <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
           <Link to="/" className="font-display text-2xl">Clario <span className="text-muted text-base">Clinic</span></Link>
           <div className="flex items-center gap-4 flex-wrap justify-end">
+            <Link to="/privacy" className="text-sm font-bold text-accent underline underline-offset-4">Model call log</Link>
             <ComputeBadge llm={health.llm} />
             {key.data && <span className="text-sm text-muted inline-flex items-center gap-1.5" title="Clinic key fingerprint"><KeyRound size={14} aria-hidden />{key.data.clinic_name} <span className="font-mono text-ink">{key.data.fingerprint}</span></span>}
           </div>
@@ -34,6 +36,7 @@ export default function ClinicApp({ health }: { health: Health }) {
         <Routes>
           <Route path="/" element={<Inbox />} />
           <Route path="/p/:id" element={<PackagePage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="*" element={<Inbox />} />
         </Routes>
       </main>

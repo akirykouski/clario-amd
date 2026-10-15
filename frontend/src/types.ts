@@ -56,9 +56,20 @@ export interface Brief {
 
 export interface Health {
   ok: boolean; mode: "patient" | "clinic";
-  llm: { backend?: string; model?: string; base_url_host?: string; is_amd?: boolean };
+  llm: { backend?: string; model?: string; base_url_host?: string; is_amd?: boolean; pseudonymize?: boolean };
   locked?: boolean | null; ontology?: { terms?: number; diseases?: number };
 }
+
+export type PrivacyKind = "email" | "phone" | "codice_fiscale" | "iban" | "date" | "address" | "name";
+export interface PrivacyReplacement { type: PrivacyKind; start: number; end: number; out_start: number; out_end: number }
+export interface PrivacyPreview { original: string; redacted: string; replacements: PrivacyReplacement[]; applied: boolean; backend: string }
+export interface AiCall {
+  id: string; seq: number; ts: string; backend: string; model: string;
+  purpose: "extract" | "rationale" | "brief" | "next_question" | "document" | "other";
+  redacted_preview: string; payload_sha256: string; prev_hash: string; hash: string;
+  redacted: boolean; replacements: number; images: number;
+}
+export interface PrivacyVerify { ok: boolean; broken_at: string | null; count: number }
 
 export interface SafetyNotice { level: "emergency" | "advice"; message: string; matched: string }
 export interface VaultState { initialized: boolean; locked: boolean }

@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from . import brief as briefing
+from . import privacy
 from . import share as sharing
 from .config import Settings
 from .demo import giulia_entries
@@ -106,7 +107,9 @@ class Runs:
 def create_app(settings: Settings | None = None) -> FastAPI:
     s = settings or Settings.from_env()
     onto = Ontology.load()
-    llm = make_llm(s)
+    vault = Vault(s.data_dir, s.auto_lock_minutes) if s.mode == "patient" else None
+    call_log = privacy.CallLog.for_settings(s, vault)
+    llm = make_llm(s, call_log)
     runs = Runs()
     tasks: set[asyncio.Task] = set()
     app = FastAPI(title=f"Clario ({s.mode})")
@@ -120,7 +123,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict:
         out = {"ok": True, "mode": s.mode, "ontology": {"terms": onto.n_terms, "diseases": onto.n_diseases},
-               "llm": {"backend": llm.backend, "model": llm.model, "base_url_host": s.llm_host, "is_amd": llm.is_amd}}
+               "llm": {"backend": llm.backend, "model": llm.model, "base_url_host": s.llm_host, "is_amd": llm.is_amd,
+                       "pseudonymize": privacy.should_pseudonymize(s)}}
         if s.mode == "patient":
             out["locked"] = vault.locked
         return out
@@ -136,9 +140,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse({"detail": "Diary is locked"}, status_code=423)
 
     if s.mode == "patient":
-        vault = Vault(s.data_dir, s.auto_lock_minutes)
         _patient_routes(app, s, vault, onto, llm, spawn)
+        privacy.routes(app, s, call_log, lambda eid: Entry.model_validate(vault.get(eid)) if vault.get(eid) else None)
     else:
+        privacy.routes(app, s, call_log)
         keys = sharing.ClinicKeys(s.data_dir)
         _clinic_routes(app, s, keys, llm, runs, spawn)
 
