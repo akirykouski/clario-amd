@@ -198,5 +198,6 @@ def test_every_llm_path_is_logged_and_semaphore_reaches_the_client(unlocked):
     assert q is not None
     import_demo_pdfs(unlocked)
     purposes = {c["purpose"] for c in unlocked.get("/api/privacy/calls", params={"limit": 500}).json()}
-    assert {"extract", "rationale", "next_question", "document"} <= purposes
+    assert {"extract", "next_question", "document"} <= purposes
+    assert "rationale" not in purposes  # no condition name is ever sent to a model for the patient
     assert unlocked.get("/api/privacy/verify").json()["ok"]

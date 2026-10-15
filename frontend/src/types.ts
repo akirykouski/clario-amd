@@ -39,6 +39,14 @@ export interface Pattern {
   neutral_label: string;
 }
 
+/** A term as the patient reads it: everyday words first, the clinical (HPO) name as subtext. */
+export interface PatientTerm { hpo_id: string; label: string; clinical: string | null }
+export interface PatientEvidence extends PatientTerm { entry_ids: string[]; first_seen: string; last_seen: string; count: number }
+/** A card for the patient. Never names a condition; card_id is opaque. */
+export interface PatientPattern {
+  card_id: string; signal: Signal; matched: PatientEvidence[]; missing: PatientTerm[]; neutral_label: string; rationale: string;
+}
+
 export interface ShareRequest {
   clinic_url: string; since: string; until: string; include_patterns: boolean;
   note?: string | null; expires_hours: number;
@@ -92,7 +100,7 @@ export interface SafetyNotice { level: "emergency" | "advice"; message: string; 
 export interface VaultState { initialized: boolean; locked: boolean }
 export interface TimelineDay { date: string; entries: Entry[]; terms: Term[] }
 export interface Timeline { days: TimelineDay[]; terms: Evidence[] }
-export interface PatternsResponse { patterns: Pattern[]; confirmed_terms: number; note: string }
+export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms: number; note: string }
 export interface ShareResult {
   package_id: string; clinic_url: string; expires_at: string; qr_payload: string; entities: number; entries: number;
 }
@@ -136,6 +144,6 @@ export interface LabResult {
 export interface NextQuestion {
   feature_id: string; question: string; why: string; ig: number; splits: string[]; question_source: "model" | "template";
 }
-export interface RankedPattern { disease_id: string; label: string; score: number; rank: number }
+export interface RankedPattern { card_id: string; label: string; score: number; rank: number }
 export interface AnswerResult { before: RankedPattern[]; after: RankedPattern[]; entry_id: string | null }
 export type Answer = "yes" | "no" | "unsure";

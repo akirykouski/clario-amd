@@ -34,8 +34,8 @@ from .extract import ExtractOpts, extract
 from .knowledge import Ontology
 from .llm import extract_json, make_llm
 from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage, Term
-from .next_question import as_ranked_patterns, next_question, rank_diseases, template_question
-from .patterns import counts_as_evidence, evidence_from, explain, negated_ids, score_patterns
+from .next_question import as_ranked_patterns, next_question, template_question
+from .patterns import counts_as_evidence, evidence_from, patient_patterns, score_patterns
 from .review import ACTIONS, EntityReview, apply_entity_action, correction_record, register_review_kind
 from .safety import check_entry
 from .vault import BadPassphrase, Locked, Vault
@@ -202,7 +202,6 @@ def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
 
 # ====================================================================== patient
 def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm, spawn, gpu_reader=None) -> None:
-    pattern_cache: dict[tuple[str, str], list] = {}  # (lang, evidence state) -> explained patterns
     opts = ExtractOpts.from_settings(s)
 
     def load(eid: str) -> Entry:
@@ -381,21 +380,15 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 
     @app.get("/api/patterns")
     async def patterns(lang: str = "en"):
+        """Cards for the patient: at most two, titled by the features recorded, in everyday words. No condition names."""
         lang = norm_lang(lang)
 
-        def evidence_state():  # vault reads and scoring are CPU work: keep them off the event loop
+        def compute():  # vault reads and scoring are CPU work: keep them off the event loop
             entries = all_entries()
-            ev = evidence_from(entries, onto)
-            return entries, ev, json.dumps([sorted((k, v.count) for k, v in ev.items()), sorted(negated_ids(entries))])
+            return len(evidence_from(entries, onto)), patient_patterns(entries, onto, lang)
 
-        entries, ev, state = await asyncio.to_thread(evidence_state)
-        for k in [k for k in pattern_cache if k[1] != state]:  # the evidence changed: older explanations are stale
-            del pattern_cache[k]
-        if (lang, state) not in pattern_cache:  # switching language back and forth does not call the model again
-            pattern_cache[(lang, state)] = await explain(llm, await asyncio.to_thread(score_patterns, entries, onto), lang)
-        pats = pattern_cache[(lang, state)]
-        note = PATTERNS_NOTE[lang][0 if pats else 1]
-        return {"patterns": pats, "confirmed_terms": len(ev), "note": note}
+        n_terms, pats = await asyncio.to_thread(compute)
+        return {"patterns": pats, "confirmed_terms": n_terms, "note": PATTERNS_NOTE[lang][0 if pats else 1]}
 
     doc_routes.register(app, s, vault, llm, spawn, gpu_reader)
     asked: dict[str, str] = {}  # feature_id -> question text last shown (so the diary entry quotes what was asked)
@@ -419,7 +412,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         if label is None:
             raise HTTPException(422, "Unknown feature")
         entries = all_entries()
-        before = as_ranked_patterns(rank_diseases(onto, entries))
+        before = as_ranked_patterns(onto, entries, norm_lang(body.lang))
         vault.put("qa", f"qa_{uuid.uuid4().hex[:10]}", {"feature_id": body.feature_id, "answer": body.answer, "at": now_iso()})
         entry_id = None
         if body.answer != "unsure":
@@ -433,7 +426,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             save(Entry(id=eid, created_at=now_iso(), occurred_on=date.today().isoformat(), text=text,
                        extraction="done", entities=[ent]))
             entry_id = eid
-        after = as_ranked_patterns(rank_diseases(onto, all_entries()))
+        after = as_ranked_patterns(onto, all_entries(), norm_lang(body.lang))
         return AnswerResult(before=before, after=after, entry_id=entry_id)
 
     @app.post("/api/demo")

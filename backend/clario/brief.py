@@ -127,8 +127,7 @@ def names_condition(text: str, onto) -> bool:
 
 def patient_view_items(pkg: SharePackage, lang: str, onto) -> list[BriefItem]:
     """What the patient may keep: their own words, plain names, no condition names, nothing the clinician did not review."""
-    from .i18n import term_label
-    from .patterns import localize
+    from .patterns import PATIENT_CARDS, neutral_label, patient_label
 
     it = lang == "it"
     items: list[BriefItem] = []
@@ -150,7 +149,7 @@ def patient_view_items(pkg: SharePackage, lang: str, onto) -> list[BriefItem]:
         x = xs[-1]
         cites = sorted({y.entry_id for y in xs})
         ds = sorted(dates[c] for c in cites if c in dates)
-        name = term_label(x.hpo_id, x.canonical, lang)
+        name = patient_label(onto, x.hpo_id, lang).capitalize() if x.hpo_id else x.canonical
         words = f'"{x.quote}"' if not names_condition(x.quote, onto) else ""
         times = f"{len(xs)} {'volta' if len(xs) == 1 else 'volte'}" if it else f"{len(xs)}x"
         said = "hai scritto" if it else "you wrote"
@@ -161,11 +160,11 @@ def patient_view_items(pkg: SharePackage, lang: str, onto) -> list[BriefItem]:
         items.append(BriefItem(id="bi_p_family", section="summary", origin="patient", review="accepted",
                                text="Hai scritto di una condizione che ha un tuo parente." if it
                                else "You wrote about a condition that a relative has."))
-    for i, p in enumerate(pkg.patterns):
-        p = localize(p, lang)
+    for i, p in enumerate(pkg.patterns[:PATIENT_CARDS]):
+        title = neutral_label([patient_label(onto, m.hpo_id, lang) for m in p.matched])  # everyday words, never a condition name
         items.append(BriefItem(id=f"bi_p_pat{i}", section="patterns", origin="patient", review="accepted", cites=[],
-                               text=(f"Cose che hai annotato e che spesso compaiono insieme: {p.neutral_label}. Non è una diagnosi."
-                                     if it else f"Things you recorded that often show up together: {p.neutral_label}. Not a diagnosis.")))
+                               text=(f"Cose che hai annotato e che spesso compaiono insieme: {title}. Non è una diagnosi."
+                                     if it else f"Things you recorded that often show up together: {title}. Not a diagnosis.")))
     return items
 
 
