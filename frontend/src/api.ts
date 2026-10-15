@@ -1,0 +1,73 @@
+import type {
+  Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, PatternsResponse, SafetyNotice,
+  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState,
+} from "./types";
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string) { super(message); this.name = "ApiError"; }
+}
+
+let lockedHandler: () => void = () => {
+  if (typeof window !== "undefined" && window.location.pathname !== "/unlock") window.location.assign("/unlock");
+};
+export function onLocked(fn: () => void) { lockedHandler = fn; }
+
+export function buildUrl(path: string, params?: Record<string, string | undefined>): string {
+  const q = Object.entries(params ?? {})
+    .filter(([, v]) => v !== undefined && v !== "")
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v as string)}`)
+    .join("&");
+  return `/api${path}${q ? `?${q}` : ""}`;
+}
+
+async function request<T>(method: string, path: string, opts: { params?: Record<string, string | undefined>; body?: unknown; text?: boolean } = {}): Promise<T> {
+  const res = await fetch(buildUrl(path, opts.params), {
+    method,
+    headers: opts.body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  });
+  if (res.status === 423) {
+    lockedHandler();
+    throw new ApiError(423, "Diary is locked");
+  }
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const j = await res.json();
+      detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail ?? j);
+    } catch { /* keep statusText */ }
+    throw new ApiError(res.status, res.status === 401 ? "Wrong passphrase or not authorised" : detail || `HTTP ${res.status}`);
+  }
+  return (opts.text ? res.text() : res.json()) as Promise<T>;
+}
+
+export const api = {
+  health: () => request<Health>("GET", "/health"),
+  vault: () => request<VaultState>("GET", "/vault"),
+  setup: (passphrase: string) => request<{ ok: boolean }>("POST", "/vault/setup", { body: { passphrase } }),
+  unlock: (passphrase: string) => request<{ ok: boolean }>("POST", "/vault/unlock", { body: { passphrase } }),
+  lock: () => request<{ ok: boolean }>("POST", "/vault/lock"),
+  entries: (since?: string, until?: string) => request<Entry[]>("GET", "/entries", { params: { since, until } }),
+  addEntry: (b: { text: string; occurred_on?: string; mood?: number | null }) =>
+    request<{ entry: Entry; safety: SafetyNotice | null }>("POST", "/entries", { body: b }),
+  entry: (id: string) => request<Entry>("GET", `/entries/${encodeURIComponent(id)}`),
+  deleteEntry: (id: string) => request<{ ok: boolean }>("DELETE", `/entries/${encodeURIComponent(id)}`),
+  extract: (id: string) => request<Entry>("POST", `/entries/${encodeURIComponent(id)}/extract`),
+  patchEntity: (id: string, b: Partial<Pick<Entity, "status" | "canonical" | "hpo_id" | "severity" | "negated">>) =>
+    request<Entity>("PATCH", `/entities/${encodeURIComponent(id)}`, { body: b }),
+  searchTerms: (q: string) => request<Term[]>("GET", "/terms/search", { params: { q } }),
+  timeline: () => request<Timeline>("GET", "/timeline"),
+  patterns: () => request<PatternsResponse>("GET", "/patterns"),
+  demo: () => request<unknown>("POST", "/demo", { body: { persona: "giulia" } }),
+  share: (b: ShareRequest) => request<ShareResult>("POST", "/share", { body: b }),
+  clinicKey: (url?: string) => request<ClinicKey>("GET", "/clinic/key", { params: { url } }),
+  inbox: () => request<InboxRow[]>("GET", "/inbox"),
+  package: (id: string) => request<SharePackage>("GET", `/inbox/${encodeURIComponent(id)}`),
+  startBrief: (id: string) => request<{ run_id: string }>("POST", `/inbox/${encodeURIComponent(id)}/brief`),
+  brief: (id: string) => request<Brief>("GET", `/inbox/${encodeURIComponent(id)}/brief`),
+  reviewItem: (pkg: string, item: string, b: { review: BriefItem["review"]; text?: string }) =>
+    request<BriefItem>("PATCH", `/brief-items/${encodeURIComponent(pkg)}/${encodeURIComponent(item)}`, { body: b }),
+  finalize: (id: string) => request<Brief>("POST", `/inbox/${encodeURIComponent(id)}/brief/finalize`),
+  briefMdUrl: (id: string) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.md`),
+  runEventsUrl: (runId: string) => buildUrl(`/runs/${encodeURIComponent(runId)}/events`),
+};

@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: #F7F8F7; --panel: #FFFFFF; --ink: #1C2321; --muted: #5A6663; --line: #DCE1DF;
+  --accent: #1F6F78; --accent-ink: #FFFFFF;
+  --weak: #5B6B78; --moderate: #B7791F; --strong: #A23B52; --mark: #CFE6E8;
+  --danger-bg: #FBEFF1;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #121715; --panel: #1A211F; --ink: #E8EDEB; --muted: #9AA7A3; --line: #2C3633;
+    --accent: #5FB3BC; --accent-ink: #0E1413;
+    --weak: #9FB0BD; --moderate: #E0A23F; --strong: #E27C93; --mark: #20474C;
+    --danger-bg: #2A171C;
+  }
+}
+html { -webkit-text-size-adjust: 100%; }
+body { background: var(--paper); color: var(--ink); font-family: "Atkinson Hyperlegible", system-ui, sans-serif; font-size: 17px; line-height: 1.55; }
+h1, h2, h3 { font-family: Newsreader, Georgia, serif; font-weight: 500; letter-spacing: -0.01em; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-lg border border-line bg-panel text-ink font-bold text-[15px] transition-colors hover:border-accent disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-primary { @apply bg-accent text-accent-ink border-accent hover:opacity-90; }
+  .btn-quiet { @apply border-transparent bg-transparent text-accent underline underline-offset-4; }
+  .card { @apply bg-panel border border-line rounded-xl p-4; }
+  .input { @apply w-full min-h-[44px] px-3 py-2 rounded-lg border border-line bg-panel text-ink; }
+  .label { @apply block text-sm font-bold mb-1; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full border border-line px-2.5 py-0.5 text-sm bg-panel; }
+  .quote { background: var(--mark); border-radius: 3px; padding: 0 2px; }
+}
+.clinic-quote { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.print-only { display: none; }
+@media print {
+  body { background: #fff; color: #000; font-size: 12pt; }
+  .no-print { display: none !important; }
+  .print-only { display: block; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

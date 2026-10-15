@@ -1,0 +1,17 @@
+# Clario clinic: HTTPS front door. Replace clinic.example.com with a real DNS name pointing at the droplet.
+# Caddy obtains and renews the certificate automatically (ports 80 and 443 must be reachable).
+# For a demo without a domain, use: clinic.<DROPLET_IP>.sslip.io (resolves to the IP; Let's Encrypt works).
+clinic.example.com {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+	# SSE brief progress must not be buffered.
+	reverse_proxy clario:8800 {
+		flush_interval -1
+	}
+	# vLLM is never proxied here. It stays on loopback / the internal Docker network.
+}

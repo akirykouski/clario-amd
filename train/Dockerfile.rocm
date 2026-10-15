@@ -1,0 +1,10 @@
+# Tag verified present on Docker Hub (rocm/pytorch, last_updated 2026-09-01): ROCm 7.14.1, Ubuntu 24.04, Python 3.12, PyTorch 2.12.0
+FROM rocm/pytorch:rocm7.14.1_ubuntu24.04_py3.12_pytorch_release_2.12.0
+WORKDIR /workspace/train
+COPY requirements-rocm.txt .
+RUN pip install --no-cache-dir -r requirements-rocm.txt
+COPY . .
+ENV HF_HOME=/workspace/hf-cache PYTORCH_TUNABLEOP_ENABLED=0
+CMD ["bash"]
+# run: docker run -it --rm --device=/dev/kfd --device=/dev/dri --group-add video --ipc=host --shm-size 64G \
+#   --security-opt seccomp=unconfined -v $PWD:/workspace/train -e HF_TOKEN rocm/... (or the image you built)

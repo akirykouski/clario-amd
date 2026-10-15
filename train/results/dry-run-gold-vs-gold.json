@@ -1,0 +1,19 @@
+{
+  "n": 68,
+  "entity_precision": 1.0,
+  "entity_recall": 1.0,
+  "entity_f1": 1.0,
+  "fuzzy_precision": 1.0,
+  "fuzzy_recall": 1.0,
+  "fuzzy_f1": 1.0,
+  "hpo_id_accuracy": 1.0,
+  "json_validity_rate": 1.0,
+  "quote_grounding_rate": 1.0,
+  "tp": 199,
+  "fp": 0,
+  "fn": 0,
+  "latency_p50_s": 0.0,
+  "latency_p95_s": 0.0,
+  "tokens_per_s": 0.0,
+  "label": "dry-run-gold-vs-gold"
+}

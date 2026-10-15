@@ -1,0 +1,10 @@
+# torch + ROCm come from the base image (rocm/pytorch). Do NOT pip install torch over it.
+# Versions are UNPINNED on purpose until validated on the droplet; freeze with `pip freeze > requirements-lock.txt` after first good run.
+transformers>=5.0   # Gemma 4 needs a recent transformers ("use the latest"); verify on droplet
+peft
+trl
+accelerate
+datasets
+huggingface_hub
+requests
+pytest
