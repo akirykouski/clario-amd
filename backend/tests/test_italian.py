@@ -1,5 +1,6 @@
 """Italian persona, server-side wording in Italian, and the brief for two audiences."""
 
+import json
 import re
 from datetime import date, timedelta
 
@@ -58,11 +59,13 @@ def test_family_history_and_negation_never_count_toward_patterns(unlocked):
     pats = unlocked.get("/api/patterns", params={"lang": "it"}).json()
     assert pats["patterns"] and "Non è una diagnosi" in pats["note"]
     top = pats["patterns"][0]
-    assert "lupus" not in top["neutral_label"].lower() and "Lupus eritematoso sistemico" in top["rationale"]
+    assert "lupus" not in json.dumps(pats, ensure_ascii=False).lower()  # condition names are clinician-only
     assert re.search(r"[a-z]", top["neutral_label"]) and "rash" not in top["neutral_label"].lower()
     assert any("farfalla" in p["neutral_label"].lower() for p in pats["patterns"])
+    assert top["matched"][0]["label"] == "Arrossamento a farfalla sul viso" and top["matched"][0]["clinical"] == "Malar rash"
     en = unlocked.get("/api/patterns").json()
-    assert "Malar rash" in en["patterns"][0]["neutral_label"] and en["note"].startswith("Patterns worth")
+    assert "red rash" in en["patterns"][0]["neutral_label"].lower() and en["note"].startswith("Patterns worth")
+    assert "lupus" not in json.dumps(en).lower()
 
 
 def test_next_question_and_answer_entry_in_italian(unlocked):

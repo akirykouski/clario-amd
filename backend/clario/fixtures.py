@@ -79,7 +79,7 @@ class OfflineLLM(LLM):
         if task == "next_question":
             lay = payload.get("plain_description", "")
             return json.dumps({"question": f"Ti capita di avere {lay}?" if payload.get("lang") == "it"
-                               else f"Do you sometimes have: {lay}?"}), _stats(20)
+                               else f"Do you ever notice {lay}?"}), _stats(20)
         if task == "brief":
             return json.dumps(self._brief(payload)), _stats(300)
         return "{}", _stats()
@@ -134,14 +134,26 @@ class OfflineLLM(LLM):
 
     @staticmethod
     def _brief(payload: dict) -> dict:
+        """Offline brief. One timeline line is deliberately wrong: it dates "fatigue first noted" on an entry that does not
+        mention fatigue. The code check flags it, and the clinician rejects it on camera."""
         entries = payload["entries"]
+        terms = payload.get("entry_terms", {})
         ids = [e["id"] for e in entries]
+        date = {e["id"]: e["date"] for e in entries}
+
+        def with_term(t: str) -> list[str]:
+            return [i for i in ids if t in terms.get(i, [])] or ids[:1]
+
+        fat = with_term("Fatigue")
+        wrong = next((i for i in ids if "Fatigue" not in terms.get(i, [])), ids[0])
         first, last = entries[0], entries[-1]
+        cites = list(dict.fromkeys(fat[:1] + with_term("Arthralgia")[:1] + with_term("Malar rash")[:1]))
         if payload.get("lang") == "it":
             return {"items": [
                 {"section": "summary", "text": f"{len(entries)} voci di diario dal {first['date']} al {last['date']}; dolori "
-                                               "articolari ricorrenti, stanchezza e arrossamento del viso dopo il sole.", "cites": ids[:3]},
-                {"section": "timeline", "text": f"{first['date']}: prima segnalazione di stanchezza.", "cites": [ids[0]]},
+                                               "articolari ricorrenti, stanchezza e arrossamento del viso dopo il sole.", "cites": cites},
+                {"section": "timeline", "text": f"{date[fat[0]]}: stanchezza segnalata.", "cites": fat[:1]},
+                {"section": "timeline", "text": f"{date[wrong]}: prima segnalazione di stanchezza.", "cites": [wrong]},
                 {"section": "patterns", "text": "Le caratteristiche registrate potrebbero somigliare a uno schema autoimmune "
                                                 "da valutare.", "cites": ids[:2]},
                 {"section": "patterns", "text": "Soffre di lupus. Iniziare 200 mg di idrossiclorochina.", "cites": ids[:1]},
@@ -150,8 +162,9 @@ class OfflineLLM(LLM):
             ]}
         return {"items": [
             {"section": "summary", "text": f"{len(entries)} diary entries from {first['date']} to {last['date']}; "
-                                           "recurring joint pain, fatigue and a facial rash after sun.", "cites": ids[:3]},
-            {"section": "timeline", "text": f"{first['date']}: fatigue first noted.", "cites": [ids[0]]},
+                                           "recurring joint pain, fatigue and a facial rash after sun.", "cites": cites},
+            {"section": "timeline", "text": f"{date[fat[0]]}: fatigue noted.", "cites": fat[:1]},
+            {"section": "timeline", "text": f"{date[wrong]}: fatigue first noted.", "cites": [wrong]},
             {"section": "patterns", "text": "The recorded features may resemble an autoimmune pattern worth considering.",
              "cites": ids[:2]},
             {"section": "patterns", "text": "You have lupus. Start 200 mg hydroxychloroquine.", "cites": ids[:1]},

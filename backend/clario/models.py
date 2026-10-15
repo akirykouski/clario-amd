@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 EntityType = Literal["symptom", "finding", "lab", "medication", "trigger", "body_site"]
 Signal = Literal["weak", "moderate", "strong"]
 Review = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
+LabReview = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
+LabFlag = Literal["low", "high", "normal"]
 COUNTED = ("confirmed", "corrected")  # decided by a person and kept: counts toward patterns and sharing
 
 
@@ -81,6 +83,32 @@ class Pattern(BaseModel):
     neutral_label: str = Field("", description="Evidence-first title without a disease name: the strongest matched features")
 
 
+class PatientTerm(BaseModel):
+    """A term as the patient reads it: everyday words first, the clinical (HPO) name as subtext."""
+
+    hpo_id: str
+    label: str = Field(description="Everyday words (Italian name in Italian)")
+    clinical: str | None = Field(None, description="HPO label shown as subtext; null when it equals label")
+
+
+class PatientEvidence(PatientTerm):
+    entry_ids: list[str]
+    first_seen: str
+    last_seen: str
+    count: int = Field(description="Number of notes that mention the term")
+
+
+class PatientPattern(BaseModel):
+    """A pattern card for the patient. Never names a condition: the title is the features the patient recorded."""
+
+    card_id: str = Field(description="Opaque id, stable while the server runs; not a disease id")
+    signal: Signal
+    matched: list[PatientEvidence]
+    missing: list[PatientTerm] = Field(default_factory=list, description="Common, noticeable features not recorded yet")
+    neutral_label: str = Field(description="The strongest matched features, in everyday words")
+    rationale: str = Field(description="Hedged template text naming no condition")
+
+
 class ShareRequest(BaseModel):
     clinic_url: str
     since: str = Field(description="ISO date, inclusive")
@@ -104,8 +132,27 @@ class SharedEntity(BaseModel):
     reviewed: bool = Field(True, description="False: no person has checked it; the brief says so")
 
 
+class SharedLab(BaseModel):
+    """One lab row in the shared period. Rows a person confirmed or corrected, or that were read with high confidence
+    (`reviewed=false`, the brief says so). needs_review and rejected rows never leave the device."""
+
+    test_name: str
+    value_numeric: float | None = None
+    value_text: str | None = None
+    unit: str = ""
+    ref_low: float | None = None
+    ref_high: float | None = None
+    flag: LabFlag | None = None
+    date: str
+    page: int = Field(description="Page within the imported document batch")
+    entry_id: str | None = Field(None, description="The diary entry of the import, when known: what the brief cites")
+    reviewed: bool = Field(True, description="False: read by the model and not checked by a person")
+
+
 class SharePackage(BaseModel):
-    """Decrypted payload a clinic receives. Only confirmed entities and the selected entries."""
+    """Decrypted payload a clinic receives. Only confirmed entities, confirmed or confident lab rows, and the selected entries.
+
+    A relative's condition (`family_history`) is shared only as family history: no HPO id, never a patient term."""
 
     package_id: str
     patient_alias: str
@@ -115,6 +162,7 @@ class SharePackage(BaseModel):
     note: str | None = None
     entries: list[Entry]
     entities: list[SharedEntity]
+    labs: list[SharedLab] = Field(default_factory=list)
     patterns: list[Pattern] = Field(default_factory=list)
 
 
@@ -127,6 +175,8 @@ class BriefItem(BaseModel):
     cites: list[str] = Field(default_factory=list, description="entry ids")
     origin: Literal["patient", "ai"] = "ai"
     review: Literal["pending", "accepted", "rejected", "edited"] = "pending"
+    flag: Literal["citation_mismatch"] | None = Field(
+        None, description="Set by code when the item names a term that none of its cited entries confirms; the clinician sees it")
 
 
 class Brief(BaseModel):
@@ -190,10 +240,6 @@ class Health(BaseModel):
     ontology: dict = Field(default_factory=dict)
 
 
-LabReview = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
-LabFlag = Literal["low", "high", "normal"]
-
-
 class LabResult(BaseModel):
     """One row read from a lab report page. Low-confidence rows wait for a person (needs_review)."""
 
@@ -251,12 +297,12 @@ class NextQuestion(BaseModel):
     question: str
     why: str = Field(description="Hedged, no condition names")
     ig: float = Field(description="Expected information gain in bits over the current top patterns")
-    splits: list[str] = Field(default_factory=list, description="disease_ids of the two patterns the answer separates")
+    splits: list[str] = Field(default_factory=list, description="card_ids of the two shown cards the answer separates; only cards on screen")
     question_source: Literal["model", "template"] = "template"
 
 
 class RankedPattern(BaseModel):
-    disease_id: str
+    card_id: str = Field(description="Opaque card id, the same as PatientPattern.card_id")
     label: str = Field(description="neutral_label, never a condition name")
     score: float
     rank: int

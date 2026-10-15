@@ -16,7 +16,7 @@ import PatternsPage from "../patient/PatternsPage";
 import ReviewPage from "../patient/ReviewPage";
 import { gpuLoad, gpuName } from "../patient/ImportPage";
 import { fmtDate } from "../lib";
-import type { Pattern, ReviewItem } from "../types";
+import type { PatientPattern, ReviewItem } from "../types";
 
 const mem = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); }, removeItem: (k: string) => { m.delete(k); }, clear: () => m.clear() }; };
 beforeEach(() => { vi.stubGlobal("localStorage", mem()); setLang("en"); });
@@ -83,15 +83,15 @@ describe("language state", () => {
   });
 });
 
-const pat: Pattern = {
-  disease_id: "ORPHA:1", disease_name: "Lupus eritematoso sistemico", signal: "moderate", score: 0.6,
+const pat: PatientPattern = {
+  card_id: "c_1", signal: "moderate",
   neutral_label: "Arrossamento a farfalla sul viso, caduta dei capelli",
-  matched: [{ hpo_id: "HP:0025300", label: "Arrossamento a farfalla sul viso", entry_ids: ["e1"], first_seen: "2026-03-01", last_seen: "2026-03-05", count: 2 }],
-  missing: [], rationale: "Potrebbe valere la pena parlarne con il medico.", rationale_source: "template",
+  matched: [{ hpo_id: "HP:0025300", label: "Arrossamento a farfalla sul viso", clinical: "Malar rash", entry_ids: ["e1"], first_seen: "2026-03-01", last_seen: "2026-03-05", count: 2 }],
+  missing: [], rationale: "Potrebbe valere la pena parlarne con il medico.",
 };
 
 describe("Italian screens", () => {
-  it("patterns page: title, intro and the collapsed condition name are Italian; the server gets lang=it", async () => {
+  it("patterns page: title, intro and the card text are Italian; the server gets lang=it", async () => {
     setLang("it");
     const get = vi.spyOn(api, "patterns").mockResolvedValue({ patterns: [pat], confirmed_terms: 5, note: "" });
     const nq = vi.spyOn(api, "nextQuestion").mockResolvedValue({
@@ -102,11 +102,11 @@ describe("Italian screens", () => {
     expect(get).toHaveBeenCalledWith("it");
     expect(await screen.findByText("Una domanda che potrebbe aiutare il medico")).toBeInTheDocument();
     expect(nq).toHaveBeenCalledWith("it");
-    expect(screen.getByText("Mostra a cosa somiglia questo schema")).toBeInTheDocument();
+    expect(screen.queryByText("Mostra a cosa somiglia questo schema")).toBeNull();
     expect(screen.getByText("Questa non è una diagnosi.")).toBeInTheDocument();
     expect(screen.getByText("Segnale moderato")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sì" })).toBeInTheDocument();
-    expect(screen.getByText(/2 volte/)).toBeInTheDocument();
+    expect(screen.getByText(/2 volte, dal 1 mar al 5 mar/)).toBeInTheDocument();
   });
 
   it("review queue shows a lab row next to entities, in Italian", async () => {

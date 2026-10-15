@@ -32,9 +32,12 @@ def _prf(tp, fp, fn):
 
 
 def ekey(e):
-    """Identity of an entity: its HPO id, or the normalised quote when it has none (triggers)."""
+    """Identity of an entity: its HPO id (or the normalised quote when it has none), plus negated and family_history.
+
+    "No fever" and "fever" are different entities: a model that drops the negation scores a miss and a false positive."""
     h = (e.get("hpo_id") or "").upper()
-    return h if h else "Q:" + _norm(e.get("quote", ""))
+    base = h if h else "Q:" + _norm(e.get("quote", ""))
+    return f"{base}|neg={int(bool(e.get('negated')))}|fam={int(bool(e.get('family_history')))}"
 
 
 def match_counts(gold, pred, key):
@@ -62,7 +65,7 @@ def pred_correct(gold, pred, key=ekey):
 def pair_entities(gold, pred):
     """One-to-one (gold, pred) pairs: same key first, then same normalised quote."""
     pairs, gf, pf = [], list(range(len(gold))), list(range(len(pred)))
-    for rule in (lambda e: ekey(e), lambda e: _norm(e.get("quote", ""))):
+    for rule in (lambda e: ekey(e), lambda e: _norm(e.get("quote", ""))):  # same identity first, then same words (flags then scored)
         for gi in list(gf):
             for pi in pf:
                 if rule(gold[gi]) == rule(pred[pi]):
@@ -111,6 +114,7 @@ def score(records):
     """records: [{diary, gold:[entity], pred:[entity]|None}] -> metrics dict."""
     hp = [0, 0, 0]; fz = [0, 0, 0]; n_valid = 0; n_strict = 0; gq = 0; nq = 0
     idok = idn = 0
+    flag_recall = {"negated": [0, 0], "family_history": [0, 0]}  # [found, gold] per flag, over all gold entities
     neg = [0, 0]; fam = [0, 0]; ons = [0, 0]; sev = [0, 0]
     points = []; per_item = []; complete = True
     for r in records:
@@ -126,6 +130,12 @@ def score(records):
         for i, v in enumerate(fuzzy_counts(gold, pred)): fz[i] += v
         for e in pred:
             nq += 1; gq += grounded(r["diary"], e["quote"])
+        pkeys = [ekey(p) for p in pred]
+        for g in gold:
+            for flag in flag_recall:
+                if g.get(flag):
+                    flag_recall[flag][1] += 1
+                    flag_recall[flag][0] += ekey(g) in pkeys  # found with the flag set, not just the term
         # HPO-ID accuracy: gold entity with an id whose quote is matched (case-insens) by a pred with the same id
         for g in gold:
             if not g.get("hpo_id"):
@@ -155,12 +165,14 @@ def score(records):
         "n": n,
         "entity_precision": p, "entity_recall": rc, "entity_f1": f,
         "fuzzy_precision": fp_, "fuzzy_recall": fr_, "fuzzy_f1": ff_,
-        "hpo_id_accuracy": idok / idn if idn else 1.0,
+        "hpo_id_accuracy": _acc(idok, idn), "n_gold_with_hpo_id": idn,
+        "negated_recall": _acc(*flag_recall["negated"]), "n_negated_gold": flag_recall["negated"][1],
+        "family_history_recall": _acc(*flag_recall["family_history"]), "n_family_history_gold": flag_recall["family_history"][1],
         "negation_accuracy": _acc(*neg), "family_history_accuracy": _acc(*fam),
         "onset_accuracy": _acc(*ons), "severity_accuracy": _acc(*sev),
         "json_validity_rate": n_valid / n if n else 0.0,
         "schema_valid_rate": n_strict / n if n else 0.0,
-        "quote_grounding_rate": gq / nq if nq else (1.0 if n else 0.0),
+        "quote_grounding_rate": _acc(gq, nq), "n_predicted_entities": nq,  # None, not 1.0, when nothing was predicted
         "ece": ece, "brier": brier, "n_confidence_entities": len(points),
         "confidence_coverage": len(points) / nq if nq else None,
         "tp": hp[0], "fp": hp[1], "fn": hp[2], "n_gold_entities": hp[0] + hp[2],
@@ -220,7 +232,9 @@ def infer_backend(url):
 def table(label, m):
     def f(v): return "n/a" if v is None else f"{v:.3f}"
     rows = [("entity F1 (HPO id)", m["entity_f1"]), ("precision", m["entity_precision"]), ("recall", m["entity_recall"]),
-            ("fuzzy-name F1", m["fuzzy_f1"]), ("HPO-ID accuracy", m["hpo_id_accuracy"]),
+            ("fuzzy-name F1", m["fuzzy_f1"]), (f"HPO-ID accuracy (n={m.get('n_gold_with_hpo_id', 0)})", m["hpo_id_accuracy"]),
+            (f"negated recall (n={m.get('n_negated_gold', 0)})", m.get("negated_recall")),
+            (f"family-history recall (n={m.get('n_family_history_gold', 0)})", m.get("family_history_recall")),
             ("negation accuracy", m["negation_accuracy"]), ("family-history accuracy", m["family_history_accuracy"]),
             ("onset accuracy", m["onset_accuracy"]), ("severity accuracy", m["severity_accuracy"]),
             ("quote grounding", m["quote_grounding_rate"]), ("JSON validity", m["json_validity_rate"]),

@@ -60,6 +60,7 @@ export const api = {
     request<{ ok: boolean; count: number }>("POST", `/review/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { body: { action, value } }),
   searchTerms: (q: string, lang?: string) => request<Term[]>("GET", "/terms/search", { params: { q, lang } }),
   timeline: () => request<Timeline>("GET", "/timeline"),
+  gpu: () => request<Record<string, unknown> | null>("GET", "/system/gpu"),
   patterns: (lang?: string) => request<PatternsResponse>("GET", "/patterns", { params: { lang } }),
   nextQuestion: (lang: string) => request<NextQuestion | null>("GET", "/patterns/next-question", { params: { lang } }),
   answerQuestion: (b: { feature_id: string; answer: Answer; question?: string; lang?: string }) =>

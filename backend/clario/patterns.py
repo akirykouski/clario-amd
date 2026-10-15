@@ -1,38 +1,45 @@
 """Pattern signals from confirmed terms. Never a diagnosis.
 
-Score and signal level are computed in code (IC-weighted best-match overlap against HPO disease
-annotations). The model is only asked to explain a match in hedged words, and its text must pass
-the hedge validator, otherwise a template is used.
+Score and signal level are computed in code (IC-weighted best-match overlap against HPO disease annotations, counting
+only close matches). A card needs at least three specific matched terms; fever, headache and fatigue alone never make
+one. Condition names stay on the clinic side: the patient gets cards titled by the features they recorded, in plain
+words, with a template note that names no condition.
 """
 
 from __future__ import annotations
 
-import asyncio
 import re
+import secrets
 from collections import defaultdict
+from dataclasses import dataclass
+from hashlib import sha256
 
-from pydantic import BaseModel
-
-from .i18n import disease_name, term_label
-from .knowledge import Ontology
-from .llm import LLM
-from .models import COUNTED, Entity, Entry, Evidence, Pattern, Term
-from .safety import is_hedged
+from .i18n import hpo_it, lay_it, term_label
+from .knowledge import Disease, Ontology
+from .lay import default_lay_terms, en_label, patient_noticeable
+from .models import COUNTED, Entity, Entry, Evidence, Pattern, PatientEvidence, PatientPattern, PatientTerm, Term
 
 MIN_TERMS = 3
-MAX_PATTERNS = 3
+MIN_SPECIFIC = 3  # a card needs this many matched terms that are not everyday symptoms
+MAX_PATTERNS = 3  # clinic package
+PATIENT_CARDS = 2  # patient screen
 SPECIFIC = 0.6  # a disease term counts as a match only if it keeps >= 60% of the patient term's IC
-COMMON = 0.5  # "not recorded yet" lists only features present in at least half of described cases
+COMMON = 0.5  # "not recorded yet" lists only features present in MORE than half of described cases
+DEFAULT_FREQ = 0.5  # build_knowledge writes this when the annotation carries no frequency
+MIN_FREQ_ANNOT = 10  # a disease needs this many annotations with a real frequency before its list is trusted
+# Everyday symptoms that nearly every condition lists: never enough evidence on their own.
+GENERIC = frozenset({"HP:0001945",  # Fever
+                     "HP:0002315",  # Headache
+                     "HP:0012378",  # Fatigue
+                     "HP:0002018",  # Nausea
+                     "HP:0002013",  # Vomiting
+                     "HP:0033050"})  # Malaise
+_SALT = secrets.token_hex(8)  # card ids are opaque and change when the server restarts
 
-RATIONALE_SYSTEM = """You help a patient prepare for a doctor's visit. You are given a rare condition whose \
-typical features overlap with features the patient recorded. Write 2 short sentences in plain words: what overlaps, \
-and that it is worth discussing with their doctor. Use hedged words such as "resembles", "may", "worth discussing". \
-Never say the patient has the condition. Never mention treatment, medicines, doses or percentages. \
-Write in the requested language. Return JSON: {"rationale": "..."}"""
 
-
-class RationaleOut(BaseModel):
-    rationale: str = ""
+def card_id(disease_id: str) -> str:
+    """What the patient side calls a card: stable while the server runs, says nothing about the condition."""
+    return "c_" + sha256(f"{_SALT}:{disease_id}".encode()).hexdigest()[:10]
 
 
 def counts_as_evidence(ent: Entity) -> bool:
@@ -42,7 +49,8 @@ def counts_as_evidence(ent: Entity) -> bool:
 def evidence_from(entries: list[Entry], onto: Ontology) -> dict[str, Evidence]:
     """HPO terms a person confirmed or corrected, about the patient (not negated, not a relative's), with their entries.
 
-    Entities that are unreviewed, in the review queue (needs_review) or rejected never count.
+    Entities that are unreviewed, in the review queue (needs_review) or rejected never count. `count` is the number of
+    notes that mention the term (two mentions in one note are one note).
     """
     by_term: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for e in entries:
@@ -52,8 +60,9 @@ def evidence_from(entries: list[Entry], onto: Ontology) -> dict[str, Evidence]:
     out = {}
     for hid, refs in by_term.items():
         dates = sorted(d for _, d in refs)
-        out[hid] = Evidence(hpo_id=hid, label=onto.label(hid) or hid, entry_ids=sorted({i for i, _ in refs}),
-                            first_seen=dates[0], last_seen=dates[-1], count=len(refs))
+        ids = sorted({i for i, _ in refs})
+        out[hid] = Evidence(hpo_id=hid, label=onto.label(hid) or hid, entry_ids=ids,
+                            first_seen=dates[0], last_seen=dates[-1], count=len(ids))
     return out
 
 
@@ -86,22 +95,41 @@ def negation_factor(onto: Ontology, negated: set[str], disease) -> float:
     return f
 
 
-def signal_for(score: float, n_matched: int) -> str | None:
-    if score >= 0.75 and n_matched >= 5:
+def is_generic(onto: Ontology, hid: str) -> bool:
+    return hid in GENERIC or bool(GENERIC & onto.ancestors(hid))
+
+
+def signal_for(score: float, n_matched: int, n_specific: int | None = None) -> str | None:
+    if (n_matched if n_specific is None else n_specific) < MIN_SPECIFIC:
+        return None
+    # Scale: share of the patient's total information content explained by CLOSE matches, weighted by how often the
+    # condition shows the feature. A textbook picture of a real condition reaches about 0.5, so the cut-offs sit there.
+    if score >= 0.6 and n_matched >= 5:
         return "strong"
-    if score >= 0.55 and n_matched >= 3:
+    if score >= 0.45 and n_matched >= 3:
         return "moderate"
-    if score >= 0.4 and n_matched >= 2:
+    if score >= 0.3:
         return "weak"
     return None
 
 
 def template_rationale(name: str, matched: list[Evidence], lang: str = "en") -> str:
+    """Clinic side only: names the condition."""
     feats = ", ".join(m.label.lower() for m in matched[:4])
     if lang == "it":
-        return (f"Alcune cose che hai annotato ({feats}) coincidono con caratteristiche tipiche di {name}. "
+        return (f"Alcune cose che il paziente ha annotato ({feats}) coincidono con caratteristiche tipiche di {name}. "
+                f"Potrebbe valere la pena parlarne con il medico, che può dire se è rilevante.")
+    return (f"Some of what the patient recorded ({feats}) overlaps with features that are typical of {name}. "
+            f"This may be worth discussing, and the clinician can tell whether it is relevant.")
+
+
+def patient_rationale(labels: list[str], lang: str = "en") -> str:
+    """Patient side: no condition name."""
+    feats = ", ".join(l.lower() for l in labels[:4])
+    if lang == "it":
+        return (f"Alcune cose che hai annotato ({feats}) compaiono spesso insieme. "
                 f"Potrebbe valere la pena parlarne con il medico, che può dire se è rilevante per te.")
-    return (f"Some of what you recorded ({feats}) overlaps with features that are typical of {name}. "
+    return (f"Some of what you recorded ({feats}) often shows up together. "
             f"This may be worth discussing with your doctor, who can tell whether it is relevant to you.")
 
 
@@ -112,17 +140,35 @@ def close(onto: Ontology, p: str, d: str) -> bool:
     return d in onto.ancestors(p) and onto.ic(d) >= SPECIFIC * onto.ic(p)
 
 
-def missing_terms(onto: Ontology, disease, patient: set[str], k: int = 5) -> list[Term]:
+_freq_cache: dict[str, bool] = {}
+
+
+def has_frequency_info(disease: Disease) -> bool:
+    """True when the disease's annotations carry real frequencies, not only the 0.5 default or 1/1 case reports."""
+    ok = _freq_cache.get(disease.id)
+    if ok is None:
+        ok = _freq_cache[disease.id] = sum(1 for w in disease.phenotypes.values()
+                                           if w not in (DEFAULT_FREQ, 1.0)) >= MIN_FREQ_ANNOT
+    return ok
+
+
+def missing_terms(onto: Ontology, disease, patient: set[str], k: int = 5, lay: dict[str, list[str]] | None = None) -> list[Term]:
     """Common features of the condition, in body systems the patient already wrote about, not yet recorded.
 
-    General before specific: a patient can tell whether they have joint swelling, not a biopsy finding.
+    Only features a person can notice and answer about (plain words exist, no emergency, lab, structural or
+    frightening term), only when the annotation says "more than half of cases" with a real frequency behind it.
     """
-    systems = set().union(*(onto.systems(p) for p in patient))
+    if not has_frequency_info(disease):
+        return []
+    lay = default_lay_terms() if lay is None else lay
+    systems = set().union(*(onto.systems(p) for p in patient)) if patient else set()
     cands = []
     for hid, w in disease.phenotypes.items():
-        if w < COMMON or not (onto.systems(hid) & systems):
+        if w <= COMMON or not (onto.systems(hid) & systems) or is_generic(onto, hid):
             continue
         if any(close(onto, p, hid) or hid in onto.ancestors(p) for p in patient):
+            continue
+        if not patient_noticeable(onto, hid, lay):
             continue
         cands.append((-w, onto.ic(hid), hid))
     cands.sort()
@@ -130,66 +176,113 @@ def missing_terms(onto: Ontology, disease, patient: set[str], k: int = 5) -> lis
 
 
 def display_name(name: str) -> str:
-    """'Systemic lupus erythematosus 18' -> 'Systemic lupus erythematosus' (subtype numbers mean nothing to a patient)."""
+    """'Systemic lupus erythematosus 18' -> 'Systemic lupus erythematosus' (subtype numbers mean nothing to a clinician list)."""
     return re.sub(r"[\s,;-]*(type\s*)?\d+[a-z]?$", "", name, flags=re.I).strip() or name
 
 
-def score_patterns(entries: list[Entry], onto: Ontology) -> list[Pattern]:
+# ---------------------------------------------------------------- scoring
+@dataclass
+class Scored:
+    disease: Disease
+    name: str
+    score: float
+    matched_ids: list[str]
+    specific_ids: list[str]
+    signal: str | None  # None: not enough specific evidence to show as a card
+
+    @property
+    def card_id(self) -> str:
+        return card_id(self.disease.id)
+
+
+_RANK = {"strong": 0, "moderate": 1, "weak": 2}
+
+
+def scored_diseases(entries: list[Entry], onto: Ontology, ev: dict[str, Evidence] | None = None, k: int = 80) -> list[Scored]:
+    """Every candidate condition, best score first, one per family. The score counts close matches only."""
+    ev = evidence_from(entries, onto) if ev is None else ev
+    patient = {p for p in ev if onto.label(p) is not None}
+    denom = sum(onto.ic(p) for p in patient)
+    if not patient or denom <= 0:
+        return []
+    negated = negated_ids(entries)
+    out: list[Scored] = []
+    for disease, _far, contrib in onto.top_diseases(patient, k=k):
+        hits = [(p, c) for p, d, c in contrib if close(onto, p, d)]
+        if not hits:
+            continue
+        score = min(1.0, sum(c for _, c in hits) / denom) * negation_factor(onto, negated, disease)
+        ids = [p for p, _ in hits]
+        spec = [p for p in ids if not is_generic(onto, p)]
+        out.append(Scored(disease, display_name(disease.name), round(score, 4), ids, spec,
+                          signal_for(score, len(ids), len(spec))))
+    out.sort(key=lambda s: -s.score)
+    seen: set[str] = set()
+    deduped = []
+    for s in out:  # subtypes of one condition ("... 16", "... 18") are one family: keep the best
+        if s.name.lower() not in seen:
+            seen.add(s.name.lower())
+            deduped.append(s)
+    return deduped
+
+
+def shown_cards(scored: list[Scored], limit: int) -> list[Scored]:
+    """Cards worth showing: enough specific evidence, strongest signal first."""
+    cards = sorted((s for s in scored if s.signal), key=lambda s: (_RANK[s.signal], -s.score))  # type: ignore[index]
+    return cards[:limit]
+
+
+def score_patterns(entries: list[Entry], onto: Ontology, limit: int = MAX_PATTERNS) -> list[Pattern]:
+    """Clinic package: cards with condition names. Weak ones are included and marked weak."""
     ev = evidence_from(entries, onto)
     if len(ev) < MIN_TERMS:
         return []
     patient = set(ev)
-    negated = negated_ids(entries)
-    out: list[Pattern] = []
-    families: set[str] = set()
-    for disease, score, contrib in onto.top_diseases(patient, k=60):
-        name = display_name(disease.name)
-        if name.lower() in families:
-            continue
-        score *= negation_factor(onto, negated, disease)
-        matched_ids = [p for p, d, c in contrib if c > 0 and close(onto, p, d)]
-        sig = signal_for(score, len(matched_ids))
-        if not sig:
-            continue
-        families.add(name.lower())
-        matched = sorted((ev[p] for p in matched_ids if p in ev), key=lambda e: -e.count)
-        out.append(Pattern(disease_id=disease.id, disease_name=name, signal=sig, score=round(score, 3),
-                           matched=matched, missing=missing_terms(onto, disease, patient),
-                           rationale=template_rationale(name, matched),
+    out = []
+    for s in shown_cards(scored_diseases(entries, onto, ev), limit):
+        matched = sorted((ev[p] for p in s.matched_ids if p in ev), key=lambda e: (-e.count, e.hpo_id))
+        out.append(Pattern(disease_id=s.disease.id, disease_name=s.name, signal=s.signal,  # type: ignore[arg-type]
+                           score=round(s.score, 3), matched=matched, missing=missing_terms(onto, s.disease, patient),
+                           rationale=template_rationale(s.name, matched),
                            neutral_label=neutral_label([m.label for m in matched])))
-    rank = {"strong": 0, "moderate": 1, "weak": 2}
-    return sorted(out, key=lambda p: (rank[p.signal], -p.score))[:MAX_PATTERNS]
+    return out
 
 
-def localize(p: Pattern, lang: str) -> Pattern:
-    """Patient-facing copy of a pattern: plain Italian names where we have them, template rationale in Italian."""
-    if lang != "it":
-        return p
-    matched = [e.model_copy(update={"label": term_label(e.hpo_id, e.label, lang)}) for e in p.matched]
-    missing = [Term(hpo_id=t.hpo_id, label=term_label(t.hpo_id, t.label, lang)) for t in p.missing]
-    name = disease_name(p.disease_name, lang)
-    return p.model_copy(update={"matched": matched, "missing": missing, "neutral_label": neutral_label([m.label for m in matched]),
-                                "disease_name": name, "rationale": template_rationale(name, matched, lang)})
+# ---------------------------------------------------------------- patient copy
+def patient_label(onto: Ontology, hid: str, lang: str, lay: dict[str, list[str]] | None = None) -> str:
+    """Everyday name of a term: the Italian table in Italian, curated English or a plain synonym in English."""
+    if lang == "it":
+        return hpo_it().get(hid) or lay_it().get(hid) or (onto.label(hid) or hid)
+    return en_label(onto, hid, lay)
 
 
-async def explain(llm: LLM, patterns: list[Pattern], lang: str = "en") -> list[Pattern]:
-    """Replace template rationales with model text where the model's text passes the hedge validator."""
-    patterns = [localize(p, lang) for p in patterns]
+def patient_pattern(onto: Ontology, scored: Scored, ev: dict[str, Evidence], patient: set[str], lang: str = "en",
+                    lay: dict[str, list[str]] | None = None) -> PatientPattern:
+    """The card as the patient sees it: opaque id, features in everyday words (clinical name as subtext), no condition."""
+    def clinical(hid: str, label: str) -> str | None:
+        name = onto.label(hid) or hid
+        return name if name.strip().lower() != label.strip().lower() else None
 
-    async def one(p: Pattern) -> Pattern:
-        prompt = {"condition": p.disease_name, "overlapping_features": [m.label for m in p.matched],
-                  "typical_features_not_recorded": [t.label for t in p.missing],
-                  "language": "Italian" if lang == "it" else "English"}
-        try:
-            out, _ = await llm.json("rationale", [{"role": "system", "content": RATIONALE_SYSTEM},
-                                                  {"role": "user", "content": str(prompt)}],
-                                    RationaleOut, max_tokens=200, payload=prompt | {"lang": lang})
-        except Exception:  # noqa: BLE001 - template stays
-            return p
-        text = out.rationale.strip()
-        if text and is_hedged(text) and len(text) < 600:
-            p.rationale, p.rationale_source = text, "model"
-        return p
+    matched = []
+    for p in sorted((p for p in scored.matched_ids if p in ev), key=lambda p: (-ev[p].count, p)):
+        label = patient_label(onto, p, lang, lay)
+        e = ev[p]
+        matched.append(PatientEvidence(hpo_id=p, label=label, clinical=clinical(p, label), entry_ids=e.entry_ids,
+                                       first_seen=e.first_seen, last_seen=e.last_seen, count=e.count))
+    missing = []
+    for t in missing_terms(onto, scored.disease, patient, lay=lay):
+        if lang == "it" and t.hpo_id not in hpo_it() and t.hpo_id not in lay_it():
+            continue  # never an English word in an Italian list
+        label = patient_label(onto, t.hpo_id, lang, lay)
+        missing.append(PatientTerm(hpo_id=t.hpo_id, label=label, clinical=clinical(t.hpo_id, label)))
+    labels = [m.label for m in matched]
+    return PatientPattern(card_id=scored.card_id, signal=scored.signal, matched=matched, missing=missing,  # type: ignore[arg-type]
+                          neutral_label=neutral_label(labels), rationale=patient_rationale(labels, lang))
 
-    return list(await asyncio.gather(*[one(p) for p in patterns]))
 
+def patient_patterns(entries: list[Entry], onto: Ontology, lang: str = "en") -> list[PatientPattern]:
+    ev = evidence_from(entries, onto)
+    if len(ev) < MIN_TERMS:
+        return []
+    patient = set(ev)
+    return [patient_pattern(onto, s, ev, patient, lang) for s in shown_cards(scored_diseases(entries, onto, ev), PATIENT_CARDS)]

@@ -15,6 +15,27 @@ export function jumpTo(entryId: string) {
   if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); }
 }
 
+const OFFLINE = "offline-fixtures";
+
+/** Persistent run facts for the clinic screen: model, speed, latency and the GPU. Offline fixtures say so and show no speed. */
+export function RunChips({ model, backend, tokensPerS, latencyMs }: { model?: string | null; backend?: string | null; tokensPerS?: number; latencyMs?: number }) {
+  const { t } = useT();
+  const [gpu, setGpu] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => { api.gpu().then(setGpu).catch(() => setGpu(null)); }, [tokensPerS, latencyMs]);
+  const offline = backend === OFFLINE;
+  if (!model && !backend) return null;
+  const name = gpu ? String(gpu.gpu_name ?? gpu.name ?? "") : "";
+  const util = gpu && typeof gpu.util_pct === "number" ? ` ${Math.round(gpu.util_pct)}%` : "";
+  return (
+    <div className="no-print flex flex-wrap gap-1.5" data-testid="run-chips">
+      <span className="chip text-xs">{offline ? t("brief.chipDemo") : [backend, model].filter(Boolean).join(" · ")}</span>
+      {!offline && tokensPerS ? <span className="chip text-xs">{t("brief.chipRate", { n: tokensPerS.toFixed(1) })}</span> : null}
+      {!offline && latencyMs ? <span className="chip text-xs">{t("brief.chipLatency", { s: (latencyMs / 1000).toFixed(1) })}</span> : null}
+      {name && <span className="chip text-xs">{t("brief.chipGpu", { name })}{util}</span>}
+    </div>
+  );
+}
+
 export function FinalizeButton({ items, onClick, busy }: { items: BriefItem[]; onClick: () => void; busy?: boolean }) {
   const { t } = useT();
   const pending = items.filter((i) => i.review === "pending").length;
@@ -69,13 +90,15 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
           <div className="card space-y-2">
             <Spinner label={state.progress < 0.1 ? t("brief.reading") : t("brief.drafting")} />
             <div className="h-1.5 bg-line rounded"><div className="h-1.5 rounded bg-accent transition-all" style={{ width: `${Math.round(state.progress * 100)}%` }} /></div>
-            <p className="text-sm text-muted">{state.model ?? t("brief.model")}{state.tokensPerS ? ` · ${t("brief.tokens", { n: state.tokensPerS.toFixed(1) })}` : ""}</p>
+            <p className="text-sm text-muted">{state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.model")}{state.backend !== OFFLINE && state.tokensPerS ? ` · ${t("brief.tokens", { n: state.tokensPerS.toFixed(1) })}` : ""}</p>
           </div>
         )}
         {state.status === "error" && <ErrorBox error={state.error ?? t("brief.error")} retry={() => start(pkg.package_id, lang)} />}
-        {state.status === "done" && <p className="text-sm text-muted">{t("brief.draftedBy", { model: state.model ?? t("brief.clinicModel"), rate: state.tokensPerS ? t("brief.draftedRate", { n: state.tokensPerS.toFixed(1) }) : "" })}</p>}
+        {state.status === "done" && <p className="text-sm text-muted">{t("brief.draftedBy", { model: state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.clinicModel"), rate: state.backend !== OFFLINE && state.tokensPerS ? t("brief.draftedRate", { n: state.tokensPerS.toFixed(1) }) : "" })}</p>}
       </div>
       {err && <ErrorBox error={err} />}
+      <RunChips model={state.model ?? shown?.model} backend={state.backend ?? shown?.backend}
+        tokensPerS={state.tokensPerS ?? shown?.stats?.tokens_per_s} latencyMs={state.latencyMs ?? shown?.stats?.latency_ms} />
 
       {!shown && state.status === "idle" && <p className="text-muted no-print">{t("brief.none")}</p>}
 
@@ -172,6 +195,7 @@ function ItemRow({ it, locked, onReview }: { it: BriefItem; locked: boolean; onR
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="chip text-xs">{ai ? t("brief.aiDraft") : t("brief.fromPatient")}</span>
             <span className="chip text-xs">{t(`brief.review.${it.review}`)}</span>
+            {it.flag === "citation_mismatch" && <span className="chip text-xs" style={{ borderColor: "var(--strong)", color: "var(--strong)" }} role="note">{t("brief.flagged")}</span>}
             {it.cites.map((c, i) => <button key={c} className="chip hover:border-accent" onClick={() => jumpTo(c)} aria-label={t("brief.goTo", { n: i + 1 })}>{t("brief.entryN", { n: i + 1 })}</button>)}
           </div>
           {ai && !locked && (

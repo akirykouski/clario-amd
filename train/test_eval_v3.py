@@ -32,7 +32,7 @@ def test_flag_accuracy_counts_only_matched_entities():
     pred = [E("red cheeks", "HP:0000469", onset="since Tuesday", sev=6), E("fever", "HP:0001945", neg=False),
             E("rash on her cheeks", "HP:0000469", fam=True)]
     m = score([rec(pred)])
-    assert m["entity_f1"] == 1.0 and m["n_matched_pairs"] == 3
+    assert abs(m["entity_f1"] - 2 / 3) < 1e-9 and m["n_matched_pairs"] == 3  # the dropped negation costs F1; the flag metric still sees the pair
     assert abs(m["negation_accuracy"] - 2 / 3) < 1e-9 and m["family_history_accuracy"] == 1.0
     assert m["onset_accuracy"] == 1.0 and m["severity_accuracy"] == 1.0
     pred[2]["family_history"] = False
@@ -47,7 +47,7 @@ def test_no_pairs_gives_none_not_a_fake_one():
 def test_entities_without_hpo_id_match_on_quote():
     g = [E("after a cold swim", None, typ="trigger")]
     m = score([{"diary": "after a cold swim", "gold": g, "pred": [E("After a cold swim", None, typ="trigger")]}])
-    assert m["entity_f1"] == 1.0 and m["hpo_id_accuracy"] == 1.0  # nothing to score for id accuracy
+    assert m["entity_f1"] == 1.0 and m["hpo_id_accuracy"] is None and m["n_gold_with_hpo_id"] == 0  # nothing to score: None, not 1.0
 
 
 def test_hard_negative_scoring():
@@ -127,3 +127,22 @@ def test_eval_wrapper_dry_run_and_old_dataset_shape(tmp_path):
                         "--out-dir", str(tmp_path)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert (tmp_path / "extraction_dryrun-gold-vs-gold.json").exists() and "entity F1" in r.stdout
+
+
+def test_empty_denominators_are_none_never_a_perfect_score():
+    m = score([{"diary": "quiet day", "gold": [E("fever", "HP:0001945")], "pred": []}])
+    assert m["quote_grounding_rate"] is None and m["n_predicted_entities"] == 0  # no prediction, nothing was grounded
+    assert m["hpo_id_accuracy"] == 0.0 and m["n_gold_with_hpo_id"] == 1
+    assert score([{"diary": "quiet day", "gold": [], "pred": []}])["quote_grounding_rate"] is None
+
+
+def test_negation_is_part_of_the_match_key_and_negated_recall_reports_n():
+    gold = [E("fever", "HP:0001945", neg=True), E("red cheeks", "HP:0000469"), E("mother", "HP:0002725", fam=True)]
+    dropped = [E("fever", "HP:0001945", neg=False), E("red cheeks", "HP:0000469"), E("mother", "HP:0002725", fam=True)]
+    m = score([{"diary": "d", "gold": gold, "pred": dropped}])
+    assert m["tp"] == 2 and m["fp"] == 1 and m["fn"] == 1  # the dropped negation is a miss and a false positive
+    assert m["negated_recall"] == 0.0 and m["n_negated_gold"] == 1
+    assert m["family_history_recall"] == 1.0 and m["n_family_history_gold"] == 1
+    ok = score([{"diary": "d", "gold": gold, "pred": gold}])
+    assert ok["negated_recall"] == 1.0 and ok["entity_f1"] == 1.0
+    assert score([{"diary": "d", "gold": [E("a", "HP:0000469")], "pred": []}])["negated_recall"] is None  # n = 0

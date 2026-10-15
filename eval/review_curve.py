@@ -8,6 +8,11 @@ auto-accepted part stays within the tolerance.
   entity level: error = share of auto-accepted entities that are wrong (false positives under the HPO-id match).
   item level:   an item is auto-accepted when its LOWEST entity confidence passes; error = share of
                 auto-accepted items that contain a wrong entity. Items with no predicted entity are skipped.
+CONFIDENCE SOURCE. The confidence in a `--confidence` run is what the model SAYS about itself (a probability it was
+asked to write), not a measured self-consistency. Treat the curve as valid only as far as that number is calibrated:
+the output carries `confidence_source` and the run's `ece` so a reader can judge. The app itself routes by
+self-consistency across samples (backend/clario/extract.py); `eval/extraction_eval.py` measures that path.
+The figure is the share ROUTED TO REVIEW, not coverage and not accuracy.
 Misses (gold entities the model never output) carry no confidence and cannot be routed; they are reported as
 `unrouted_misses` so the curve is not read as a recall guarantee.
 
@@ -64,7 +69,10 @@ def build(res):
     out = {k: res[k] for k in ("label", "dataset", "model", "backend") if k in res}
     out.update({"date": datetime.date.today().isoformat(), "source_result": f"extraction_{res['label']}.json",
                 "n": res["n"], "n_entities_with_confidence": len(ep), "n_items_scored": len(ip),
-                "unrouted_misses": res.get("fn"), "tolerances": {}})
+                "unrouted_misses": res.get("fn"),
+                "confidence_source": "model self-reported (prompt asked for a probability); not self-consistency",
+                "ece": res.get("ece"), "metric": "share of entities routed to review (not coverage, not accuracy)",
+                "tolerances": {}})
     for tol in TOLERANCES:
         out["tolerances"][f"{int(tol * 100)}pct"] = {"entity": review_share(ep, tol), "item": review_share(ip, tol)}
     out["entity_curve"] = [{"threshold": t, "coverage": c, "error": e} for t, c, e in risk_coverage(ep)]

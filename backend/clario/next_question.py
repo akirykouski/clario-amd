@@ -16,7 +16,6 @@ import json
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 
 import numpy as np
 from pydantic import BaseModel
@@ -25,10 +24,11 @@ from .i18n import lay_it
 from .knowledge import Ontology, _norm
 from .llm import LLM
 from .models import Entry, NextQuestion, RankedPattern
-from .patterns import MIN_TERMS, display_name, evidence_from, negated_ids, negation_factor, neutral_label
-from .safety import hedge_problems, is_hedged, is_red_flag_term, is_unnoticeable_term
+from .lay import default_lay_terms, patient_noticeable
+from .patterns import (MIN_TERMS, PATIENT_CARDS, display_name, evidence_from, negated_ids, neutral_label, patient_label,
+                       scored_diseases, shown_cards)
+from .safety import hedge_problems, is_hedged
 
-LAY_PATH = Path(__file__).parent / "data" / "lay_terms.json"
 EPS = 0.02  # prior smoothing: a condition with a low score stays in play
 FLOOR = 0.02  # P(feature | condition) when the condition is not annotated with it
 MIN_PF = 0.03  # skip features almost nobody among the candidates would have
@@ -52,53 +52,38 @@ class QuestionOut(BaseModel):
     question: str = ""
 
 
-@lru_cache(maxsize=1)
-def default_lay_terms() -> dict[str, list[str]]:
-    return json.loads(LAY_PATH.read_text(encoding="utf-8")) if LAY_PATH.exists() else {}
-
-
-# Structural or congenital wording: a person cannot confirm it from how they feel day to day.
-_STRUCTURAL = re.compile(r"abnormal|anomal|malform|hypoplas|aplasia|dysplas|agenesis|atresia|congenital|aberrant|morpholog|"
-                         r"defect|dysmorph|deformit|underdevelop|overgrowth|undergrowth|asymmetr|shape|position", re.I)
-
-
-def lay_phrase(syns: list[str]) -> str | None:
-    """A synonym a layperson could recognise: short, no 'abnormality of ...' or structural wording."""
-    ok = [s for s in syns if 3 <= len(s) <= 60 and not re.match(r"(decreased|increased|reduced|elevated)", s, re.I)
-          and len(s.split()) <= 5 and not _STRUCTURAL.search(s) and not re.search(r"\d|\bof the\b.*\bof the\b", s)]
-    return min(ok, key=len).lower() if ok else None
-
-
 @dataclass
 class Ranked:
     disease: object
     name: str
     score: float
-    label: str
+    card_id: str
+    signal: str | None  # the signal when this condition is one of the cards on screen, else None
 
 
 def rank_diseases(onto: Ontology, entries: list[Entry], k: int = 15) -> list[Ranked]:
-    """Top conditions by pattern score on the confirmed present terms; 'no' answers lower a condition."""
+    """Top conditions by close-match score on the confirmed present terms; 'no' answers lower a condition.
+
+    The cards on screen (at most PATIENT_CARDS) are always included and carry their signal; the rest are contrast only.
+    """
     ev = evidence_from(entries, onto)
     if not ev:
         return []
-    neg = negated_ids(entries)
-    out: list[Ranked] = []
-    seen: set[str] = set()
-    for d, score, contrib in onto.top_diseases(set(ev), k=60):
-        name = display_name(d.name)
-        if name.lower() in seen:
-            continue
-        seen.add(name.lower())
-        labels = [ev[p].label for p, _q, v in sorted(contrib, key=lambda c: -c[2]) if p in ev]
-        out.append(Ranked(d, name, round(score * negation_factor(onto, neg, d), 4), neutral_label(labels)))
-    out.sort(key=lambda r: -r.score)
-    return out[:k]
+    scored = scored_diseases(entries, onto, ev)
+    shown = {s.disease.id: s for s in shown_cards(scored, PATIENT_CARDS)}
+    top = scored[:k] + [s for s in shown.values() if s not in scored[:k]]
+    return [Ranked(s.disease, s.name, s.score, s.card_id, s.signal if s.disease.id in shown else None) for s in top]
 
 
-def as_ranked_patterns(ranked: list[Ranked], n: int = 5) -> list[RankedPattern]:
-    return [RankedPattern(disease_id=r.disease.id, label=r.label, score=r.score, rank=i + 1)
-            for i, r in enumerate(ranked[:n])]
+def as_ranked_patterns(onto: Ontology, entries: list[Entry], lang: str = "en") -> list[RankedPattern]:
+    """The cards on screen, in order, with their plain-words title."""
+    ev = evidence_from(entries, onto)
+    out = []
+    for i, s in enumerate(shown_cards(scored_diseases(entries, onto, ev), PATIENT_CARDS)):
+        ids = sorted((p for p in s.matched_ids if p in ev), key=lambda p: (-ev[p].count, p))
+        out.append(RankedPattern(card_id=s.card_id, label=neutral_label([patient_label(onto, p, lang) for p in ids]),
+                                 score=s.score, rank=i + 1))
+    return out
 
 
 # ---------------------------------------------------------------- information gain
@@ -127,17 +112,6 @@ class Choice:
     splits: list[str]
 
 
-def _askable(onto: Ontology, hid: str, lay: dict[str, list[str]]) -> str | None:
-    """The plain-words phrase for a term, or None when it must not be asked about."""
-    syns = lay.get(hid)
-    label = onto.label(hid)
-    if not syns or not label:
-        return None
-    if is_red_flag_term(label, *syns) or is_unnoticeable_term(label, *syns) or _STRUCTURAL.search(label):
-        return None
-    return lay_phrase(syns)
-
-
 def choose(onto: Ontology, entries: list[Entry], lay: dict[str, list[str]] | None = None,
            skip: set[str] | None = None, min_terms: int = MIN_TERMS, k: int = 15, top: int = 12) -> list[Choice]:
     """Candidate features best first by expected information gain."""
@@ -146,8 +120,9 @@ def choose(onto: Ontology, entries: list[Entry], lay: dict[str, list[str]] | Non
     if len(ev) < min_terms:
         return []
     ranked = rank_diseases(onto, entries, k)
-    if len(ranked) < 2:
-        return []
+    focus = [r for r in ranked if r.signal in ("moderate", "strong")]
+    if len(ranked) < 2 or not focus:
+        return []  # nothing on screen is at least a moderate signal: weak cards alone never prompt a question
     neg = negated_ids(entries)
     answered = {ent.hpo_id for e in entries for ent in e.entities if ent.hpo_id and ent.review in ("confirmed", "corrected")} | (skip or set())
     blocked: set[str] = set()
@@ -160,15 +135,16 @@ def choose(onto: Ontology, entries: list[Entry], lay: dict[str, list[str]] | Non
     systems = set().union(*(onto.systems(p) for p in ev))
     phr: dict[str, str | None] = {}
     cand: dict[str, int] = {}
+    # Only features of the cards on screen at moderate or stronger signal; the other conditions are contrast.
     # A person can answer about body areas they already wrote about; widen to every area only if that leaves nothing.
     for same_system in (True, False):
-        for r in ranked:
+        for r in focus:
             for q in r.disease.phenotypes:
                 for a in {q} | onto.ancestors(q):
                     if a in cand or a in blocked or (same_system and not (onto.systems(a) & systems)):
                         continue
                     if a not in phr:
-                        phr[a] = _askable(onto, a, lay)
+                        phr[a] = patient_noticeable(onto, a, lay)
                     if phr[a]:
                         cand[a] = len(cand)
         if cand:
@@ -190,9 +166,12 @@ def choose(onto: Ontology, entries: list[Entry], lay: dict[str, list[str]] | Non
         if pf[j] < MIN_PF or ig[j] <= 1e-6:
             continue
         col = lik[:, j]
-        head = min(len(ranked), 5)
-        hi, lo = int(np.argmax(col[:head])), int(np.argmin(col[:head]))
-        splits = [ranked[hi].disease.id, ranked[lo].disease.id] if hi != lo and col[hi] - col[lo] >= 0.2 else []
+        on_screen = [i for i, r in enumerate(ranked) if r.signal]
+        splits: list[str] = []
+        if len(on_screen) == 2:  # the answer separates the two cards on screen, never a condition the patient cannot see
+            hi, lo = sorted(on_screen, key=lambda i: -col[i])
+            if col[hi] - col[lo] >= 0.2:
+                splits = [ranked[hi].card_id, ranked[lo].card_id]
         out.append(Choice(ids[j], float(ig[j]), float(pf[j]), phr[ids[j]] or "", splits))
     return out
 
@@ -229,7 +208,7 @@ def question_problems(q: str, onto: Ontology, label: str | None = None, lay: str
 
 
 def template_question(lay: str, lang: str) -> str:
-    return f"Ti capita di avere {lay}?" if lang == "it" else f"Do you sometimes have: {lay}?"
+    return f"Ti capita di avere {lay}?" if lang == "it" else f"Do you ever notice {lay}?"
 
 
 def why_text(lang: str, splits: list[str]) -> str:

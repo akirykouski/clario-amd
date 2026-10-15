@@ -9,11 +9,13 @@ summary text must pass the hedge validator. Every AI item starts `pending` and n
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from collections import Counter
 
 from pydantic import BaseModel, Field
 
+from .i18n import hpo_it
 from .models import Brief, BriefItem, SharePackage
 from .safety import hedge_problems
 
@@ -59,6 +61,39 @@ def _span(ds: list[str], lang: str) -> str:
     return f"dal {ds[0]} al {ds[-1]}" if lang == "it" else f"{ds[0]} to {ds[-1]}"
 
 
+_LAB_FLAG = {"en": {"low": "low", "high": "high", "normal": "in range"}, "it": {"low": "basso", "high": "alto", "normal": "nella norma"}}
+
+
+def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
+    """One item per test, straight from the shared lab rows (no model): value, unit, flag, date, source page, range."""
+    it = lang == "it"
+    groups: dict[str, list] = {}
+    for l in pkg.labs:
+        groups.setdefault(l.test_name, []).append(l)
+    items = []
+    for name, rows in sorted(groups.items(), key=lambda kv: min(r.date for r in kv[1])):
+        rows = sorted(rows, key=lambda r: (r.date, r.page))
+        parts = []
+        for r in rows:
+            val = r.value_text or (f"{r.value_numeric:g}" if r.value_numeric is not None else "?")
+            flag = f", {_LAB_FLAG[lang][r.flag]}" if r.flag else ""
+            where = f"{'pagina' if it else 'page'} {r.page}"
+            parts.append(f"{(val + ' ' + r.unit).strip()}{flag} ({r.date}, {where})")
+        rng = next((r for r in rows if r.ref_low is not None or r.ref_high is not None), None)
+        rtxt = ""
+        if rng:
+            lo = "" if rng.ref_low is None else f"{rng.ref_low:g}"
+            hi = "" if rng.ref_high is None else f"{rng.ref_high:g}"
+            rtxt = f"; {'intervallo stampato' if it else 'printed range'} {lo} {'a' if it else 'to'} {hi}".replace("  ", " ")
+        mark = ""
+        if any(not r.reviewed for r in rows):
+            mark = f" ({'non verificato da una persona' if it else NOT_REVIEWED})"
+        cites = sorted({r.entry_id for r in rows if r.entry_id})
+        items.append(BriefItem(id=_id(), section="labs", text=f"{name}: {'; '.join(parts)}{rtxt}{mark}", cites=cites,
+                               origin="patient", review="accepted"))
+    return items
+
+
 def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
     """Clinician view of what the patient recorded, straight from data: clinical terms and HPO ids."""
     it = lang == "it"
@@ -91,7 +126,7 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         rec = f"registrato {len(cites)} {'volta' if len(cites) == 1 else 'volte'}" if it else f"recorded {len(cites)}x"
         items.append(BriefItem(id=_id(), section=sec, text=f"{label}: {rec}, {_span(ds, lang)}{extra}{mark}",
                                cites=sorted(set(cites)), origin="patient", review="accepted"))
-    return items
+    return items + lab_items(pkg, lang)
 
 
 # ---------------------------------------------------------------- audience and language views
@@ -127,8 +162,7 @@ def names_condition(text: str, onto) -> bool:
 
 def patient_view_items(pkg: SharePackage, lang: str, onto) -> list[BriefItem]:
     """What the patient may keep: their own words, plain names, no condition names, nothing the clinician did not review."""
-    from .i18n import term_label
-    from .patterns import localize
+    from .patterns import PATIENT_CARDS, neutral_label, patient_label
 
     it = lang == "it"
     items: list[BriefItem] = []
@@ -150,22 +184,23 @@ def patient_view_items(pkg: SharePackage, lang: str, onto) -> list[BriefItem]:
         x = xs[-1]
         cites = sorted({y.entry_id for y in xs})
         ds = sorted(dates[c] for c in cites if c in dates)
-        name = term_label(x.hpo_id, x.canonical, lang)
+        name = patient_label(onto, x.hpo_id, lang).capitalize() if x.hpo_id else x.canonical
         words = f'"{x.quote}"' if not names_condition(x.quote, onto) else ""
         times = f"{len(xs)} {'volta' if len(xs) == 1 else 'volte'}" if it else f"{len(xs)}x"
         said = "hai scritto" if it else "you wrote"
         text = f"{name}: {said} {words + ' ' if words else ''}({times}, {_span(ds, lang)})"
         items.append(BriefItem(id=f"bi_p{n}", section="symptoms", text=text, cites=cites, origin="patient", review="accepted"))
         n += 1
+    items += lab_items(pkg, lang)
     if family:
         items.append(BriefItem(id="bi_p_family", section="summary", origin="patient", review="accepted",
                                text="Hai scritto di una condizione che ha un tuo parente." if it
                                else "You wrote about a condition that a relative has."))
-    for i, p in enumerate(pkg.patterns):
-        p = localize(p, lang)
+    for i, p in enumerate(pkg.patterns[:PATIENT_CARDS]):
+        title = neutral_label([patient_label(onto, m.hpo_id, lang) for m in p.matched])  # everyday words, never a condition name
         items.append(BriefItem(id=f"bi_p_pat{i}", section="patterns", origin="patient", review="accepted", cites=[],
-                               text=(f"Cose che hai annotato e che spesso compaiono insieme: {p.neutral_label}. Non è una diagnosi."
-                                     if it else f"Things you recorded that often show up together: {p.neutral_label}. Not a diagnosis.")))
+                               text=(f"Cose che hai annotato e che spesso compaiono insieme: {title}. Non è una diagnosi."
+                                     if it else f"Things you recorded that often show up together: {title}. Not a diagnosis.")))
     return items
 
 
@@ -181,9 +216,33 @@ def render_brief(pkg: SharePackage, brief: Brief, audience: str, lang: str, onto
         items = patient_items(pkg, lang) + ai
     else:
         keep = [i for i in ai if i.review in ("accepted", "edited") and i.section in ("summary", "timeline")
-                and brief.lang == lang and not names_condition(i.text, onto)]
+                and brief.lang == lang and not i.flag and not names_condition(i.text, onto)]
         items = patient_view_items(pkg, lang, onto) + keep
     return brief.model_copy(update={"items": items, "audience": audience, "lang": lang})
+
+
+def _term_names(pkg: SharePackage) -> dict[str, set[str]]:
+    """Every way the package names one of the patient's terms (clinical name, Italian name) -> the term keys it can mean."""
+    names: dict[str, set[str]] = {}
+    for x in pkg.entities:
+        if x.negated or x.family_history or x.type == "lab":
+            continue
+        key = x.hpo_id or x.canonical.lower()
+        for n in (x.canonical, hpo_it().get(x.hpo_id or "", "")):
+            if len(n.strip()) >= 4:
+                names.setdefault(n.strip().lower(), set()).add(key)
+    return names
+
+
+def citation_mismatch(pkg: SharePackage, text: str, cites: list[str]) -> bool:
+    """True when the text names a term of the patient that none of the cited entries confirms."""
+    low = text.lower()
+    supported = {x.hpo_id or x.canonical.lower() for x in pkg.entities
+                 if x.entry_id in cites and not x.negated and not x.family_history}
+    for name, keys in _term_names(pkg).items():
+        if re.search(rf"\b{re.escape(name)}\b", low) and not (keys & supported):
+            return True
+    return False
 
 
 def check_ai_items(pkg: SharePackage, draft: DraftOut) -> list[BriefItem]:
@@ -202,7 +261,8 @@ def check_ai_items(pkg: SharePackage, draft: DraftOut) -> list[BriefItem]:
             continue  # pattern notes must be hedged
         if any(p != "no hedging language" for p in problems):
             continue  # diagnostic or prescriptive language
-        out.append(BriefItem(id=_id(), section=sec, text=text, cites=cites, origin="ai", review="pending"))
+        flag = "citation_mismatch" if cites and citation_mismatch(pkg, text, cites) else None  # never accepted without a clinician
+        out.append(BriefItem(id=_id(), section=sec, text=text, cites=cites, origin="ai", review="pending", flag=flag))
     return out
 
 

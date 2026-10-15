@@ -8,6 +8,7 @@ import json
 import logging
 import time
 import uuid
+from datetime import date, timedelta
 from typing import Any, Awaitable, Callable, Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -63,6 +64,7 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         b = batches[bid]
         sem = asyncio.Semaphore(s.doc_workers)
         fallback_date = b["occurred_on"]
+        shift = timedelta(days=b.get("shift_days", 0))  # demo only: move the synthetic referti into the diary's weeks
 
         async def one(i: int, page: docs.Page) -> None:
             async with sem:
@@ -71,7 +73,8 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
                                                   threshold=s.review_threshold, n_samples=s.doc_samples)
                     for r in res.rows:
                         lab = LabResult(id=f"l_{uuid.uuid4().hex[:10]}", batch_id=bid, test_key=docs.test_key(r["test_name"]),
-                                        model=res.model, **{**r, "date": r["date"] or fallback_date})
+                                        model=res.model, **{**r, "date": (date.fromisoformat(r["date"]) + shift).isoformat()
+                                                            if r["date"] else fallback_date})
                         vault.put("lab", lab.id, lab.model_dump(mode="json"))
                         b["labs"] += 1
                         b["needs_review"] += lab.review == "needs_review"
@@ -106,7 +109,7 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
             raise HTTPException(422, "Add at least one PDF or image")
         return start_batch(pages)
 
-    def start_batch(pages: list[docs.Page]) -> dict:
+    def start_batch(pages: list[docs.Page], shift_days: int = 0) -> dict:
         """Store the pages encrypted, add the diary entry, start reading in the background."""
         now_m = time.monotonic()
         for k in [k for k, b in batches.items() if b["finished"] is not None and now_m - b["finished"] > FINISHED_TTL]:
@@ -120,8 +123,10 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         entry = Entry(id=f"e_{uuid.uuid4().hex[:10]}", created_at=now, occurred_on=occurred,
                       text=f"Imported documents ({len(pages)} pages)", extraction="done")
         vault.put("entry", entry.id, entry.model_dump(mode="json"))
+        vault.put("docbatch", bid, {"batch_id": bid, "entry_id": entry.id})  # what a shared lab row cites
         batches[bid] = {"total": len(pages), "done": 0, "errors": 0, "labs": 0, "needs_review": 0,
-                        "started": time.monotonic(), "finished": None, "entry_id": entry.id, "occurred_on": occurred}
+                        "started": time.monotonic(), "finished": None, "entry_id": entry.id, "occurred_on": occurred,
+                        "shift_days": shift_days}
         spawn(run_batch(bid, pages))
         return {"batch_id": bid, "pages": len(pages), "entry_id": entry.id}
 

@@ -35,7 +35,7 @@ Our reading, to be confirmed with counsel.
 
 | Design choice | Effect on intended purpose |
 |---|---|
-| Patients see feature groups and a signal level with evidence, never a condition name or a percentage | No diagnostic output for the patient |
+| Condition names are clinician-only. Patients see feature groups in everyday words and a signal level with evidence, never a condition name, a disease id or a percentage, on any screen or in any API response | No diagnostic output for the patient |
 | Pattern text must pass a hedge validator, otherwise a template is used | No diagnostic or treatment wording from the model |
 | Clinician sees pattern overlap labelled "worth discussing" with evidence and gaps | Decision support is limited to organising evidence the patient entered. Still the area a regulator would study most closely |
 | No dose, medication or treatment content | No treatment function |
