@@ -20,6 +20,7 @@ from .lay import default_lay_terms, en_label, patient_noticeable
 from .models import COUNTED, Entity, Entry, Evidence, Pattern, PatientEvidence, PatientPattern, PatientTerm, Term
 
 MIN_TERMS = 3
+NO_FLOOR = 0.7  # one 'no' cuts a score by at most 30%, so a single answer cannot drop a moderate card below weak
 MIN_SPECIFIC = 3  # a card needs this many matched terms that are not everyday symptoms
 MAX_PATTERNS = 3  # clinic package
 PATIENT_CARDS = 2  # patient screen
@@ -91,7 +92,7 @@ def negation_factor(onto: Ontology, negated: set[str], disease) -> float:
     """Likelihood of the 'no' answers under a disease (softened so one answer never erases a pattern)."""
     f = 1.0
     for n in negated:
-        f *= 1.0 - 0.85 * annotated_freq(onto, disease, n)
+        f *= max(NO_FLOOR, 1.0 - 0.85 * annotated_freq(onto, disease, n))
     return f
 
 

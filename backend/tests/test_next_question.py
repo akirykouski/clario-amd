@@ -179,3 +179,17 @@ def test_question_wording_is_everyday_english_and_never_alarming():
     assert cs
     for c in cs:
         assert not re.search(r"cancer|tumou?r|heart|kidney failure", c.lay), c.lay
+
+
+def test_one_no_answer_never_erases_the_only_card(unlocked):
+    unlocked.post("/api/demo", json={"persona": "giulia"})
+    wait_extracted(unlocked)
+    confirm_all(unlocked)
+    before = unlocked.get("/api/patterns").json()
+    assert before["patterns"], "the demo shows a card"
+    q = unlocked.get("/api/patterns/next-question").json()
+    assert q
+    unlocked.post("/api/patterns/answer", json={"feature_id": q["feature_id"], "answer": "no"})
+    after = unlocked.get("/api/patterns").json()
+    assert after["confirmed_terms"] >= before["confirmed_terms"]
+    assert after["patterns"], "one 'no' lowers a card but never removes it"
