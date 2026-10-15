@@ -74,9 +74,13 @@ export function splitQuotes(text: string, quotes: string[]): Seg[] {
   return out;
 }
 
+/** BCP 47 locale for dates and numbers in the current UI language. */
+export function locale(): string {
+  return getLang() === "it" ? "it-IT" : "en-GB";
+}
 export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }): string {
   const d = new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
-  return isNaN(d.getTime()) ? iso : d.toLocaleDateString(getLang() === "it" ? "it-IT" : "en-GB", opts);
+  return isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat(locale(), opts).format(d);
 }
 export function today(): string {
   const d = new Date();

@@ -9,7 +9,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -26,6 +26,7 @@ from . import doc_routes
 from . import gpu as gpumetrics
 from . import share as sharing
 from .config import Settings
+from .share import now_iso
 from . import documents as docs
 from .demo import PERSONA_LANG, PERSONAS, demo_referti, persona_entries
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
@@ -87,10 +88,6 @@ class InboxIn(BaseModel):
 class ReviewIn(BaseModel):
     review: str
     text: str | None = None
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 # ---------------------------------------------------------------- run bus (SSE)

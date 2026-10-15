@@ -12,6 +12,14 @@ Review = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
 COUNTED = ("confirmed", "corrected")  # decided by a person and kept: counts toward patterns and sharing
 
 
+def route_review(confidence: float | None, threshold: float, *, none_means: str = "auto") -> str:
+    """Below the threshold -> needs_review. `none_means` is the state when no confidence was measured:
+    entities (nothing to doubt) stay "auto", lab rows (nothing measured) go to "needs_review"."""
+    if confidence is None:
+        return none_means
+    return "needs_review" if confidence < threshold else "auto"
+
+
 class Term(BaseModel):
     """An HPO ontology term."""
 

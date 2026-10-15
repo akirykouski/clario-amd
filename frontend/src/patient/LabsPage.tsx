@@ -2,13 +2,13 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FileUp } from "lucide-react";
 import { api } from "../api";
-import { fmtDate } from "../lib";
+import { fmtDate, locale } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
-import { getLang, t, useT } from "../i18n";
+import { t, useT } from "../i18n";
 import type { LabPatch, LabTest, LabValue } from "../types";
 
-const num = (n: number) => (Math.round(n * 1000) / 1000).toLocaleString(getLang() === "it" ? "it-IT" : "en-GB", { useGrouping: false, maximumFractionDigits: 3 });
+const num = (n: number) => (Math.round(n * 1000) / 1000).toLocaleString(locale(), { useGrouping: false, maximumFractionDigits: 3 });
 export const valueText = (v: LabValue) => (v.value_numeric !== null ? num(v.value_numeric) : v.value_text ?? "");
 export function refText(r: Pick<LabTest, "ref_low" | "ref_high">): string {
   if (r.ref_low !== null && r.ref_high !== null) return t("labs.rangeBoth", { lo: num(r.ref_low), hi: num(r.ref_high) });

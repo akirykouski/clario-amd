@@ -9,7 +9,6 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
@@ -19,6 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 from . import documents as docs
 from .config import Settings
 from .review import LabReview
+from .share import now_iso
 from .models import Entry, LabResult, LabsResponse, LabTest, LabValue
 from .vault import Locked, Vault
 
@@ -118,7 +118,7 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
     def start_batch(pages: list[docs.Page]) -> dict:
         """Store the pages encrypted, add the diary entry, start reading in the background."""
         bid = f"b_{uuid.uuid4().hex[:10]}"
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        now = now_iso()
         occurred = docs.today_iso()
         for i, p in enumerate(pages):
             vault.put("docpage", f"{bid}_p{i + 1}", {"batch_id": bid, "page": i + 1, "source": p.source,

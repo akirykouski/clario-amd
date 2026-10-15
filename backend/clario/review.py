@@ -15,20 +15,15 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timezone
 from typing import Callable, Protocol
 
 from . import documents as docs
 from .knowledge import Ontology
-from .models import Entity, Entry, LabResult
+from .share import now_iso
+from .models import Entity, Entry, LabResult, route_review  # noqa: F401 - route_review re-exported
 
 ACTIONS = ("confirm", "correct", "reject")
 EXCERPT_WIDTH = 90
-
-
-def route_review(confidence: float | None, threshold: float) -> str:
-    """Below the threshold -> needs_review. No confidence measured -> auto."""
-    return "needs_review" if confidence is not None and confidence < threshold else "auto"
 
 
 def excerpt(text: str, quote: str, width: int = EXCERPT_WIDTH) -> str:
@@ -149,5 +144,5 @@ def _snap(x: Entity) -> dict:
 
 def correction_record(kind: str, item_id: str, action: str, detail: dict) -> tuple[str, dict]:
     rid = f"cl_{uuid.uuid4().hex[:10]}"
-    return rid, {"id": rid, "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), "kind": kind,
+    return rid, {"id": rid, "ts": now_iso(), "kind": kind,
                  "item_id": item_id, "action": action, **detail}

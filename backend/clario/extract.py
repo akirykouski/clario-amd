@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import unicodedata
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +24,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .config import Settings
-from .knowledge import Ontology
+from .knowledge import Ontology, fold
 from .llm import LLM, LLMError, Stats, extract_json, merge_stats
 from .models import Entity
 from .prompt import build_messages
@@ -41,6 +40,7 @@ thing. If no candidate is a good match, answer NONE. Return JSON only: {"hpo_id"
 MATCH_THRESHOLD = 0.6
 PICK_K = 20
 _TYPES = {"symptom", "finding", "lab", "medication", "trigger", "body_site", "bodypart"}
+# Cue lists mirror train/synth.py NEG / FAM (train stays standalone); backend/tests/test_cue_parity.py pins the differences.
 _NEG = re.compile(r"\b(no|not|without|never|denies|nessun[ao]?|non|senza|niente)\b[^.;,]{0,25}$", re.I)
 _REL_EN = r"(?:my|his|her|their)\s+(?:mother|mom|mum|father|dad|sister|brother|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|parents?|family)"
 _REL_IT = r"(?:mia|mio|mie|miei|sua|suo)\s+(?:madre|mamma|padre|papa|papà|sorella|fratello|nonna|nonno|zia|zio|cugin[ao]|genitori|famiglia)"
@@ -116,17 +116,12 @@ def messages_for(text: str, confidence: bool = False) -> list[dict]:
     return build_messages(text, confidence)
 
 
-def _fold(s: str) -> str:
-    s = unicodedata.normalize("NFKD", s)
-    return "".join(c for c in s if not unicodedata.combining(c)).lower()
-
-
 def find_quote(text: str, quote: str) -> tuple[int, int] | None:
     """Locate quote in text ignoring case, accents and whitespace runs. Returns (start, end) in text."""
-    q = re.sub(r"\s+", " ", _fold(quote).strip(" .,;:\"'"))
+    q = re.sub(r"\s+", " ", fold(quote).strip(" .,;:\"'"))
     if len(q) < 2:
         return None
-    folded = _fold(text)
+    folded = fold(text)
     pattern = re.escape(q).replace(r"\ ", r"\s+")
     m = re.search(pattern, folded)
     return (m.start(), m.end()) if m else None
@@ -224,12 +219,12 @@ def resolve_hpo(proposed: str | None, quote: str, canonical: str, onto: Ontology
     flags: list[str] = []
     pid = (proposed or "").strip().upper()
     if pid and re.fullmatch(r"HP:\d{7}", pid) and onto.exists(pid):
-        names = [_fold(n) for n in [onto.label(pid) or "", *onto.synonyms(pid)]]
+        names = [fold(n) for n in [onto.label(pid) or "", *onto.synonyms(pid)]]
         for phrase in (canonical, quote):
             m = onto.best_match(phrase)
             if m and (m[0].hpo_id == pid or pid in onto.ancestors(m[0].hpo_id) or m[0].hpo_id in onto.ancestors(pid)):
                 return pid, onto.label(pid), flags
-            if _fold(phrase).strip() in names:
+            if fold(phrase).strip() in names:
                 return pid, onto.label(pid), flags
         flags.append("hpo_dropped")
     elif pid:

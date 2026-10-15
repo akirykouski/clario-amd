@@ -30,10 +30,14 @@ class Disease:
     phenotypes: dict[str, float] = field(default_factory=dict)
 
 
+def fold(s: str) -> str:
+    """Lower-case and strip accents ("Perché" -> "perche")."""
+    s = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in s if not unicodedata.combining(c)).lower()
+
+
 def _norm(s: str) -> str:
-    s = unicodedata.normalize("NFKD", s.lower())
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    return re.sub(r"[^a-z0-9]+", " ", s).strip()
+    return re.sub(r"[^a-z0-9]+", " ", fold(s)).strip()
 
 
 def _stem(w: str) -> str:

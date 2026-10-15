@@ -12,7 +12,6 @@ import base64
 import io
 import json
 import re
-import unicodedata
 import zlib
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -20,8 +19,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .knowledge import fold
 from .llm import LLM, LLMError, extract_json
-from .models import LabResult
+from .models import LabResult, route_review
 
 TRUTH_PREFIX = "clario-truth:"
 MAX_DIM = 1600
@@ -201,9 +201,7 @@ def messages_for(jpeg: bytes, page_no: int) -> list[dict]:
 
 # ------------------------------------------------------------------ rules in code
 def test_key(name: str) -> str:
-    s = unicodedata.normalize("NFKD", name)
-    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
-    return re.sub(r"[^a-z0-9]+", "", s)
+    return re.sub(r"[^a-z0-9]+", "", fold(name))
 
 
 def compute_flag(num: float | None, lo: float | None, hi: float | None, given: str | None = None) -> str | None:
@@ -214,10 +212,6 @@ def compute_flag(num: float | None, lo: float | None, hi: float | None, given: s
             return "low"
         return "normal"
     return given
-
-
-def review_state(confidence: float | None, threshold: float) -> str:
-    return "needs_review" if confidence is None or confidence < threshold else "auto"
 
 
 def _vkey(r: RawLab) -> str:
@@ -286,7 +280,7 @@ async def extract_page(llm: LLM, page: Page, page_no: int, *, vision_model: str 
                      "unit": r.unit, "ref_low": r.ref_low, "ref_high": r.ref_high,
                      "flag": compute_flag(r.value_numeric, r.ref_low, r.ref_high, r.flag),
                      "date": r.date or doc.date, "page": page_no, "confidence": c,
-                     "review": review_state(c, threshold)})
+                     "review": route_review(c, threshold, none_means="needs_review")})
     return PageResult(rows, doc.date, vision_model or llm.model, llm.backend)
 
 

@@ -202,7 +202,7 @@ class Redaction:
 
 
 # ====================================================================== call log
-def now_iso() -> str:
+def now_iso_ms() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
@@ -288,7 +288,7 @@ class CallLog:
     def append(self, *, backend: str, model: str, purpose: str, preview: str, sent_text: str,
                redacted: bool = False, replacements: int = 0, images: int = 0) -> dict | None:
         purpose = purpose if purpose in PURPOSES else "other"
-        entry = {"ts": now_iso(), "backend": backend, "model": model, "purpose": purpose,
+        entry = {"ts": now_iso_ms(), "backend": backend, "model": model, "purpose": purpose,
                  "redacted_preview": preview[:200], "payload_sha256": sha256(sent_text),
                  "redacted": redacted, "replacements": replacements, "images": images}
         with self._lock:

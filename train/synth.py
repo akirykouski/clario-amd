@@ -40,6 +40,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "backend"))
 from clario.knowledge import Ontology  # noqa: E402
+from prompt import _extract_json  # noqa: E402
 
 # HPO terms a patient could notice themselves: those with HPO layperson synonyms, minus the
 # metabolism, blood and immune lab branches (built from hp.json, see lay_terms.json).
@@ -64,6 +65,7 @@ EVENTS = {"en": ["my cousin's wedding is on Saturday", "the car is at the garage
                  "abbiamo preso un gattino rumorosissimo", "l'autobus è arrivato in ritardo due volte",
                  "ho iniziato un corso di ceramica", "i vicini stanno ristrutturando"]}
 
+# Mirrors backend/clario/extract.py _NEG / _FAMILY (this folder stays standalone); backend/tests/test_cue_parity.py pins the differences.
 NEG = re.compile(r"(\b(no|not|without|never|nothing|none|nessun[ao]?|non|senza|niente|neanche|nemmeno|mai)\b|n't\b)"
                  r"[^.;!?]{0,30}$", re.I)
 FAM = re.compile(r"\b(my|his|her|our)\s+(mother|mom|mum|father|dad|sister|brother|grandmother|grandfather|grandma|"
@@ -278,8 +280,11 @@ async def draft(client, model: str, onto: Ontology, p: dict) -> tuple[dict, tupl
         model=model, temperature=1.0, max_tokens=900,
         messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt(onto, p)}])
     toks = (r.usage.prompt_tokens, r.usage.completion_tokens) if getattr(r, "usage", None) else (0, 0)
-    txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", (r.choices[0].message.content or "").strip())
-    return json.loads(txt), toks
+    txt = r.choices[0].message.content or ""
+    obj = _extract_json(txt)
+    if obj is None:
+        raise json.JSONDecodeError("no JSON object in the reply", txt, 0)
+    return obj, toks
 
 
 def check_endpoint(base_url: str) -> None:
