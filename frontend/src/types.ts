@@ -24,6 +24,7 @@ export interface Evidence {
 export interface Pattern {
   disease_id: string; disease_name: string; signal: Signal; score: number;
   matched: Evidence[]; missing: Term[]; rationale: string; rationale_source: "model" | "template";
+  neutral_label: string;
 }
 
 export interface ShareRequest {
@@ -78,3 +79,10 @@ export interface RunEvent {
   stage: string; message?: string; progress?: number; backend?: string; model?: string;
   tokens_per_s?: number; latency_ms?: number; payload?: unknown;
 }
+
+export interface NextQuestion {
+  feature_id: string; question: string; why: string; ig: number; splits: string[]; question_source: "model" | "template";
+}
+export interface RankedPattern { disease_id: string; label: string; score: number; rank: number }
+export interface AnswerResult { before: RankedPattern[]; after: RankedPattern[]; entry_id: string | null }
+export type Answer = "yes" | "no" | "unsure";

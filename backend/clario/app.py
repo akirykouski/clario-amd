@@ -27,8 +27,9 @@ from .demo import giulia_entries
 from .extract import extract
 from .knowledge import Ontology
 from .llm import extract_json, make_llm
-from .models import Brief, Entity, Entry, ShareRequest, SharePackage
-from .patterns import evidence_from, explain, score_patterns
+from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage
+from .next_question import as_ranked_patterns, next_question, rank_diseases, template_question
+from .patterns import evidence_from, explain, negated_ids, score_patterns
 from .safety import check_entry
 from .vault import BadPassphrase, Locked, Vault
 
@@ -52,6 +53,13 @@ class EntityPatch(BaseModel):
     hpo_id: str | None = None
     severity: int | None = None
     negated: bool | None = None
+
+
+class AnswerIn(BaseModel):
+    feature_id: str
+    answer: str  # yes | no | unsure
+    question: str | None = None
+    lang: str = "en"
 
 
 class DemoIn(BaseModel):
@@ -308,7 +316,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
     async def patterns():
         entries = all_entries()
         ev = evidence_from(entries, onto)
-        key = json.dumps(sorted((k, v.count) for k, v in ev.items()))
+        key = json.dumps([sorted((k, v.count) for k, v in ev.items()), sorted(negated_ids(entries))])
         if key not in pattern_cache:
             pattern_cache.clear()
             pattern_cache[key] = await explain(llm, score_patterns(entries, onto))
@@ -316,6 +324,42 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         note = ("Patterns worth discussing with your doctor. Not a diagnosis."
                 if pats else "Confirm at least 3 terms in your entries to look for patterns.")
         return {"patterns": pats, "confirmed_terms": len(ev), "note": note}
+
+    asked: dict[str, str] = {}  # feature_id -> question text last shown (so the diary entry quotes what was asked)
+
+    def unsure_ids() -> set[str]:
+        return {d["feature_id"] for d in vault.all("qa") if d.get("answer") == "unsure"}
+
+    @app.get("/api/patterns/next-question")
+    async def pattern_next_question(lang: str = "en") -> NextQuestion | None:
+        q = await next_question(llm, onto, all_entries(), lang, skip=unsure_ids())
+        if q:
+            asked[q.feature_id] = q.question
+        return q
+
+    @app.post("/api/patterns/answer")
+    async def pattern_answer(body: AnswerIn) -> AnswerResult:
+        if body.answer not in ("yes", "no", "unsure"):
+            raise HTTPException(422, "answer must be yes, no or unsure")
+        label = onto.label(body.feature_id)
+        if label is None:
+            raise HTTPException(422, "Unknown feature")
+        entries = all_entries()
+        before = as_ranked_patterns(rank_diseases(onto, entries))
+        vault.put("qa", f"qa_{uuid.uuid4().hex[:10]}", {"feature_id": body.feature_id, "answer": body.answer, "at": now_iso()})
+        entry_id = None
+        if body.answer != "unsure":
+            q = (body.question or asked.get(body.feature_id) or template_question(label.lower(), body.lang)).strip()
+            text = f"Answer to a question: {q} {body.answer.capitalize()}"
+            eid = f"e_{uuid.uuid4().hex[:10]}"
+            ent = Entity(id=f"x_{uuid.uuid4().hex[:10]}", entry_id=eid, type="symptom", quote=q, canonical=label,
+                         hpo_id=body.feature_id, hpo_label=label, negated=body.answer == "no", status="confirmed",
+                         flags=["from_question"], model="next-question")
+            save(Entry(id=eid, created_at=now_iso(), occurred_on=date.today().isoformat(), text=text,
+                       extraction="done", entities=[ent]))
+            entry_id = eid
+        after = as_ranked_patterns(rank_diseases(onto, all_entries()))
+        return AnswerResult(before=before, after=after, entry_id=entry_id)
 
     @app.post("/api/demo")
     async def demo(body: DemoIn):

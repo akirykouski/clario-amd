@@ -64,6 +64,7 @@ class Pattern(BaseModel):
     missing: list[Term] = Field(default_factory=list, description="Typical features not recorded, top 5 by IC")
     rationale: str = Field(description="Hedged text, passed the hedge validator")
     rationale_source: Literal["model", "template"] = "template"
+    neutral_label: str = Field("", description="Evidence-first title without a disease name: the strongest matched features")
 
 
 class ShareRequest(BaseModel):
@@ -126,3 +127,27 @@ class Health(BaseModel):
     llm: dict
     locked: bool | None = None
     ontology: dict = Field(default_factory=dict)
+
+
+class NextQuestion(BaseModel):
+    """One yes/no question that would best separate the current patterns. Never names a condition or a medicine."""
+
+    feature_id: str = Field(description="HPO id the question asks about")
+    question: str
+    why: str = Field(description="Hedged, no condition names")
+    ig: float = Field(description="Expected information gain in bits over the current top patterns")
+    splits: list[str] = Field(default_factory=list, description="disease_ids of the two patterns the answer separates")
+    question_source: Literal["model", "template"] = "template"
+
+
+class RankedPattern(BaseModel):
+    disease_id: str
+    label: str = Field(description="neutral_label, never a condition name")
+    score: float
+    rank: int
+
+
+class AnswerResult(BaseModel):
+    before: list[RankedPattern]
+    after: list[RankedPattern]
+    entry_id: str | None = None

@@ -45,6 +45,10 @@ class OfflineLLM(LLM):
             feats = ", ".join(payload.get("overlapping_features", [])[:3]).lower()
             return json.dumps({"rationale": f"What you recorded ({feats}) resembles some typical features of "
                                             f"{payload.get('condition')}. It may be worth discussing with your doctor."}), _stats()
+        if task == "next_question":
+            lay = payload.get("plain_description", "")
+            return json.dumps({"question": f"Le capita di avere: {lay}?" if payload.get("lang") == "it"
+                               else f"Do you sometimes have: {lay}?"}), _stats(20)
         if task == "brief":
             return json.dumps(self._brief(payload)), _stats(300)
         return "{}", _stats()

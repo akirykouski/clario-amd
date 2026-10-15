@@ -77,3 +77,29 @@ def hedge_problems(text: str) -> list[str]:
 
 def is_hedged(text: str) -> bool:
     return not hedge_problems(text)
+
+
+# --------------------------------------------------------------------------- red-flag and untouchable terms
+# Terms that must never become a question: emergency symptoms (they get the red-flag notice, not a quiz),
+# and medicine or lab-only terms a patient cannot notice or should not answer about.
+_RED_FLAG_TERMS = re.compile(
+    r"chest pain|chest tightness|shortness of breath|dyspnea|difficulty breathing|respiratory (distress|failure|arrest)|"
+    r"apnea|cyanosis|hemoptysis|coughing (up )?blood|hematemesis|vomiting blood|blood in (the )?vomit|"
+    r"syncope|fainting|loss of consciousness|unconscious|seizure|convuls|status epilepticus|stroke|"
+    r"hemipar|hemipleg|paralysis|slurred|aphasia|sudden (loss|vision)|suicid|self[- ]?(harm|injur|mutilat)|"
+    r"hemorrhage|bleeding|anaphyla|throat (closing|swelling)|angioedema|coma\b|confusion|delirium|"
+    r"hallucinat|psychosis|cardiac arrest|heart attack|myocardial infarction|sepsis", re.I)
+_NOT_NOTICEABLE = re.compile(
+    r"serum|plasma|blood level|urine level|concentration|antibod|autoantibod|elevated|decreased circulating|"
+    r"increased circulating|laborator|biopsy|histolog|on (mri|ct|x-ray|imaging|examination|ultrasound|eeg)|"
+    r"radiograph|electromyogra|echocardiogra|ecg|electrocardiogra|karyotype|chromosom|genotype|mutation|"
+    r"medicat|drug|treatment|therapy|reaction to|sensitivity to|intoleran|toxicity|overdose|"
+    r"\b(mri|ct|eeg|emg)\b|enzyme|hormone level|\bgene\b|cell count|hemoglobin|creatinine|\blevels?\b", re.I)
+
+
+def is_red_flag_term(*names: str) -> bool:
+    return any(_RED_FLAG_TERMS.search(n) for n in names if n)
+
+
+def is_unnoticeable_term(*names: str) -> bool:
+    return any(_NOT_NOTICEABLE.search(n) for n in names if n)

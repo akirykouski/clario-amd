@@ -93,3 +93,13 @@ export const flagNote: Record<string, string> = {
   hpo_dropped: "Ontology code removed: it did not match your words.",
   quote_not_found: "We could not find these exact words in your note.",
 };
+
+/** How each id moved between two orderings: negative = moved up, positive = moved down. Ids missing from either are skipped. */
+export function reorderDelta(before: string[], after: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const id of after) {
+    const b = before.indexOf(id);
+    if (b >= 0) out[id] = after.indexOf(id) - b;
+  }
+  return out;
+}
