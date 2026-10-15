@@ -28,6 +28,7 @@ class Disease:
     id: str
     name: str
     phenotypes: dict[str, float] = field(default_factory=dict)
+    n_freq: int | None = None  # annotations backed by a real frequency (None: older knowledge files do not say)
 
 
 def fold(s: str) -> str:
@@ -77,8 +78,8 @@ class Ontology:
             self._ic[i] = ic
         self._diseases: dict[str, Disease] = {}
         self._direct: dict[str, list[tuple[Disease, float]]] = defaultdict(list)
-        for did, name, ph in raw["diseases"]:
-            d = Disease(did, name, {_hid(t): w for t, w in ph})
+        for did, name, ph, *rest in raw["diseases"]:
+            d = Disease(did, name, {_hid(t): w for t, w in ph}, rest[0] if rest else None)
             self._diseases[did] = d
             for t, w in d.phenotypes.items():
                 self._direct[t].append((d, w))

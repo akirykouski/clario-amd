@@ -20,10 +20,21 @@ def hid(iri: str) -> str | None:
     return f"HP:{m.group(1)}" if m else None
 
 
+DEFAULT_FREQ = 0.5  # annotation without any frequency: "occasional-like" prior, never certainty
+
+
 def freq_weight(f: str) -> float | None:
+    """P(feature | disease) from one phenotype.hpoa frequency cell, or None for an excluded feature.
+
+    Only an explicit "Obligate" term (HP:0040280) or "100%" means 1.0. A case-report ratio n/d is evidence about d
+    patients, so it is shrunk toward the 0.5 prior with a Laplace estimate (n+1)/(d+2): 1/1 -> 0.67, 4/4 -> 0.83,
+    20/20 -> 0.95, 0/3 -> 0.2. Before this, every 1/1 case report (about 20,000 annotations, e.g. 51 of 58 features of
+    OMIM:621369) was stored as 1.0 and read as "every patient has it", which inflated scores, the next-question
+    pick and the strength of a "no" answer. A blank cell is the DEFAULT_FREQ prior.
+    """
     f = f.strip()
     if not f:
-        return 0.5
+        return DEFAULT_FREQ
     if f == EXCLUDED:
         return None
     if f in FREQ:
@@ -31,11 +42,23 @@ def freq_weight(f: str) -> float | None:
     m = re.fullmatch(r"(\d+)\s*/\s*(\d+)", f)
     if m:
         n, d = int(m.group(1)), int(m.group(2))
-        return min(1.0, n / d) if d else 0.5
+        return (min(n, d) + 1) / (d + 2) if d else DEFAULT_FREQ
     m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*%", f)
     if m:
         return min(1.0, float(m.group(1)) / 100)
-    return 0.5
+    return DEFAULT_FREQ
+
+
+INFORMATIVE_MIN_D = 10  # a n/d ratio from fewer patients is a case report, not a frequency
+
+
+def freq_informative(f: str) -> bool:
+    """True when the cell really measures how often a feature occurs (a frequency term, a percentage, a cohort ratio)."""
+    f = f.strip()
+    if not f or f == EXCLUDED:
+        return False
+    m = re.fullmatch(r"(\d+)\s*/\s*(\d+)", f)
+    return int(m.group(2)) >= INFORMATIVE_MIN_D if m else True
 
 
 def load_hpo(path: str):
@@ -113,7 +136,9 @@ def main() -> None:
             w = freq_weight(r["frequency"])
             if w is None:
                 continue
-            e = dis.setdefault(d, {"id": d, "name": r["disease_name"], "p": {}})
+            e = dis.setdefault(d, {"id": d, "name": r["disease_name"], "p": {}, "fi": set()})
+            if freq_informative(r["frequency"]):
+                e["fi"].add(t)
             if w > e["p"].get(t, -1):
                 e["p"][t] = w
 
@@ -134,7 +159,8 @@ def main() -> None:
     out = {
         "terms": [[n(t), v["label"], v["syn"], [n(p) for p in parents[t]], round(ic[t], 3)]
                   for t, v in sorted(nodes.items())],
-        "diseases": [[e["id"], e["name"], [[n(t), round(w, 3)] for t, w in sorted(e["p"].items())]]
+        "diseases": [[e["id"], e["name"], [[n(t), round(w, 3)] for t, w in sorted(e["p"].items())],
+                     len(e["fi"])]  # 4th field: annotations with a real frequency behind the weight
                      for e in dis.values() if e["p"]],
     }
     with gzip.open(a.out, "wt", compresslevel=9) as f:
