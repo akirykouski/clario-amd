@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Check, ChevronDown, Pencil, X } from "lucide-react";
 import { api } from "../api";
 import type { ReviewItem } from "../types";
-import { notifyReview, splitQuotes } from "../lib";
+import { fmtNumText, notifyReview, splitQuotes } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { entityName, termLabel, useT } from "../i18n";
@@ -107,7 +107,7 @@ function ReviewCard({ item, onAct, grouped = false }: { item: ReviewItem; groupe
         </p>
       )}
       <p className={lab ? "font-bold" : "mt-3 font-bold"}>
-        {lab && name ? <>{name.main}: {qualText(item.value ?? "")}{name.printed && <span className="ml-2 text-sm font-normal text-muted">{name.printed}</span>}</> : termName}
+        {lab && name ? <>{name.main}: {fmtNumText(qualText(item.value ?? ""))}{name.printed && <span className="ml-2 text-sm font-normal text-muted">{name.printed}</span>}</> : termName}
       </p>
       <p className="text-sm text-muted">
         {lab

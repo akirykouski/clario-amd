@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Pencil, Printer, X } from "lucide-react";
 import { api } from "../api";
 import type { Brief, BriefItem, BriefSection, SharePackage } from "../types";
-import { canFinalize } from "../lib";
+import { canFinalize, fmtDate, fmtNum } from "../lib";
 import { ErrorBox, Spinner } from "../components/ui";
 import { tn, useT, type Key } from "../i18n";
 import { useRun } from "./useRun";
@@ -29,8 +29,8 @@ export function RunChips({ model, backend, tokensPerS, latencyMs }: { model?: st
   return (
     <div className="no-print flex flex-wrap gap-1.5" data-testid="run-chips">
       <span className="chip text-xs">{offline ? t("brief.chipDemo") : [backend, model].filter(Boolean).join(" · ")}</span>
-      {!offline && tokensPerS ? <span className="chip text-xs">{t("brief.chipRate", { n: tokensPerS.toFixed(1) })}</span> : null}
-      {!offline && latencyMs ? <span className="chip text-xs">{t("brief.chipLatency", { s: (latencyMs / 1000).toFixed(1) })}</span> : null}
+      {!offline && tokensPerS ? <span className="chip text-xs">{t("brief.chipRate", { n: fmtNum(tokensPerS, 1) })}</span> : null}
+      {!offline && latencyMs ? <span className="chip text-xs">{t("brief.chipLatency", { s: fmtNum(latencyMs / 1000, 1) })}</span> : null}
       {name && <span className="chip text-xs">{t("brief.chipGpu", { name })}{util}</span>}
     </div>
   );
@@ -90,11 +90,11 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
           <div className="card space-y-2">
             <Spinner label={state.progress < 0.1 ? t("brief.reading") : t("brief.drafting")} />
             <div className="h-1.5 bg-line rounded"><div className="h-1.5 rounded bg-accent transition-all" style={{ width: `${Math.round(state.progress * 100)}%` }} /></div>
-            <p className="text-sm text-muted">{state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.model")}{state.backend !== OFFLINE && state.tokensPerS ? ` · ${t("brief.tokens", { n: state.tokensPerS.toFixed(1) })}` : ""}</p>
+            <p className="text-sm text-muted">{state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.model")}{state.backend !== OFFLINE && state.tokensPerS ? ` · ${t("brief.tokens", { n: fmtNum(state.tokensPerS, 1) })}` : ""}</p>
           </div>
         )}
         {state.status === "error" && <ErrorBox error={state.error ?? t("brief.error")} retry={() => start(pkg.package_id, lang)} />}
-        {state.status === "done" && <p className="text-sm text-muted">{t("brief.draftedBy", { model: state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.clinicModel"), rate: state.backend !== OFFLINE && state.tokensPerS ? t("brief.draftedRate", { n: state.tokensPerS.toFixed(1) }) : "" })}</p>}
+        {state.status === "done" && <p className="text-sm text-muted">{t("brief.draftedBy", { model: state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.clinicModel"), rate: state.backend !== OFFLINE && state.tokensPerS ? t("brief.draftedRate", { n: fmtNum(state.tokensPerS, 1) }) : "" })}</p>}
       </div>
       {err && <ErrorBox error={err} />}
       <RunChips model={state.model ?? shown?.model} backend={state.backend ?? shown?.backend}
@@ -218,7 +218,7 @@ function PrintBrief({ pkg, brief }: { pkg: SharePackage; brief: Brief }) {
   return (
     <div className="print-only">
       <h1 style={{ fontSize: "20pt" }}>{t("brief.printTitle", { alias: pkg.patient_alias })}</h1>
-      <p>{t("brief.printTo", { a: pkg.period[0], b: pkg.period[1] })}</p>
+      <p>{t("brief.printTo", { a: fmtDate(pkg.period[0], { day: "numeric", month: "long", year: "numeric" }), b: fmtDate(pkg.period[1], { day: "numeric", month: "long", year: "numeric" }) })}</p>
       {SECTIONS.map((s) => {
         const items = kept.filter((i) => i.section === s);
         if (!items.length) return null;

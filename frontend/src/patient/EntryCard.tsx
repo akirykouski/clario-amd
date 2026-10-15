@@ -61,12 +61,12 @@ export function EntryCard({ initial, onChange }: { initial: Entry; onChange?: (e
         {entry.extraction === "done" && terms.length === 0 && <span className="text-sm text-muted">{t("entry.noTerms")}</span>}
         {terms.map((x) => x.review === "needs_review" ? (
           <Link key={x.id} to="/review" className="chip chip-review" title={t("entry.toReviewTitle")}>
-            {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{name(x)}
+            {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{name(x)}
             <span className="text-xs font-bold"> {t("entry.toReviewTag")}</span>
           </Link>
         ) : (
           <span key={x.id} className="chip" style={x.review === "confirmed" || x.review === "corrected" ? { borderColor: "var(--accent)" } : undefined}>
-            {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{name(x)}
+            {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{name(x)}
             {x.review === "auto" && <span className="text-muted text-xs"> {t("entry.toCheckTag")}</span>}
           </span>
         ))}

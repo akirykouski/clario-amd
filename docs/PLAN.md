@@ -1,4 +1,4 @@
-# Clario — plan (AMD Developer Hackathon ACT III, Track 2: Health and Wellbeing)
+# Clario plan (AMD Developer Hackathon ACT III, Track 2: Health and Wellbeing)
 
 ## One line
 A private symptom diary for people on a long diagnostic journey. It turns everyday notes into
@@ -9,7 +9,7 @@ clinical terms with evidence, and lets a clinic review the full picture on its o
 |---|---|
 | Improve one part of the patient journey | The months before diagnosis: capture, then a 15-minute visit that starts from the full picture |
 | No autonomous diagnosis or treatment advice | Pattern signals only ("resembles", "consider discussing"), checked by a hedge validator in code; red-flag and dosing questions are intercepted before any model call |
-| Sensitive data | Patient data encrypted at rest on the patient's device (Argon2id + AES-GCM). Sharing is per-visit, patient-selected, sealed to the clinic's public key, expiring. The clinic model runs on the clinic's own AMD server, never a third-party API |
+| Sensitive data | Patient data encrypted at rest on the patient's device (Argon2id + AES-GCM). Sharing is per-visit, patient-selected, sealed to the clinic's public key, expiring. The clinic model runs on the clinic's own AMD server and no third-party API is called |
 | Uncertainty | Signal levels (weak/moderate/strong) from a deterministic score, evidence counts, "what is missing", no percentages |
 | Human review | Patient confirms extracted terms; clinician accepts or rejects each AI-suggested item before the brief is final; nothing AI-written reaches the brief unreviewed |
 
@@ -31,7 +31,7 @@ Both talk to ONE OpenAI-compatible client: Ollama, vLLM on ROCm, Lemonade (Ryzen
 2. **Clinic server on AMD**: Gemma 4 31B on vLLM, MI300X. Drafts the clinician brief and re-checks patterns over shared data. Throughput and latency measured by `bench/`.
 3. **Any backend via one API**: the same app runs against Ollama on a laptop, Lemonade on a Ryzen AI PC, or vLLM on Instinct.
 
-## Deterministic guardrails (code, not prompt)
+## Deterministic guardrails (enforced in code)
 - Every extracted term must quote a verbatim span from the entry.
 - HPO IDs must exist in the shipped ontology; label/synonym must match the quoted span's meaning bucket, else the ID is dropped and the term flagged.
 - Pattern score = information-content-weighted overlap of the patient's confirmed HPO set with each disease's annotated phenotypes (HPO `phenotype.hpoa`). The patient sees a template note that names no condition; the LLM drafts hedged brief lines for the clinician only, citing entry ids.

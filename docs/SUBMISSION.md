@@ -29,7 +29,7 @@ The patient keeps a private diary on their own device, encrypted with a passphra
 
 Before a visit, the patient chooses a period and sends the clinic a package. Only confirmed terms and notes from that period leave the device, sealed to the clinic's public key, with an expiry. The clinic opens it on its own AMD Instinct MI300X server. Gemma 4 31B on vLLM drafts a one-page brief with citations back to the patient's entries. A clinician accepts, edits or rejects every AI-written line before the brief can be finalized.
 
-Safety is enforced in code. Emergency descriptions get an immediate notice. A validator rejects diagnostic or treatment wording. Patterns appear as weak, moderate or strong signals with evidence counts and what is missing, never as a diagnosis. Every model call is logged in a tamper-evident chain the patient can check.
+Safety is enforced in code. Emergency descriptions get an immediate notice. A validator rejects diagnostic or treatment wording. Patterns appear as weak, moderate or strong signals with evidence counts and what is missing, and they carry no diagnosis. Every model call is logged in a tamper-evident chain the patient can check.
 
 On AMD: the clinic model runs on vLLM with ROCm, the synthetic training data was generated on the MI300X, the extractor was fine-tuned with LoRA on ROCm, and GPU telemetry is shown live in the app. Clario organises information. Clinicians decide.
 ```

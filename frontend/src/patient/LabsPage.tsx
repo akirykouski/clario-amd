@@ -2,14 +2,14 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FileUp } from "lucide-react";
 import { api } from "../api";
-import { fmtDate, locale, notifyReview } from "../lib";
+import { fmtDate, fmtNum, notifyReview } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { isOfflineBackend, useHealth } from "../components/useHealth";
 import { t, useT } from "../i18n";
 import type { LabPatch, LabTest, LabValue } from "../types";
 
-const num = (n: number) => (Math.round(n * 1000) / 1000).toLocaleString(locale(), { useGrouping: false, maximumFractionDigits: 3 });
+const num = (n: number) => fmtNum(n);
 /** "Positivo 1:160" -> "pos", "Negativo" -> "neg": a qualitative result, never "High" or "Low". */
 export function qualKind(v: Pick<LabValue, "value_numeric" | "value_text">): "pos" | "neg" | null {
   if (v.value_numeric !== null || !v.value_text) return null;

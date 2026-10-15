@@ -84,7 +84,7 @@ def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         if rng:
             lo = "" if rng.ref_low is None else f"{rng.ref_low:g}"
             hi = "" if rng.ref_high is None else f"{rng.ref_high:g}"
-            rtxt = f"; {'intervallo stampato' if it else 'printed range'} {lo} {'a' if it else 'to'} {hi}".replace("  ", " ")
+            rtxt = f"; {'valori di riferimento da' if it else 'printed range'} {lo} {'a' if it else 'to'} {hi}".replace("  ", " ")
         mark = ""
         if any(not r.reviewed for r in rows):
             mark = f" ({'non verificato da una persona' if it else NOT_REVIEWED})"
@@ -141,7 +141,7 @@ TITLES = {
                         "labs": "Lab results", "medications": "Medicines", "patterns": "Worth discussing (not a diagnosis)",
                         "questions": "Questions"},
     ("patient", "it"): {"summary": "Riepilogo", "timeline": "Cosa è successo e quando", "symptoms": "Di cosa hai scritto",
-                        "labs": "Esami", "medications": "Farmaci", "patterns": "Da discutere col medico (non è una diagnosi)",
+                        "labs": "Esami", "medications": "Farmaci", "patterns": "Da discutere con il medico (non è una diagnosi)",
                         "questions": "Domande"},
 }
 FOOTER = {

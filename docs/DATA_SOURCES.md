@@ -1,12 +1,12 @@
 # Clario data sources: candidate datasets, licences, and plan
 
-Research date: 2026-10-14. Web research only. Nothing was downloaded and no model was run. Where a claim rests on a search snippet or a third-party mirror instead of the primary page, it is flagged. Anything not confirmed is marked UNVERIFIED. This is an engineering reading of licence text, not legal advice.
+Research date: 2026-10-14. Web research only. Nothing was downloaded and no model was run. Where a claim rests on a search snippet or a third-party mirror instead of the primary page, it is flagged. Anything not confirmed is marked UNVERIFIED. This is an engineering reading of licence text and is not legal advice.
 
 ## 1. Bottom line
 
 1. No public dataset gives lay-language text, span-level symptoms, negation, and HPO IDs together. Every real corpus needs a label bridge (UMLS or SNOMED to HPO) or a hand-made gold set.
 2. The only English lay-language corpora we can legally put in a public repo are PsyTAR (CC BY 4.0) and, with caveats, COMETA (code is MIT, data licence not stated). CADEC is the best-known lay corpus but its CSIRO Data Licence forbids redistribution and is non-commercial. Keep it out of the repo.
-3. Italian real data is thin. E3C is clinical case-report register, not lay. There is no Italian patient-forum symptom corpus that we could find. The Italian eval set has to be hand-made by the team.
+3. Italian real data is thin. E3C is clinical case-report register and is not lay. There is no Italian patient-forum symptom corpus that we could find. The Italian eval set has to be hand-made by the team.
 4. The Anthropic position on training a model on Claude outputs is amber to red (section 5). Safest path for the demo: generate synthetic training data with an open-weights model on the AMD cloud, and use Claude only for roles that do not create training targets.
 5. HPO files carry a custom licence with a no-alteration clause. Do not commit modified copies of hp.json. Download a pinned release at build time.
 
@@ -14,7 +14,7 @@ Research date: 2026-10-14. Web research only. Nothing was downloaded and no mode
 
 | Use | Rank 1 | Rank 2 | Rank 3 | Why |
 |---|---|---|---|---|
-| Best for TRAIN | Synthetic data from an open model, seeded with HPO labels and layperson synonyms plus CHV lay phrases | PsyTAR (CC BY 4.0) | SympTEMIST and E3C as register diversity (not lay) | Only synthetic data carries HPO IDs and our exact schema. PsyTAR is the one real lay corpus that is safe to redistribute. |
+| Best for TRAIN | Synthetic data from an open model, seeded with HPO labels and layperson synonyms plus CHV lay phrases | PsyTAR (CC BY 4.0) | SympTEMIST and E3C as register diversity (they are not lay) | Only synthetic data carries HPO IDs and our exact schema. PsyTAR is the one real lay corpus that is safe to redistribute. |
 | Best for EVAL | Hand-annotated Clario gold set (100 to 150 diary-style docs, EN and IT), with real lay text drawn from PsyTAR | PsyTAR held-out reviews (spans, patient-written, CC BY 4.0) | COMETA mentions (lay phrase to SNOMED, for term-normalization accuracy) | Real, non-synthetic, and publishable. CADEC is a stronger-known benchmark but can only be used privately. |
 | Best for ITALIAN | Hand-made Italian lay gold set (team plus an Italian-speaking annotator) | E3C Italian (clinical register, CC BY 4.0 per project snippets) | HPO Italian translation labels (UNVERIFIED coverage) and SympTEMIST multilingual Italian silver standard (UNVERIFIED licence and quality) | No native Italian lay symptom corpus found. |
 
@@ -71,7 +71,7 @@ Columns: size, genre, language, annotation, negation, licence as stated, access 
 - Size: varies by year and task. 2022 covered English and Spanish on Twitter, Reddit, WebMD. 2024 added Japanese, German, French. 2025 had six tasks (ADE and vaccine events, substance use, dementia caregiving, insomnia, foodborne outbreaks).
 - Genre: lay, social media. Multilingual, no Italian found.
 - Annotation: ADE span extraction and some normalization (task dependent). Negation: not a standard layer.
-- Licence: overview papers say data is available "upon request". No dataset licence found. The CC BY 4.0 on the NAIST record covers the paper, not the data (https://naist.repo.nii.ac.jp/records/2001050).
+- Licence: overview papers say data is available "upon request". No dataset licence found. The CC BY 4.0 on the NAIST record covers the paper and does not cover the data (https://naist.repo.nii.ac.jp/records/2001050).
 - (a) Unclear. (b) No: tweet text is also bound by platform terms.
 - Access: registration form and organizer approval, days to weeks (UNVERIFIED). Not usable this week.
 
@@ -81,7 +81,7 @@ Columns: size, genre, language, annotation, negation, licence as stated, access 
 - Genre: lay (tweets) plus scientific (PubMed). English.
 - Annotation: drugs, diseases, symptoms, relations, attributes. Normalization ontology and negation: UNVERIFIED.
 - Licence: the Cambridge record shows "Attribution 4.0 International" for the article. Dataset licence not found: UNVERIFIED. Other groups report only 663 tweets retrievable under Twitter's terms.
-- (a) Probably. (b) Only IDs for tweets, not text. Amber.
+- (a) Probably. (b) Only IDs for tweets, with no text. Amber.
 - Access: download location not confirmed, UNVERIFIED.
 
 **Micromed (Jimeno-Yepes et al., 2015)**
@@ -98,7 +98,7 @@ Columns: size, genre, language, annotation, negation, licence as stated, access 
 - Value: best source of real lay-phrase to concept pairs (for example slang for symptoms). Use for term-normalization eval and for seeding synthetic data prompts.
 
 **RHMD (Reddit health mention dataset)**
-- 10,015 labeled Reddit posts mentioning 15 diseases or symptoms, GitHub (https://researchers.mq.edu.au/en/publications/rhmd-a-real-world-dataset-for-health-mention-classification-on-re/). Post-level classification (personal, non-personal, figurative, hyperbolic), not spans. Licence UNVERIFIED. Useful only to filter real versus figurative mentions ("this headache of a meeting").
+- 10,015 labeled Reddit posts mentioning 15 diseases or symptoms, GitHub (https://researchers.mq.edu.au/en/publications/rhmd-a-real-world-dataset-for-health-mention-classification-on-re/). Post-level classification (personal, non-personal, figurative, hyperbolic), with no spans. Licence UNVERIFIED. Useful only to filter real versus figurative mentions ("this headache of a meeting").
 
 ### 4.2 Scientific and clinical text with ontology normalization
 
@@ -120,7 +120,7 @@ Columns: size, genre, language, annotation, negation, licence as stated, access 
 - URL: https://data.monarchinitiative.org/hpo/README.txt (hpo_corpus.tar.gz, 228 manually annotated OMIM-cited abstracts, stand-off "start::end HPO URI | text"). GSC+ extends it. Counts conflict across sources (1,933 annotations or 2,773 mentions, 497 unique HPO IDs). PhenoTagger repo ships corpora in data/corpus.zip (https://github.com/ncbi-nlp/PhenoTagger).
 - Genre: scientific abstracts. English. HPO IDs native. Negation: none found.
 - Licence: README only points to https://hpo.jax.org/app/license. See section 6. PhenoTagger repo is MIT, which does not obviously cover the corpus.
-- Access: open, same day. Native HPO labels make it the right sanity-check eval for ID accuracy, not for lay language.
+- Access: open, same day. Native HPO labels make it the right sanity-check eval for ID accuracy and a poor one for lay language.
 
 **ID-68**
 - Described as 68 real clinical notes (Anazi et al., 2017) used by PhenoBERT and AutoPCR (https://arxiv.org/pdf/2507.19315). I could not find a public download or licence: UNVERIFIED. Skip.
@@ -142,9 +142,9 @@ Columns: size, genre, language, annotation, negation, licence as stated, access 
 **E3C (European Clinical Case Corpus)**
 - URL: https://e3c.fbk.eu/, https://nlplab.fbk.eu/projects/e3c, https://live.european-language-grid.eu/catalogue/corpus/7618.
 - Languages: Italian, English, Spanish, French, Basque. Layers: manual entities, temporal info, and factuality (layer 1), semi-automatic entities (layer 2), unannotated (layer 3). Entities: pathologies, symptoms, procedures, body parts. Factuality covers negation, uncertainty, hedge per the project page.
-- Genre: clinical case reports, not lay.
+- Genre: clinical case reports, which are not lay.
 - Licence: a search snippet states "Creative Commons License Attribution 4.0 International (CC BY 4.0)". The project pages I opened do not state a licence, and the ELG page did not render: UNVERIFIED on primary source.
-- HuggingFace: NLP-FBK/e3c-sentences-IT-revised has 1,471 sentences (train 632, validation 101, test 738), one entity type CLINENTITY, no licence tag on the card (https://huggingface.co/datasets/NLP-FBK/e3c-sentences-IT-revised). Caution: the card describes this as the English layer 1 projected into Italian, so it is projected data, not native Italian annotation. DrBenchmark/E3C has about 27.7k rows across five languages (https://huggingface.co/datasets/DrBenchmark/E3C), integer NER tags, empty README, no licence.
+- HuggingFace: NLP-FBK/e3c-sentences-IT-revised has 1,471 sentences (train 632, validation 101, test 738), one entity type CLINENTITY, no licence tag on the card (https://huggingface.co/datasets/NLP-FBK/e3c-sentences-IT-revised). Caution: the card describes this as the English layer 1 projected into Italian, so it is projected data and is not native Italian annotation. DrBenchmark/E3C has about 27.7k rows across five languages (https://huggingface.co/datasets/DrBenchmark/E3C), integer NER tags, empty README, no licence.
 - Access: open, same day.
 
 **SympTEMIST (BSC, BioCreative VIII)**
@@ -186,7 +186,7 @@ Searches run on the HF API (symptom, HPO, medical ner, italian medical, cadec, e
 | biololab/hpo_spanish_synonims | Spanish HPO synonyms | Gated, none | Spanish only. |
 | junliang/symptom | Token classification | "Other", Chinese | Wrong language. |
 | pandalla/datatager_symptom_recognition_and_advice | Symptom recognition from consultation text | Apache-2.0 | Language and provenance UNVERIFIED. |
-| gretelai/symptom_to_diagnosis | Free-text symptom to diagnosis classification | Apache-2.0 | Classification, not spans. Likely synthetic. |
+| gretelai/symptom_to_diagnosis | Free-text symptom to diagnosis classification | Apache-2.0 | Classification only, no spans. Likely synthetic. |
 | mfaruqi/indonesian-medical-ner | Patient forum complaints | cc-by-nc-4.0 | Indonesian, non-commercial. |
 | bigbio/psytar | PsyTAR mirror | cc-by-4.0 | Use this one. |
 | NLP-FBK/e3c-sentences-IT-revised | Italian clinical entities | None shown | See E3C. |

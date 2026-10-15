@@ -38,7 +38,7 @@ describe("review queue", () => {
   it("collapses many identical-confidence lab items under one line and shows each value once", async () => {
     vi.spyOn(api, "review").mockResolvedValue({ items: [labItem(1), labItem(2), labItem(3), labItem(4)], count: 4 });
     render(<MemoryRouter><ReviewPage /></MemoryRouter>);
-    expect(await screen.findByText("4 lab values with the same reading quality")).toBeInTheDocument();
+    expect(await screen.findByText("4 lab values read with the same level of confidence")).toBeInTheDocument();
     expect(screen.getAllByTestId("review-group")).toHaveLength(1);
     await waitFor(() => expect(screen.getAllByText(/Sodium: 131/)).toHaveLength(1));
     expect(document.body.textContent).not.toMatch(/%/);

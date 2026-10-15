@@ -15,7 +15,7 @@ import { DemoMenu } from "../patient/DemoMenu";
 import PatternsPage from "../patient/PatternsPage";
 import ReviewPage from "../patient/ReviewPage";
 import { gpuLoad, gpuName } from "../patient/ImportPage";
-import { fmtDate } from "../lib";
+import { fmtDate, fmtNum } from "../lib";
 import type { PatientPattern, ReviewItem } from "../types";
 
 const mem = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); }, removeItem: (k: string) => { m.delete(k); }, clear: () => m.clear() }; };
@@ -64,6 +64,15 @@ describe("language state", () => {
     expect(tn("privacy.verified", 3)).toMatch(/3 chiamate/);
     expect(fmtDate("2026-03-04", { month: "long" })).toBe("marzo");
   });
+  it("elides Italian day numbers and uses the decimal comma", () => {
+    setLang("it");
+    expect(t("share.range", { a: "11 marzo", b: "8 aprile" })).toBe("dall'11 marzo all'8 aprile");
+    expect(t("share.range", { a: "12 marzo", b: "18 aprile" })).toBe("dal 12 marzo al 18 aprile");
+    expect(t("patterns.span.one", { a: "8 marzo" })).toBe("una volta, l'8 marzo");
+    expect(fmtNum(12.5, 1)).toBe("12,5");
+    setLang("en");
+    expect(fmtNum(12.5, 1)).toBe("12.5");
+  });
   it("names Italian terms plainly and falls back to the patient's own words", () => {
     setLang("it");
     expect(termLabel("HP:0012378", "Fatigue")).toBe("Stanchezza");
@@ -98,12 +107,13 @@ describe("Italian screens", () => {
       feature_id: "HP:0002017", question: "Ti capita di avere nausea e vomito?", why: "La tua risposta potrebbe aiutare il medico.",
       ig: 0.3, splits: [], question_source: "template" });
     render(<MemoryRouter><PatternsPage /></MemoryRouter>);
-    expect(await screen.findByRole("heading", { name: "Schemi da discutere col medico" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Schemi da discutere con il medico" })).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith("it");
     expect(await screen.findByText("Una domanda che potrebbe aiutare il medico")).toBeInTheDocument();
     expect(nq).toHaveBeenCalledWith("it");
     expect(screen.queryByText("Mostra a cosa somiglia questo schema")).toBeNull();
-    expect(screen.getByText("Questa non è una diagnosi.")).toBeInTheDocument();
+    expect(screen.queryByText("Questa non è una diagnosi.")).toBeNull();
+    expect(screen.getByText(/Non sono una diagnosi/)).toBeInTheDocument();
     expect(screen.getByText("Segnale moderato")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sì" })).toBeInTheDocument();
     expect(screen.getByText(/2 volte, dal 1 mar al 5 mar/)).toBeInTheDocument();
@@ -123,7 +133,7 @@ describe("Italian screens", () => {
     render(<MemoryRouter><ReviewPage /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Da rivedere" })).toBeInTheDocument();
     expect(screen.getByText("Colesterolo totale: 264 mg/dL")).toBeInTheDocument();
-    expect(screen.getByText(/intervallo stampato da 0 a 200 · Alto · Pagina 1/)).toBeInTheDocument();
+    expect(screen.getByText(/valori di riferimento da 0 a 200 · Alto · Pagina 1/)).toBeInTheDocument();
     expect(screen.getByText("Assente: Febbre")).toBeInTheDocument();
     expect(screen.getAllByText("Lettura incerta")).toHaveLength(2);
     const buttons = screen.getAllByRole("button", { name: /Conferma/ });

@@ -65,7 +65,7 @@ function EntityRow({ e, onPatch }: { e: Entity; onPatch: (b: Parameters<typeof a
   return (
     <li className="card" style={e.review === "rejected" ? { opacity: 0.6 } : undefined}>
       <p className="text-sm text-muted">{t("entryPage.youWrote")} <mark className="quote text-ink">{e.quote}</mark></p>
-      <p className="mt-1 font-bold">{e.negated && t("term.absent")}{e.family_history && t("term.relative")}{entityName(e)}</p>
+      <p className="mt-1 font-bold">{e.negated && t("term.absent")}{e.family_history && t("term.relative")}{e.type === "trigger" && t("term.contextChip")}{entityName(e)}</p>
       {e.review === "needs_review" && (
         <p className="text-sm mt-1 rounded-lg border px-2 py-1 chip-review">
           {t("entryPage.unsure")}<Link className="underline" to="/review">{t("entryPage.openReview")}</Link>

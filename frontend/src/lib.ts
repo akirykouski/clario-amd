@@ -84,6 +84,17 @@ export function splitQuotes(text: string, quotes: string[]): Seg[] {
 export function locale(): string {
   return getLang() === "it" ? "it-IT" : "en-GB";
 }
+/** A number in the UI language: decimal comma in Italian. `digits` fixes the fraction digits; without it up to 3 are kept. */
+export function fmtNum(n: number, digits?: number): string {
+  const o: Intl.NumberFormatOptions = digits === undefined
+    ? { useGrouping: false, maximumFractionDigits: 3 }
+    : { useGrouping: false, minimumFractionDigits: digits, maximumFractionDigits: digits };
+  return new Intl.NumberFormat(locale(), o).format(n);
+}
+/** A plain decimal string from the server ("5.4") shown in the UI language ("5,4"); any other text is returned as is. */
+export function fmtNumText(s: string): string {
+  return /^\s*-?\d+(\.\d+)?\s*$/.test(s) ? fmtNum(Number(s)) : s;
+}
 export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }): string {
   const d = new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
   return isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat(locale(), opts).format(d);

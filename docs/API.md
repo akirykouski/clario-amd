@@ -67,7 +67,7 @@ Extraction env (patient mode): `CLARIO_SC_N` (self-consistency samples, default 
 | GET | `/api/bench` | | latest `bench/results/*.json` |
 
 ## Privacy (both modes)
-Text is pseudonymized (`backend/clario/privacy.py`) before a model call when `CLARIO_PSEUDONYMIZE=1`, or by default in patient mode when `LLM_BASE_URL` is not localhost. Email, phone, codice fiscale, IBAN, absolute dates, street addresses and first names become `[EMAIL]` `[PHONE]` `[CODICE_FISCALE]` `[IBAN]` `[DATE]` `[ADDRESS]` `[NAME]`. Medical terms, doses, lab values and scores are untouched. Quotes returned by the model are mapped back to the original text (the map lives in memory for the call). Every call is logged on every backend, redacted or not: patient mode in the vault (kind `ai_call`), clinic mode in `ai_calls.jsonl` in the clinic data dir.
+Text is pseudonymized (`backend/clario/privacy.py`) before a model call when `CLARIO_PSEUDONYMIZE=1`, or by default in patient mode when `LLM_BASE_URL` is not localhost. Email, phone, codice fiscale, IBAN, absolute dates, street addresses and full names (a listed first name or a title, plus up to two capitalised words) become `[EMAIL]` `[PHONE]` `[CODICE_FISCALE]` `[IBAN]` `[DATE]` `[ADDRESS]` `[NAME]`. Medical terms, doses, lab values and scores are untouched. A surname written alone is not caught, and scanned page images are not redacted. Quotes returned by the model are mapped back to the original text (the map lives in memory for the call). Every call is logged on every backend, redacted or not: patient mode in the vault (kind `ai_call`), clinic mode in `ai_calls.jsonl` in the clinic data dir.
 
 | Method | Path | Returns |
 |---|---|---|
@@ -75,7 +75,7 @@ Text is pseudonymized (`backend/clario/privacy.py`) before a model call when `CL
 | GET | `/api/privacy/verify` | `PrivacyVerify` = `{ok, broken_at: id \| null, count}`. Recomputes the chain; any edited, removed or reordered record gives `ok=false` and the first bad id |
 | GET | `/api/privacy/preview` | patient only. `?entry_id=` returns `PrivacyPreview` = `{original, redacted, replacements: [{type, start, end, out_start, out_end}], applied, backend}` |
 
-`/api/health` `llm.pseudonymize` reports whether redaction is active. The log stores a 200 char redacted preview and the sha256 of the exact payload sent, never the raw text. Deleting the newest records (tail truncation) is not detectable by the chain alone.
+`/api/health` `llm.pseudonymize` reports whether redaction is active. The log stores a 200 char redacted preview and the sha256 of the exact payload sent; the raw text is not stored. Deleting the newest records (tail truncation) is not detectable by the chain alone.
 
 ## Safety interceptor, wording and storage
 - Red-flag text and dosing or medicine-change questions (EN and IT: "can I take more ibuprofen", "should I stop my pills", "posso aumentare la dose", "smetto di prendere ...?", and any such question about medicines in pregnancy or breastfeeding) are matched in `safety.check_entry` before any model call. Emergencies return `level=emergency`. Dosing questions return `level=advice`, point to the clinician or pharmacist, and the entry skips extraction. A note that merely mentions a medicine is not blocked.

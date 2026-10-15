@@ -36,7 +36,17 @@ const subscribe = (f: () => void) => { listeners.add(f); return () => { listener
 export function useLang(): Lang { return useSyncExternalStore(subscribe, getLang, getLang); }
 
 type Params = Record<string, string | number>;
-const fill = (s: string, p?: Params) => (p ? s.replace(/\{(\w+)\}/g, (_, k: string) => String(p[k] ?? `{${k}}`)) : s);
+/** Italian elision before the day numbers 8 and 11: "dal 11" -> "dall'11", "il 8" -> "l'8", "al 8" -> "all'8", "del 11" -> "dell'11". */
+export function elideIt(s: string): string {
+  return s.replace(/\b(dal|al|del|il) (8|11)(?!\d)/gi, (_, w: string, d: string) => {
+    const base = { dal: "dall'", al: "all'", del: "dell'", il: "l'" }[w.toLowerCase() as "dal"];
+    return (w[0] === w[0].toUpperCase() ? base[0].toUpperCase() + base.slice(1) : base) + d;
+  });
+}
+const fill = (s: string, p?: Params) => {
+  const out = p ? s.replace(/\{(\w+)\}/g, (_, k: string) => String(p[k] ?? `{${k}}`)) : s;
+  return current === "it" ? elideIt(out) : out;
+};
 
 /** Translate a key in the current language. Works outside components; use useT() inside them so they re-render. */
 export function t(key: Key, params?: Params): string { return fill(dict[current][key] ?? en[key], params); }
@@ -51,7 +61,9 @@ export function useT() {
 }
 
 /** Plain Italian name for an HPO term in Italian; otherwise the label as given. */
+const LAY_EN: Record<string, string> = { "HP:0001025": "Hives" };
 export function termLabel(hpoId: string | null | undefined, fallback: string): string {
+  if (current === "en" && hpoId && LAY_EN[hpoId]) return LAY_EN[hpoId];
   return current === "it" && hpoId && hpoIt[hpoId] ? hpoIt[hpoId] : fallback;
 }
 

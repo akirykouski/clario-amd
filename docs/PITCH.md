@@ -17,7 +17,7 @@ Speaking pace about 140 words per minute. Total about 400 words.
 | 2:35 to 2:50 | 9 | "The buyer is the clinic. It receives a structured, patient-approved dossier instead of a pile of paper. How many minutes that saves per visit is what our first pilot measures." | Business slide |
 | 2:50 to 3:00 | 10 | "We are looking for two Italian rare disease centres for a pilot. Clario organises. Clinicians decide." | Ask slide |
 
-If the live demo fails, play the recorded video from the same timestamps. Keep the demo on the AMD URL, never on localhost, so the compute claim is real.
+If the live demo fails, play the recorded video from the same timestamps. Keep the demo on the AMD URL (localhost would undercut the compute claim), so the compute claim is real.
 
 ## Slide outline (10 slides)
 
@@ -29,7 +29,7 @@ If the live demo fails, play the recorded video from the same timestamps. Keep t
 | 4 | Product walk | Four screenshots: Today, Review queue, Share, Clinic brief | `frontend/src/patient/*`, `frontend/src/clinic/*` |
 | 5 | Safety by design | The five Track 2 items, one mechanism each, one file each | README "How we handle safety" |
 | 6 | AMD workload | Diagram patient device and MI300X. Table: brief on 31B, extraction on E4B, vision lab import, data generation, LoRA training, benchmark. Live GPU chip | README "Runs on AMD", `{{bench.brief.c32.out_tok_per_s}}` |
-| 7 | Model and data | Why no public set fits, labels by construction, disease-disjoint split, Claude used for eval only, never for training | `docs/DATA_SOURCES.md`, `train/README.md` |
+| 7 | Model and data | Why no public set fits, labels by construction, disease-disjoint split, Claude used for eval only and never trained on | `docs/DATA_SOURCES.md`, `train/README.md` |
 | 8 | Results | Table: base vs LoRA on entity F1, HPO-ID accuracy, grounding, JSON validity, review-queue share. Throughput on MI300X | `eval/results/extraction_*.json`, `bench/results/*.json` |
 | 9 | Business model | See below | hypotheses, labelled |
 | 10 | Ask | Two pilot centres, intros to Italian rare disease networks, AMD cloud credits for the pilot period | n/a |
@@ -56,8 +56,8 @@ If the live demo fails, play the recorded video from the same timestamps. Keep t
 
 | # | Question | Answer |
 |---|---|---|
-| 1 | Is this a medical device? | Our position: no. Clario is a patient organiser and a note summariser. It does not give a diagnosis, a risk score or treatment advice, and code enforces that (hedge validator, condition names are clinician-only so a patient never sees one on any screen or in any API response, no percentages). A regulatory assessment with a qualified advisor comes before any clinical deployment. Detail in `docs/COMPLIANCE.md`. This is our position, not legal advice |
-| 2 | Why not just use GPT or Claude? | Three reasons. Health text is Article 9 data, so the clinic model runs on the clinic's own server and the patient side redacts identifiers before any remote call. Second, the extractor is a small model (E4B) with a laptop export path (`train/export.py`, not yet measured on a laptop). Third, the guardrails are in code (quotes, ontology, citations), so the base model matters less than the checks around it. We use Claude only to draft gold labels for human review and as an eval comparison, never for training |
+| 1 | Is this a medical device? | Our position: no. Clario is a patient organiser and a note summariser. It does not give a diagnosis, a risk score or treatment advice, and code enforces that (hedge validator, Clario never shows a patient a condition name it inferred, and no percentages). A regulatory assessment with a qualified advisor comes before any clinical deployment. Detail in `docs/COMPLIANCE.md`. This is our position and it is not legal advice |
+| 2 | Why not just use GPT or Claude? | Three reasons. Health text is Article 9 data, so the clinic model runs on the clinic's own server and the patient side redacts identifiers before any remote call. Second, the extractor is a small model (E4B) with a laptop export path (`train/export.py`; laptop speed is not yet measured). Third, the guardrails are in code (quotes, ontology, citations), so the base model matters less than the checks around it. We use Claude only to draft gold labels for human review and as an eval comparison, and we do not train on its output |
 | 3 | Where does the data go? | The diary stays in an encrypted vault on the patient's device. A share sends only confirmed terms and entries from a chosen period, sealed to the clinic's key, expiring. The clinic stores the opened package on its own server. The privacy page lists every model call and its hash chain. On the public demo everything is synthetic |
 | 4 | How do you know the model is right? | We check it. Each term must quote the patient's words, each ontology id must match those words, and uncertain ones go to the patient. On the numbers: `{{extraction.ft-e4b-r16.entity_f1}}` entity F1 and `{{extraction.ft-e4b-r16.quote_grounding_rate}}` grounding on the held-out set, from `eval/results`. Known limit: part of the eval data is synthetic, so we also report a hand-reviewed gold set |
 | 5 | Your training data is synthetic. Does it transfer? | Unproven, and we say so. Labels come from the ontology by construction, with disease-disjoint splits. We test on a hand-reviewed gold set and on PsyTAR mapped to HPO. The gap between the synthetic and the real rows in `eval/RESULTS.md` is the honest answer |

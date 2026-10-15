@@ -39,7 +39,7 @@ describe("patterns page", () => {
     expect(await screen.findByRole("heading", { name: "Patterns to discuss with your clinician" })).toBeInTheDocument();
     const titles = () => screen.getAllByTestId("pattern-card").map((c) => c.querySelector("h2")?.textContent);
     expect(titles()).toEqual(["Fatigue, rash", "Joint pain, stiffness"]);
-    expect(screen.getAllByText("This is not a diagnosis.")).toHaveLength(2);
+    expect(screen.getAllByText(/not a diagnosis/i)).toHaveLength(1);
     expect(screen.queryByText("Show what this pattern resembles")).toBeNull();
     expect(screen.getAllByText(/^Unusual tiredness/)[0].textContent).toBe("Unusual tiredness (Fatigue)");
     expect(screen.getAllByText(/2 times, 1 Mar to 5 Mar/).length).toBeGreaterThan(0);

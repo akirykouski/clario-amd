@@ -162,13 +162,11 @@ export default function PatternsPage() {
             )}
             <div className="border-t border-line pt-2 space-y-1">
               <p>{p.rationale}</p>
-              <p className="text-sm text-muted">{t("patterns.notDx")}</p>
             </div>
           </article>
         ))}
       </div>
       {data.confirmed_terms >= 3 && data.patterns.length === 0 && <Empty title={t("patterns.noneTitle")}>{t("patterns.noneText")}</Empty>}
-      {data.note && <p className="text-sm text-muted">{data.note}</p>}
     </div>
   );
 }

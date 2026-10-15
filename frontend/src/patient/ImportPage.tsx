@@ -6,7 +6,7 @@ import { ErrorBox } from "../components/ui";
 import { useEventStream } from "../components/useEventStream";
 import { isOfflineBackend, useHealth } from "../components/useHealth";
 import { useT } from "../i18n";
-import { notifyReview } from "../lib";
+import { fmtNum, notifyReview } from "../lib";
 import type { BatchEvent, BatchStarted } from "../types";
 
 /** GPU load in percent from the reading `GET /api/system/gpu` puts on the progress stream (`util_pct`). */
@@ -101,7 +101,7 @@ export default function ImportPage() {
           )}
           {showSpeed ? (
             <>
-              <p className="font-display leading-none text-7xl tabular-nums" data-testid="pps">{ev.pages_per_sec.toFixed(1)}</p>
+              <p className="font-display leading-none text-7xl tabular-nums" data-testid="pps">{fmtNum(ev.pages_per_sec, 1)}</p>
               <p className="text-muted font-bold">{t("import.pps")}</p>
             </>
           ) : (
