@@ -36,7 +36,7 @@ from .llm import extract_json, make_llm
 from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage, Term
 from .next_question import as_ranked_patterns, next_question, rank_diseases, template_question
 from .patterns import counts_as_evidence, evidence_from, explain, negated_ids, score_patterns
-from .review import ACTIONS, EntityReview, correction_record
+from .review import ACTIONS, EntityReview, correction_record, register_review_kind
 from .safety import check_entry
 from .vault import BadPassphrase, Locked, Vault
 
@@ -121,7 +121,7 @@ class Runs:
                 return
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
     s = settings or Settings.from_env()
     onto = Ontology.load()
     vault = Vault(s.data_dir, s.auto_lock_minutes) if s.mode == "patient" else None
@@ -151,15 +151,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/system/gpu")
     async def system_gpu():
         """GPU summary {gpu_name, util_pct, vram_used_gb, vram_total_gb}, or null when there is no telemetry."""
-        if s.gpu_metrics_url:
-            try:
-                async with httpx.AsyncClient(timeout=4) as c:
-                    r = await c.get(s.gpu_metrics_url)
-                    r.raise_for_status()
-                    return JSONResponse(r.json())
-            except (httpx.HTTPError, ValueError):
-                return JSONResponse(None)
-        return JSONResponse(await asyncio.to_thread(gpumetrics.read_cached))
+        return JSONResponse(await gpumetrics.read_gpu(s))
 
     @app.get("/api/runs/{rid}/events")
     async def run_events(rid: str):
@@ -172,7 +164,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse({"detail": "Diary is locked"}, status_code=423)
 
     if s.mode == "patient":
-        _patient_routes(app, s, vault, onto, llm, spawn)
+        _patient_routes(app, s, vault, onto, llm, spawn, gpu_reader)
         privacy.routes(app, s, call_log, lambda eid: Entry.model_validate(vault.get(eid)) if vault.get(eid) else None)
     else:
         privacy.routes(app, s, call_log)
@@ -201,7 +193,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 # ====================================================================== patient
-def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm, spawn) -> None:
+def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm, spawn, gpu_reader=None) -> None:
     pattern_cache: dict[str, Any] = {}
     opts = ExtractOpts.from_settings(s)
 
@@ -332,9 +324,9 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
                 return e.entities[i]
         raise HTTPException(404, "entity not found")
 
-    # ---- human review queue; other modules add kinds via app.state.review_kinds[kind] = handler
+    # ---- human review queue; other modules add kinds with review.register_review_kind
     app.state.vault = vault
-    app.state.review_kinds = {"entity": EntityReview(all_entries, save, onto)}
+    register_review_kind(app, "entity", EntityReview(all_entries, save, onto))
 
     @app.get("/api/review")
     def review_queue():
@@ -397,7 +389,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         note = PATTERNS_NOTE[lang][0 if pats else 1]
         return {"patterns": pats, "confirmed_terms": len(ev), "note": note}
 
-    doc_routes.register(app, s, vault, llm, spawn)
+    doc_routes.register(app, s, vault, llm, spawn, gpu_reader)
     asked: dict[str, str] = {}  # feature_id -> question text last shown (so the diary entry quotes what was asked)
 
     def unsure_ids() -> set[str]:

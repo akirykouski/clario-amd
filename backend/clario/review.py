@@ -1,12 +1,8 @@
 """Human review queue: anything the system is unsure about goes to a person before it counts.
 
-`kind` names what is being reviewed. Each kind is a small handler registered in `app.state.review_kinds`
-(patient mode), so another module (for example lab values) can add a kind without touching the routes:
-
-    class ReviewKind(Protocol):
-        def items(self) -> list[dict]: ...                      # queue rows, shape of `item()` below
-        def apply(self, item_id, action, value) -> dict: ...    # raises LookupError (404) / ValueError (422);
-                                                                # returns {"before", "after", "entry_id"?, "source_excerpt"?}
+`kind` names what is being reviewed. Each kind is a small handler (see `ReviewKind`) added with
+`register_review_kind(app, name, handler)` (patient mode), so another module (for example lab values) can add a kind
+without touching the routes.
 
 Every decision is also written to the vault as a `correction_log` record (before/after), kept for later fine-tuning.
 """
@@ -16,6 +12,8 @@ from __future__ import annotations
 import re
 import uuid
 from typing import Callable, Protocol
+
+from fastapi import FastAPI
 
 from . import documents as docs
 from .knowledge import Ontology
@@ -61,8 +59,18 @@ def apply_entity_action(ent: Entity, action: str, value: str | None, onto: Ontol
 
 
 class ReviewKind(Protocol):
-    def items(self) -> list[dict]: ...
-    def apply(self, item_id: str, action: str, value: str | None) -> dict: ...
+    def items(self) -> list[dict]:
+        """Queue rows, shaped like `entity_item` / `lab_item`."""
+
+    def apply(self, item_id: str, action: str, value: str | None) -> dict:
+        """Raises LookupError (404) or ValueError (422); returns {"before", "after", "entry_id"?, "source_excerpt"?}."""
+
+
+def register_review_kind(app: FastAPI, name: str, handler: ReviewKind) -> None:
+    """Add a review kind to the queue behind GET /api/review and POST /api/review/{kind}/{id}."""
+    if not hasattr(app.state, "review_kinds"):
+        app.state.review_kinds = {}
+    app.state.review_kinds[name] = handler
 
 
 class EntityReview:
@@ -113,7 +121,7 @@ def _lab_snap(x: LabResult) -> dict:
             "date": x.date, "page": x.page}
 
 
-class LabReview:
+class LabReviewKind:
     """Rows read from scanned lab reports. Same confirm / correct / reject as entities, same log, same badge."""
 
     def __init__(self, all_labs: Callable[[], list[LabResult]], save: Callable[[LabResult], None]):

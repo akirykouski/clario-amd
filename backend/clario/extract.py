@@ -252,7 +252,8 @@ async def pick_hpo(llm: LLM, onto: Ontology, quote: str, canonical: str, propose
     msgs = [{"role": "system", "content": PICK_SYSTEM},
             {"role": "user", "content": json.dumps({"quote": quote, "canonical": canonical,
                                                     "candidates": payload["candidates"]}, ensure_ascii=False)}]
-    texts, st = await llm.samples("hpo_pick", msgs, 1, temperature=0.0, schema=pick_schema(ids), payload=payload)
+    texts, st = await llm.samples("hpo_pick", msgs, 1, temperature=0.0, schema=pick_schema(ids), payload=payload,
+                                  purpose="extract")  # the pick is part of extraction
     try:
         got = str(extract_json(texts[0]).get("hpo_id", "")).strip().upper()
     except (ValueError, AttributeError):

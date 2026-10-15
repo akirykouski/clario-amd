@@ -91,8 +91,10 @@ class LLM:
         yield "", st
 
     async def samples(self, task: str, messages: list[dict], n: int, *, temperature: float = 0.7,
-                      schema: dict | None = None, payload: dict | None = None) -> tuple[list[str], Stats]:
-        """n independent JSON completions of the same prompt (self-consistency). Base: n sequential calls."""
+                      schema: dict | None = None, payload: dict | None = None,
+                      purpose: str | None = None) -> tuple[list[str], Stats]:
+        """n independent JSON completions of the same prompt (self-consistency). Base: n sequential calls.
+        `purpose` labels the call in the privacy log (PrivacyLLM); a plain client ignores it."""
         outs: list[str] = []
         total: Stats | None = None
         for _ in range(max(1, n)):
@@ -117,8 +119,8 @@ class LLM:
 
 
 class OpenAICompat(LLM):
-    def __init__(self, s: Settings):
-        super().__init__(s.llm_concurrency)
+    def __init__(self, s: Settings, concurrency: int | None = None):
+        super().__init__(concurrency or s.llm_concurrency)
         from openai import AsyncOpenAI
 
         self.client = AsyncOpenAI(base_url=s.llm_base_url, api_key=s.llm_api_key, timeout=300, max_retries=1)
@@ -200,7 +202,7 @@ class OpenAICompat(LLM):
                     raise
         raise LLMError(f"{self.backend}: server refused every JSON mode")
 
-    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None):
+    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None, purpose=None):
         import openai
 
         n = max(1, n)
@@ -250,12 +252,14 @@ class OpenAICompat(LLM):
 
 def make_llm(s: Settings, call_log=None) -> LLM:
     """The configured client. With a `call_log`, wrapped so every call is logged (and redacted when remote)."""
+    # one pool wide enough for document batches (CLARIO_DOC_CONCURRENCY), else the client would starve vLLM batching
+    concurrency = max(s.llm_concurrency, s.doc_workers)
     if s.offline:
         from .fixtures import OfflineLLM
 
-        inner: LLM = OfflineLLM(s.llm_concurrency)
+        inner: LLM = OfflineLLM(concurrency)
     else:
-        inner = OpenAICompat(s)
+        inner = OpenAICompat(s, concurrency)
     if call_log is None:
         return inner
     from .privacy import wrap

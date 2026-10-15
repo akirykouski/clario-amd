@@ -279,3 +279,18 @@ def test_clinic_keeps_its_own_log(tmp_path):
         assert [c["purpose"] for c in calls] == ["brief"] and calls[0]["redacted"] is False
         assert clinic.get("/api/privacy/verify").json()["ok"] is True
     assert (tmp_path / "clinic" / "ai_calls.jsonl").exists()
+
+
+def test_wrapper_forwards_attributes_but_never_methods(tmp_path):
+    class Inner(LLM):
+        backend, model = "fake", "fake-1"
+
+        async def future_method(self, *a, **k):  # a model call a later LLM version might add
+            return "unredacted", None
+
+    llm = privacy.PrivacyLLM(Inner(), privacy.CallLog(privacy.FileStore(tmp_path / "log.jsonl")), True)
+    assert (llm.backend, llm.model, llm.is_amd) == ("fake", "fake-1", False)  # plain attributes pass through
+    assert hasattr(llm, "samples") and hasattr(llm, "complete")  # the logged surface is defined on the wrapper
+    assert not hasattr(llm, "future_method")  # an unknown method cannot silently skip redaction and the log
+    with pytest.raises(AttributeError):
+        llm.future_method()

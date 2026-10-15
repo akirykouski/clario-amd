@@ -347,7 +347,12 @@ class PrivacyLLM:
         self._inner, self.log, self.pseudonymize = inner, log, pseudonymize
 
     def __getattr__(self, name: str):
-        return getattr(self._inner, name)
+        """Plain attributes of the inner client (backend, model, is_amd) pass through. A method never does: every
+        way to call the model is defined below, so a method added to LLM later cannot skip redaction and the log."""
+        value = getattr(self._inner, name)
+        if callable(value):
+            raise AttributeError(f"{type(self).__name__} does not forward {name}(); define it so the call is redacted and logged")
+        return value
 
     # -- internals
     def _prepare(self, task: str, messages: list[dict], payload: dict | None, purpose: str | None):
@@ -383,7 +388,6 @@ class PrivacyLLM:
     def _log(self, task: str, sent: list[dict], preview: str, purpose: str | None, red: Redaction) -> None:
         images = sum(1 for m in sent if isinstance(m.get("content"), list)
                      for p in m["content"] if isinstance(p, dict) and p.get("type") != "text")
-        task = "extract" if task == "hpo_pick" else task  # the HPO pick is part of extraction
         p = purpose or (task if task in PURPOSES else "other")
         self.log.append(backend=self._inner.backend, model=self._inner.model, purpose=p, preview=preview,
                         sent_text=json.dumps(sent, ensure_ascii=False, sort_keys=True), redacted=self.pseudonymize,

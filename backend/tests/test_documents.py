@@ -191,15 +191,11 @@ def test_batch_upload_sse_and_labs(unlocked, folder):
         assert t["out_of_range"] == (t["latest"]["flag"] in ("low", "high"))
 
 
-def test_gpu_is_read_from_system_route_when_it_exists(tmp_path, folder):
-    app = create_app(settings(tmp_path))
-    app.router.routes[:] = [r for r in app.router.routes if getattr(r, "path", "") != "/api/system/gpu"]  # swap in a stub
-
-    @app.get("/api/system/gpu")
-    def gpu():
+def test_progress_stream_carries_the_gpu_reading(tmp_path, folder):
+    async def gpu_reader(_settings):
         return {"name": "AMD Instinct MI300X", "util": 61}
 
-    with TestClient(app) as c:
+    with TestClient(create_app(settings(tmp_path), gpu_reader=gpu_reader)) as c:
         c.post("/api/vault/setup", json={"passphrase": PASS})
         bid = upload(c, sorted(folder.glob("*.pdf"))[:1]).json()["batch_id"]
         assert events(c, bid)[-1]["gpu"] == {"name": "AMD Instinct MI300X", "util": 61}

@@ -27,7 +27,7 @@ class FakeLLM(LLM):
         self.pick_schemas: list[dict] = []
         self.calls: list[tuple[str, int]] = []
 
-    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None):
+    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None, purpose=None):
         self.calls.append((task, n))
         st = Stats("fake", "fake-1", 1.0, 10, None)
         if task == "hpo_pick":
