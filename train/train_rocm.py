@@ -22,6 +22,8 @@ def main():
     ap.add_argument("--attn", default="sdpa", help="sdpa (default, safe on ROCm) | eager | flash_attention_2 if installed")
     ap.add_argument("--merge", action="store_true", help="also save merged bf16 weights for vLLM")
     ap.add_argument("--seed", type=int, default=13)
+    ap.add_argument("--results-dir", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "eval", "results"),
+                    help="provenance copy train_<label>.json goes here ('' to skip)")
     ap.add_argument("--skip-data-check", action="store_true", help="do not verify the files are extraction_v3 chat files")
     a = ap.parse_args()
 
@@ -97,7 +99,14 @@ def main():
         "peak_mem_gb": torch.cuda.max_memory_allocated() / 2**30,
         "log_history": trainer.state.log_history,
     }
+    metrics.update({"n": len(ds), "dataset": a.data, "backend": f"rocm-hip-{getattr(torch.version, 'hip', None)}",
+                    "date": __import__("datetime").date.today().isoformat()})  # provenance, same fields as every eval/results file
     json.dump(metrics, open(os.path.join(a.out, "metrics.json"), "w"), indent=2)
+    if a.results_dir:
+        os.makedirs(a.results_dir, exist_ok=True)
+        label = os.path.basename(os.path.normpath(a.out))
+        json.dump({**{k: v for k, v in metrics.items() if k != "log_history"}, "label": label},
+                  open(os.path.join(a.results_dir, f"train_{label}.json"), "w"), indent=2)
     trainer.save_model(os.path.join(a.out, "adapter")); tok.save_pretrained(os.path.join(a.out, "adapter"))
     print({k: v for k, v in metrics.items() if k != "log_history"})
     if a.merge:

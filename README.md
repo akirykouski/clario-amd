@@ -59,9 +59,9 @@ The five Track 2 items, each mapped to a mechanism in code.
 
 | Track 2 item | Mechanism | Where |
 |---|---|---|
-| Incorrect or unsupported answers | Every extracted term must quote a span that exists in the entry, or it is dropped. HPO ids come from ontology candidates only and must match the words, or the id is dropped. Brief items must cite entries inside the shared package. Pattern scores are computed in code from HPO annotations. The model only phrases the explanation | `backend/clario/extract.py`, `backend/clario/knowledge.py`, `backend/clario/patterns.py`, `backend/clario/brief.py` |
+| Incorrect or unsupported answers | Every extracted term must quote a span that exists in the entry, or it is dropped. HPO ids come from ontology candidates only and must match the words, or the id is dropped. Brief items must cite entries inside the shared package. Pattern scores are computed in code from HPO annotations (close matches only, three specific terms for a card). The patient text is a template; the model drafts brief lines only for the clinician | `backend/clario/extract.py`, `backend/clario/knowledge.py`, `backend/clario/patterns.py`, `backend/clario/brief.py` |
 | Sensitive data | Vault encrypted with Argon2id + AES-256-GCM, no recovery by design. Direct identifiers (email, phone, codice fiscale, IBAN, dates, addresses, first names) are replaced before any remote model call. Every model call is written to a hash-chained log the patient can verify. A share contains only confirmed terms and entries in a chosen period, sealed to the clinic's X25519 key, and expires. Clinic model runs on the clinic's own server | `backend/clario/vault.py`, `backend/clario/privacy.py`, `backend/clario/share.py` |
-| Uncertain results | Confidence from self-consistency across samples. Anything under the threshold (default 0.7) goes to a review queue and counts for nothing until a person decides. Patterns show weak, moderate or strong with evidence counts and a "what is missing" list, never a percentage | `backend/clario/review.py`, `backend/clario/extract.py`, `backend/clario/patterns.py` |
+| Uncertain results | Confidence from self-consistency across samples. Anything under the threshold (default 0.7) goes to a review queue and counts for nothing until a person decides. Patterns show weak, moderate or strong with evidence counts (notes) and a "not recorded yet" list, never a percentage. Condition names are clinician-only: the patient sees at most two cards titled by the features they recorded, in everyday words, and no API response to the patient carries a condition name | `backend/clario/review.py`, `backend/clario/extract.py`, `backend/clario/patterns.py` |
 | High-risk decisions | Emergency descriptions (chest pain with warning signs, trouble breathing, stroke signs, self-harm, heavy bleeding, long seizure, fainting with injury) get an immediate notice with the emergency number before anything else. A hedge validator rejects AI text with diagnostic or prescriptive language (doses, "you have", "confirms", percentages) and falls back to a template. Next-question suggestions never name a condition or medicine | `backend/clario/safety.py`, `backend/clario/next_question.py` |
 | Human review | The patient confirms terms before they count. The clinician must accept, edit or reject every AI-drafted brief item. Finalize returns 409 while any item is pending. The printed brief says "AI-drafted items reviewed by the clinician" and the markdown export contains accepted and edited items only. Items never seen by a person are marked "not reviewed by a person" | `backend/clario/review.py`, `backend/clario/brief.py`, `frontend/src/clinic/BriefPanel.tsx` |
 
@@ -102,20 +102,20 @@ Extraction, held-out synthetic test split. Source file per row: `eval/results/ex
 
 Repeat the table for the reviewed gold set (`--dataset gold-reviewed`) and PsyTAR (`--dataset psytar-hpo`) once those files exist.
 
-Review queue: share of entities a person has to look at for 1, 2 and 5 percent tolerated error: `{{review_curve.coverage_at_1pct}}`, `{{review_curve.coverage_at_2pct}}`, `{{review_curve.coverage_at_5pct}}` from `eval/review_curve.py` output (needs a run with `--confidence`).
+Review queue: share of entities routed to review so that the auto-accepted rest stays within 1, 2 and 5 percent error: `{{review_curve.tolerances.1pct.entity.review_share}}`, `{{review_curve.tolerances.2pct.entity.review_share}}`, `{{review_curve.tolerances.5pct.entity.review_share}}` from `eval/results/review_curve_<label>.json`. This is a routing share, not accuracy or coverage, and it uses the confidence the model reports about itself (a run with `--confidence`); the file says so in `confidence_source`.
 
-Throughput on the MI300X, Gemma 4 31B on vLLM. Source: `bench/results/amd-mi300x-gemma4-31b-<timestamp>.json`.
+Throughput on the MI300X, Gemma 4 31B on vLLM. Source: `eval/results/bench_amd-mi300x-gemma4-31b.json` (fields n, dataset, model, backend, date, `results[]` with workload, concurrency, req_per_s, out_tok_per_s, p50_s, p95_s); the full run stays in `bench/results/`.
 
 | Workload | Concurrency | Requests/s | Output tokens/s | p50 / p95 latency (s) |
 |---|---|---|---|---|
-| extract | 1 | `{{bench.extract.c1.req_per_s}}` | `{{bench.extract.c1.tokens_per_s}}` | `{{bench.extract.c1.p50}}` / `{{bench.extract.c1.p95}}` |
-| extract | 32 | `{{bench.extract.c32.req_per_s}}` | `{{bench.extract.c32.tokens_per_s}}` | `{{bench.extract.c32.p50}}` / `{{bench.extract.c32.p95}}` |
-| brief | 1 | `{{bench.brief.c1.req_per_s}}` | `{{bench.brief.c1.tokens_per_s}}` | `{{bench.brief.c1.p50}}` / `{{bench.brief.c1.p95}}` |
-| brief | 32 | `{{bench.brief.c32.req_per_s}}` | `{{bench.brief.c32.tokens_per_s}}` | `{{bench.brief.c32.p50}}` / `{{bench.brief.c32.p95}}` |
+| extract | 1 | `{{bench.extract.c1.req_per_s}}` | `{{bench.extract.c1.out_tok_per_s}}` | `{{bench.extract.c1.p50_s}}` / `{{bench.extract.c1.p95_s}}` |
+| extract | 32 | `{{bench.extract.c32.req_per_s}}` | `{{bench.extract.c32.out_tok_per_s}}` | `{{bench.extract.c32.p50_s}}` / `{{bench.extract.c32.p95_s}}` |
+| brief | 1 | `{{bench.brief.c1.req_per_s}}` | `{{bench.brief.c1.out_tok_per_s}}` | `{{bench.brief.c1.p50_s}}` / `{{bench.brief.c1.p95_s}}` |
+| brief | 32 | `{{bench.brief.c32.req_per_s}}` | `{{bench.brief.c32.out_tok_per_s}}` | `{{bench.brief.c32.p50_s}}` / `{{bench.brief.c32.p95_s}}` |
 
-Training on the MI300X: wall time `{{train.e4b-r16.wall}}`, tokens/s `{{train.e4b-r16.tokens_per_s}}`, peak memory GB `{{train.e4b-r16.peak_mem_gb}}`, from `train/out/e4b-r16/metrics.json`.
+Training on the MI300X: wall time `{{train.e4b-r16.train_wall_s}}`, tokens/s `{{train.e4b-r16.tokens_per_s_est}}`, peak memory GB `{{train.e4b-r16.peak_mem_gb}}`, from `eval/results/train_e4b-r16.json` (fields n, dataset, model, backend, date, train_wall_s, tokens_per_s_est, peak_mem_gb; a copy of `train/out/e4b-r16/metrics.json`).
 
-Lab import: pages per second on the MI300X `{{documents.pages_per_s}}`, from the lab import run output of `backend/scripts/eval_documents.py` once saved to `eval/results/`.
+Lab import: pages per second on the MI300X `{{documents.pages_per_sec}}`, from the lab import run output of `backend/scripts/eval_documents.py` once saved to `eval/results/`.
 
 ## Run it
 

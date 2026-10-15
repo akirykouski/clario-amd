@@ -119,6 +119,9 @@ async def main():
     ap.add_argument("--json-object", action="store_true", help="json_object instead of json_schema")
     ap.add_argument("--timeout", type=float, default=300)
     ap.add_argument("--out-dir", default=str(pathlib.Path(__file__).parent / "results"))
+    ap.add_argument("--backend", default="openai-compatible", help="e.g. vllm-rocm-mi300x (recorded in the eval/results file)")
+    ap.add_argument("--results-dir", default=str(pathlib.Path(__file__).resolve().parent.parent / "eval" / "results"),
+                    help="where the provenance copy bench_<label>.json goes ('' to skip)")
     args = ap.parse_args()
     args.max_tokens = {"extract": args.max_tokens_extract, "brief": args.max_tokens_brief}
     key = os.environ.get(args.api_key_env) or ("ollama" if args.allow_no_key else None)
@@ -138,6 +141,13 @@ async def main():
     meta = {"label": args.label, "base_url": args.base_url, "model": args.model, "timestamp": ts, "n_per_level": args.n,
             "stream": args.stream, "mode": "json_object" if args.json_object else "json_schema", "results": rows}
     out.write_text(json.dumps(meta, indent=2))
+    if args.results_dir:  # every number in the README traces to a file here: n, dataset, model, backend, date
+        prov = {"label": args.label, "dataset": "bench/prompts.py (synthetic diaries and package summary)", "model": args.model,
+                "backend": args.backend, "date": datetime.date.today().isoformat(), "n": args.n, "n_per_level": args.n,
+                "mode": meta["mode"], "stream": args.stream, "source_file": str(out.name), "results": rows}
+        dest = pathlib.Path(args.results_dir) / f"bench_{args.label}.json"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(prov, indent=2))
     md = f"### {args.label} ({args.model}, {meta['mode']}, stream={args.stream})\n\n" + table(rows) + "\n"
     out.with_suffix(".md").write_text(md)
     print("\n" + md + f"\nsaved {out} and {out.with_suffix('.md').name}")

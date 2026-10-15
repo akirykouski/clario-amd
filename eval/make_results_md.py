@@ -52,7 +52,7 @@ def render(results_dir):
             L += ["", "Partial gold (unlabelled mentions exist, precision and F1 are lower bounds): " + ", ".join(partial) + "."]
     else:
         L.append("No model run recorded yet.")
-    L += ["", "## Review curve (share of entities sent to a human)", ""]
+    L += ["", "## Review curve (share of entities routed to review)", ""]
     if curves:
         L += ["| file | model | dataset | n | date | 1% error | 2% error | 5% error | items 1% / 2% / 5% |", "|---|---|---|---|---|---|---|---|---|"]
         for n, r in curves:
@@ -60,7 +60,7 @@ def render(results_dir):
             ent = [f3(t.get(k, {}).get("entity", {}).get("review_share")) for k in ("1pct", "2pct", "5pct")]
             itm = " / ".join(f3(t.get(k, {}).get("item", {}).get("review_share")) for k in ("1pct", "2pct", "5pct"))
             L.append(f"| {n} | {r['model']} | {r['dataset']} | {r['n']} | {r['date']} | {ent[0]} | {ent[1]} | {ent[2]} | {itm} |")
-        L += ["", "Review share at a tolerated error rate among auto-accepted entities. Misses carry no confidence and are not routed."]
+        L += ["", "Share routed to review so that the auto-accepted rest stays within the tolerated error. It is a routing share, not coverage or accuracy, and it rests on the confidence the model reports about itself (see confidence_source in each file). Misses carry no confidence and are not routed."]
     else:
         L.append("No review curve recorded yet (needs a run with `--confidence`, then `eval/review_curve.py`).")
     if other:

@@ -34,7 +34,7 @@ Both talk to ONE OpenAI-compatible client: Ollama, vLLM on ROCm, Lemonade (Ryzen
 ## Deterministic guardrails (code, not prompt)
 - Every extracted term must quote a verbatim span from the entry.
 - HPO IDs must exist in the shipped ontology; label/synonym must match the quoted span's meaning bucket, else the ID is dropped and the term flagged.
-- Pattern score = information-content-weighted overlap of the patient's confirmed HPO set with each disease's annotated phenotypes (HPO `phenotype.hpoa`). The LLM only writes the hedged explanation, citing entry ids.
+- Pattern score = information-content-weighted overlap of the patient's confirmed HPO set with each disease's annotated phenotypes (HPO `phenotype.hpoa`). The patient sees a template note that names no condition; the LLM drafts hedged brief lines for the clinician only, citing entry ids.
 - Hedge validator rejects any rationale with diagnostic or prescriptive language; falls back to a template.
 - Red-flag interceptor: emergency symptoms and dosing/medication-change questions never reach a model.
 
