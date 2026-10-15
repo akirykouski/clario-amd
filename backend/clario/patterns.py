@@ -26,7 +26,12 @@ MAX_PATTERNS = 3  # clinic package
 PATIENT_CARDS = 2  # patient screen
 SPECIFIC = 0.6  # a disease term counts as a match only if it keeps >= 60% of the patient term's IC
 COMMON = 0.5  # "not recorded yet" lists only features present in MORE than half of described cases
-DEFAULT_FREQ = 0.5  # build_knowledge writes this when the annotation carries no frequency
+# Frequency weights in the shipped knowledge (backend/scripts/build_knowledge.py): 1.0 means an explicit "Obligate" or
+# "100%" annotation only. No frequency info is DEFAULT_FREQ (0.5). A 1/1 case report is shrunk to 2/3 (Laplace
+# (n+1)/(d+2)), so a single reported patient never reads as "every patient has it". Scores, the next-question pick and
+# the 'no' penalty all read these weights as P(feature | condition), so they stay honest only while that holds.
+DEFAULT_FREQ = 0.5
+SINGLE_CASE = 2 / 3  # what a lone 1/1 case report becomes; carries no frequency information either
 MIN_FREQ_ANNOT = 10  # a disease needs this many annotations with a real frequency before its list is trusted
 # Everyday symptoms that nearly every condition lists: never enough evidence on their own.
 GENERIC = frozenset({"HP:0001945",  # Fever
@@ -100,16 +105,31 @@ def is_generic(onto: Ontology, hid: str) -> bool:
     return hid in GENERIC or bool(GENERIC & onto.ancestors(hid))
 
 
-def signal_for(score: float, n_matched: int, n_specific: int | None = None) -> str | None:
-    if (n_matched if n_specific is None else n_specific) < MIN_SPECIFIC:
+# Signal tiers, set from the calibration benchmark (eval/pattern_calibration.py -> eval/results/pattern_calibration.json).
+# The benchmark showed the raw score barely separates right from wrong cards: precision sits at 45-55% across scores
+# 0.3-0.65 and falls above 0.7 (short annotation lists score high by chance). What predicts a correct card is its LEAD,
+# the score minus the best other condition's score: precision climbs from about 25% at no lead to about 90% at 0.15+.
+# Each tier is a band of lead with a stated precision target (share of cards in that tier that are the simulated
+# condition, held-out run; the cut-off is the lowest lead that reaches target + 3 points on the calibration run):
+#   strong   = lead >= STRONG_LEAD    target >= 80% precision
+#   moderate = lead >= MODERATE_LEAD  target >= 40% (a band: it cannot borrow precision from strong)
+#   weak     = lead >= WEAK_LEAD      target >= 25%; a card with a lower lead is not shown
+# and no card at all below MIN_SCORE. Rerun the script and update the three numbers when the scorer or knowledge
+# changes; test_pattern_calibration pins them to the result file.
+STRONG_LEAD: float | None = 0.10
+MODERATE_LEAD: float | None = 0.03
+WEAK_LEAD: float | None = 0.01
+MIN_SCORE = 0.2  # the matched terms explain under a fifth of what the patient recorded: never a card
+
+
+def signal_for(score: float, n_matched: int, n_specific: int | None = None, lead: float = 0.0) -> str | None:
+    if (n_matched if n_specific is None else n_specific) < MIN_SPECIFIC or score < MIN_SCORE:
         return None
-    # Scale: share of the patient's total information content explained by CLOSE matches, weighted by how often the
-    # condition shows the feature. A textbook picture of a real condition reaches about 0.5, so the cut-offs sit there.
-    if score >= 0.6 and n_matched >= 5:
+    if STRONG_LEAD is not None and lead >= STRONG_LEAD:
         return "strong"
-    if score >= 0.45 and n_matched >= 3:
+    if MODERATE_LEAD is not None and lead >= MODERATE_LEAD:
         return "moderate"
-    if score >= 0.3:
+    if WEAK_LEAD is not None and lead >= WEAK_LEAD:
         return "weak"
     return None
 
@@ -145,11 +165,15 @@ _freq_cache: dict[str, bool] = {}
 
 
 def has_frequency_info(disease: Disease) -> bool:
-    """True when the disease's annotations carry real frequencies, not only the 0.5 default or 1/1 case reports."""
+    """True when the disease's annotations carry real frequencies, not only the 0.5 default or lone 1/1 case reports."""
     ok = _freq_cache.get(disease.id)
     if ok is None:
-        ok = _freq_cache[disease.id] = sum(1 for w in disease.phenotypes.values()
-                                           if w not in (DEFAULT_FREQ, 1.0)) >= MIN_FREQ_ANNOT
+        if disease.n_freq is not None:  # the build counted annotations with a real frequency behind them
+            ok = disease.n_freq >= MIN_FREQ_ANNOT
+        else:  # older knowledge file: guess from the weights
+            ok = sum(1 for w in disease.phenotypes.values()
+                     if abs(w - DEFAULT_FREQ) > 1e-6 and abs(w - SINGLE_CASE) > 1e-3) >= MIN_FREQ_ANNOT
+        _freq_cache[disease.id] = ok
     return ok
 
 
@@ -190,6 +214,7 @@ class Scored:
     matched_ids: list[str]
     specific_ids: list[str]
     signal: str | None  # None: not enough specific evidence to show as a card
+    lead: float = 0.0  # score minus the best other condition's score (negative for all but the top condition)
 
     @property
     def card_id(self) -> str:
@@ -215,8 +240,7 @@ def scored_diseases(entries: list[Entry], onto: Ontology, ev: dict[str, Evidence
         score = min(1.0, sum(c for _, c in hits) / denom) * negation_factor(onto, negated, disease)
         ids = [p for p, _ in hits]
         spec = [p for p in ids if not is_generic(onto, p)]
-        out.append(Scored(disease, display_name(disease.name), round(score, 4), ids, spec,
-                          signal_for(score, len(ids), len(spec))))
+        out.append(Scored(disease, display_name(disease.name), round(score, 4), ids, spec, None))
     out.sort(key=lambda s: -s.score)
     seen: set[str] = set()
     deduped = []
@@ -224,6 +248,10 @@ def scored_diseases(entries: list[Entry], onto: Ontology, ev: dict[str, Evidence
         if s.name.lower() not in seen:
             seen.add(s.name.lower())
             deduped.append(s)
+    for i, s in enumerate(deduped):  # the signal needs the lead over the best other condition, known only now
+        rival = deduped[1].score if i == 0 and len(deduped) > 1 else (deduped[0].score if i else 0.0)
+        s.lead = round(s.score - rival, 4)
+        s.signal = signal_for(s.score, len(s.matched_ids), len(s.specific_ids), s.lead)
     return deduped
 
 

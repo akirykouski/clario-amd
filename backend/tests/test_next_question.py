@@ -18,6 +18,16 @@ LAY = {f"HP:{n:07d}": [w] for n, w in {1: "alpha thing", 2: "beta thing", 3: "sh
                                          5: "second thing", 6: "third thing", 7: "chest ache"}.items()}
 
 
+@pytest.fixture(autouse=True)
+def every_card_is_moderate(monkeypatch):
+    """The toy conditions tie (zero lead), and the calibrated tiers need a lead. These tests are about the question
+    logic, so every card counts as a moderate signal; the calibrated tiers are tested in test_pattern_calibration."""
+    import clario.patterns as patterns
+
+    monkeypatch.setattr(patterns, "MODERATE_LEAD", -1.0)
+    monkeypatch.setattr(patterns, "WEAK_LEAD", -1.0)
+
+
 def hid(n):
     return f"HP:{n:07d}"
 
@@ -159,7 +169,7 @@ def test_weak_cards_alone_never_prompt_a_question(monkeypatch):
     onto = toy()
     es = [entry((1, False), (2, False), (3, False))]
     assert choose(onto, es, LAY, min_terms=3)
-    monkeypatch.setattr(patterns, "signal_for", lambda score, n, k=None: "weak")
+    monkeypatch.setattr(patterns, "signal_for", lambda score, n, k=None, lead=0.0: "weak")
     assert choose(onto, es, LAY, min_terms=3) == []  # nothing on screen is at least moderate: skip the question
 
 
