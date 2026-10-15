@@ -11,7 +11,7 @@ v3 schema validity, ECE and Brier when the model emits confidence, latency p50/p
 Gold rows: {"diary", "target": {"entities": [...]}} in v3 or the older dataset shape.
 A row with "gold_complete": false (PsyTAR) means unlabelled mentions exist, so precision is a lower bound.
 """
-import argparse, datetime, difflib, json, os, sys, time
+import argparse, datetime, difflib, json, os, re, sys, time, unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from prompt import build_messages, from_dataset_entities, parse, strict_valid
 
@@ -92,6 +92,38 @@ def grounded(diary, quote):
     return bool(quote) and quote.lower() in diary.lower()
 
 
+# ---- self-consistency: the SAME signal the app routes on (mirrors backend/clario/extract.py find_quote / _same /
+# self_consistency; train stays standalone, backend/tests/test_sc_parity.py pins the two together).
+def _fold(s):
+    s = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in s if not unicodedata.combining(c)).lower()
+
+
+def _quote_in(text, quote):
+    q = re.sub(r"\s+", " ", _fold(quote).strip(" .,;:\"'"))
+    if len(q) < 2:
+        return False
+    return bool(re.search(re.escape(q).replace(r"\ ", r"\s+"), _fold(text)))
+
+
+def _same(a, b):
+    """The app's match key: same negation flag, and the same canonical name (case-insensitive) or the same HPO id."""
+    if bool(a.get("negated")) != bool(b.get("negated")):
+        return False
+    if str(a.get("canonical", "")).strip().lower() == str(b.get("canonical", "")).strip().lower():
+        return True
+    return bool(a.get("hpo_id")) and a.get("hpo_id") == b.get("hpo_id")
+
+
+def self_consistency(pred, samples, diary):
+    """Per predicted entity: share of the n samples that hold the same (term, negated) pair with a quote found in the
+    diary. An unparsable sample (None) counts as a miss. Returns None per entity when there are no samples."""
+    if not samples:
+        return [None] * len(pred)
+    return [round(sum(1 for s in samples if any(_quote_in(diary, q.get("quote", "")) and _same(p, q) for q in (s or [])))
+                  / len(samples), 4) for p in pred]
+
+
 def calibration(points, bins=10):
     """points: [(confidence, correct)] -> (ece, brier). Equal-width bins; None when there are no points."""
     if not points:
@@ -156,7 +188,10 @@ def score(records):
         for e, ok in zip(pred, flags):
             if e.get("confidence") is not None:
                 points.append((e["confidence"], int(ok)))
-                ents.append({"confidence": e["confidence"], "correct": int(ok)})
+                row = {"confidence": e["confidence"], "correct": int(ok)}
+                if e.get("verbalized") is not None:  # the model's own number, kept next to the self-consistency one
+                    row["confidence_verbalized"] = e["verbalized"]
+                ents.append(row)
         per_item.append({"id": r.get("id"), "n_gold": len(gold), "n_pred": len(pred), "entities": ents})
     p, rc, f = _prf(*hp); fp_, fr_, ff_ = _prf(*fz)
     n = len(records)
@@ -200,15 +235,30 @@ def make_complete(base_url, model, key, max_tokens=1024, timeout=300, confidence
                                            temperature=0, max_tokens=max_tokens)
         dt = time.time() - t0
         return r.choices[0].message.content or "", dt, (r.usage.completion_tokens if r.usage else 0)
+
+    def samples(diary, n, temperature=0.7):
+        """n sampled answers in one call (the app's llm.samples does the same with n=CLARIO_SC_N, temperature 0.7)."""
+        r = client.chat.completions.create(model=model, messages=build_messages(diary, confidence=confidence),
+                                           temperature=temperature, max_tokens=max_tokens, n=n)
+        return [c.message.content or "" for c in r.choices]
+    complete.samples = samples
     return complete
 
 
-def run_records(gold, complete, concurrency=4):
-    """Run complete(diary) over gold rows. Returns (records, wall_seconds)."""
+def run_records(gold, complete, concurrency=4, sc_n=0):
+    """Run complete(diary) over gold rows. Returns (records, wall_seconds).
+    sc_n > 1: also draw sc_n samples per row and set every predicted entity's confidence to its self-consistency
+    (agreement rate across the samples, the app's signal); a verbalized confidence the model wrote moves to `verbalized`."""
     def one(g):
         try:
             text, dt, toks = complete(g["diary"])
-            return {**g, "pred": parse(text), "strict": strict_valid(text), "dt": dt, "toks": toks, "raw": text, "err": None}
+            pred = parse(text)
+            if sc_n > 1 and pred:
+                sampled = [parse(t) for t in complete.samples(g["diary"], sc_n)]
+                for e, c in zip(pred, self_consistency(pred, sampled, g["diary"])):
+                    e["verbalized"] = e.get("confidence")
+                    e["confidence"] = c
+            return {**g, "pred": pred, "strict": strict_valid(text), "dt": dt, "toks": toks, "raw": text, "err": None}
         except Exception as e:
             return {**g, "pred": None, "strict": False, "dt": 0.0, "toks": 0, "raw": "", "err": repr(e)}
     t0 = time.time()
@@ -260,7 +310,10 @@ def main(argv=None):
     ap.add_argument("--dataset", default="", help="dataset name recorded in the result (default: file path tail)")
     ap.add_argument("--backend", default="", help="e.g. vllm-rocm-mi300x, ollama, lemonade (default: inferred from URL)")
     ap.add_argument("--label", default="run"); ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--confidence", action="store_true", help="ask for a confidence field (prompt variant)")
+    ap.add_argument("--confidence", action="store_true", help="ask for a confidence field (prompt variant): verbalized confidence")
+    ap.add_argument("--sc-n", type=int, default=0,
+                    help="self-consistency: draw N samples per diary, confidence = agreement rate (the signal the app routes on). "
+                         "With --confidence too, the verbalized number is kept as confidence_verbalized for comparison")
     ap.add_argument("--concurrency", type=int, default=4); ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--timeout", type=float, default=300); ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--out-dir", default=DEFAULT_OUT)
@@ -279,14 +332,15 @@ def main(argv=None):
         if not (a.base_url and a.model): ap.error("--base-url and --model required")
         key = os.environ.get(a.api_key_env, "") if a.api_key_env else "none"
         complete = make_complete(a.base_url, a.model, key, a.max_tokens, a.timeout, a.confidence)
-        recs, wall = run_records(gold, complete, a.concurrency)
+        recs, wall = run_records(gold, complete, a.concurrency, a.sc_n)
         m = score(recs); label = a.label
         lat = [r["dt"] for r in recs if r["err"] is None]
         m.update(latency_p50_s=pct(lat, .5), latency_p95_s=pct(lat, .95),
                  tokens_per_s=sum(r["toks"] for r in recs) / wall if wall else 0.0,
                  wall_s=wall, errors=sum(r["err"] is not None for r in recs), concurrency=a.concurrency)
         res = build_result(m, label, dataset, a.model, a.backend or infer_backend(a.base_url), dry_run=False,
-                           confidence_prompt=a.confidence, base_url=a.base_url)
+                           confidence_prompt=a.confidence, base_url=a.base_url, sc_n=a.sc_n,
+                           confidence_source=("self_consistency" if a.sc_n > 1 else "verbalized" if a.confidence else None))
         res["samples"] = [{"diary": r["diary"], "raw": r["raw"][:600], "err": r["err"]} for r in recs[:3]]
     with open(os.path.join(a.out_dir, f"extraction_{label}.json"), "w") as f: json.dump(res, f, indent=2)
     print(table(label, res))

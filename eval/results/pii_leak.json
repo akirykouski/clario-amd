@@ -453,5 +453,11 @@
         }
       }
     }
+  },
+  "hardware": {
+    "gpu_name": "none (CPU only, no model)",
+    "gpu_count": 0,
+    "vram_total_gb": null,
+    "source": "none"
   }
 }

@@ -154,6 +154,7 @@ services:
     volumes:
       - clinic-data:/data
       - ../../bench/results:/app/bench/results:ro   # GET /api/bench serves the droplet's own results
+      - ../../eval/results:/app/eval/results:ro     # conformal_threshold.json: the certified review threshold (GET /api/health review)
     expose:
       - "8800"
 
@@ -173,6 +174,7 @@ services:
     volumes:
       - patient-data:/data
       - ../../bench/results:/app/bench/results:ro
+      - ../../eval/results:/app/eval/results:ro
     expose:
       - "8800"
 

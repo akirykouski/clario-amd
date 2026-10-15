@@ -328,6 +328,7 @@ def main(argv: list[str] | None = None) -> dict:
                    f"{int(P_NEGATED*100)}% with one negated term; synthetic, no real patients",
         "model": f"clario-patterns {git_sha()}",
         "backend": "cpu",
+        "hardware": {"gpu_name": "none (CPU only, no model)", "gpu_count": 0, "vram_total_gb": None, "source": "none"},
         "date": date.today().isoformat(),
         "seed": a.seed,
         "report": "validation run (seed+1): an independent draw from the one that chose the cut-offs, so no number here is in-sample",

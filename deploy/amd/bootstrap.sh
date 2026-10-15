@@ -15,7 +15,9 @@
 #   synth      train/synth.py against vllm-big (SYNTH_N rows, default 3000), generator is never anthropic.com
 #   prep       train/prep.py (disease-held-out train/val/test)
 #   train      LoRA r16 on Gemma 4 E4B (train_rocm.py), eval/results/train_e4b-r16.json
-#   eval       base vs tuned: extraction F1 (+ a --confidence run each, then eval/review_curve.py)
+#   eval       base vs tuned: extraction F1 (+ a --confidence run each, then eval/review_curve.py), then the conformal review
+#              threshold: --sc-n ${CLARIO_SC_N:-5} run with the app prompt -> review_curve.py --source sc -> eval/conformal.py
+#              -> eval/results/conformal_threshold.json (alpha ${CLARIO_REVIEW_ALPHA:-0.05} and 0.10; the app picks it up)
 #   bench      bench/bench.py on vllm-big: tokens/s, p50/p95, concurrency 1/8/32, self-consistency n=5 cost, GPU util
 #   results    eval/make_results_md.py --check (every result file has n, dataset, model, backend, date, hardware)
 #   app        (not in --all) compose up clinic + patient-demo + gpu-metrics + caddy, prints the public URLs
@@ -60,7 +62,7 @@ while [ $# -gt 0 ]; do
     --bench) want bench; shift ;;
     --app) DO_APP=1; shift ;;
     --skip-smoke) SKIP_SMOKE=1; shift ;;
-    -h|--help) sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown flag: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -389,6 +391,17 @@ step_eval() {
     [ "$FALLBACK" = 1 ] && echo "WARN: no review curve (the endpoint's answers carried no confidence field)" \
       || die "no review curve written: the --confidence runs carried no per-entity confidence. Check train/prompt.py confidence variant and the raw samples in eval/results/extraction_$EVAL_BASE_LABEL-conf.json"
   fi
+  say "review threshold with a guarantee (self-consistency, conformal)"
+  # The app's own signal: agreement across CLARIO_SC_N samples, same app prompt (no --confidence). Scored on the tuned model
+  # when there is one, else on the base (fallback with a single model). Writes eval/results/conformal_threshold.json.
+  local sc_model sc_label
+  if [ -n "$tuned_model" ]; then sc_model="$tuned_model"; sc_label="$EVAL_TUNED_LABEL-sc"; else sc_model="$SMALL_MODEL"; sc_label="$EVAL_BASE_LABEL-sc"; fi
+  eval_run "$sc_label" "$sc_model" "$SMALL_URL" "$EVAL_DATASET" train/data/v3/test.jsonl --sc-n "${CLARIO_SC_N:-5}"
+  pyrun eval/review_curve.py "eval/results/extraction_$sc_label.json" --source sc
+  check_result "$REPO/eval/results/review_curve_$sc_label.json"
+  pyrun eval/conformal.py "eval/results/extraction_$sc_label.json" --source sc --alpha "${CLARIO_REVIEW_ALPHA:-0.05}" --alpha 0.10 --delta 0.1
+  python3 "$REPO/eval/hardware.py" stamp "$REPO/eval/results/conformal_threshold.json"
+  check_result "$REPO/eval/results/conformal_threshold.json"
   [ -n "$tuned_model" ] || echo "WARN: no tuned model given (TUNED_MODEL); only the base was scored"
 }
 

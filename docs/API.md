@@ -5,7 +5,7 @@ Shapes: `backend/clario/models.py`. One codebase, two modes: `CLARIO_MODE=patien
 ## Both modes
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/api/health` | `Health` (`mode`, `llm: {backend, model, base_url_host, is_amd}`, `ontology: {terms, diseases}`, `demo_instance: bool`) |
+| GET | `/api/health` | `Health` (`mode`, `llm: {backend, model, base_url_host, is_amd}`, `ontology: {terms, diseases}`, `demo_instance: bool`, `review: {threshold, source (conformal\|env\|override), alpha, delta, calibration_n, calibration_status}`) |
 | GET | `/api/system/gpu` | `{gpu_name, util_pct, vram_used_gb, vram_total_gb}` or `null` (proxies `CLARIO_GPU_METRICS_URL`, else local `amd-smi`, else null) |
 
 ## Patient mode

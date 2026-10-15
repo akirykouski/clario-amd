@@ -338,5 +338,11 @@
   },
   "slack": 0.03,
   "min_support": 40,
-  "seconds": 65.3
+  "seconds": 65.3,
+  "hardware": {
+    "gpu_name": "none (CPU only, no model)",
+    "gpu_count": 0,
+    "vram_total_gb": null,
+    "source": "none"
+  }
 }

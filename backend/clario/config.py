@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -14,6 +15,30 @@ def _flag(v: str | None, default: bool | None = None) -> bool | None:
     """Boolean env var: unset or empty -> `default`; else 1/true/yes/on."""
     v = (v or "").strip().lower()
     return default if not v else v in ("1", "true", "yes", "on")
+
+
+CALIBRATION_FILE = "conformal_threshold.json"  # written by eval/conformal.py
+
+
+def load_review_calibration(path: Path) -> tuple[str, dict | None]:
+    """Read the statistically certified review threshold. Returns (status, data); data only when status is "used".
+    Status: used | missing | invalid | dry_run_ignored | no_valid_threshold. A dry-run (fixture) file is never used."""
+    try:
+        d = json.loads(Path(path).read_text())
+    except FileNotFoundError:
+        return "missing", None
+    except (OSError, ValueError):
+        return "invalid", None
+    if not isinstance(d, dict):
+        return "invalid", None
+    if d.get("dry_run"):
+        return "dry_run_ignored", None
+    t = d.get("threshold")
+    if t is None and d.get("status") == "no_valid_threshold":
+        return "no_valid_threshold", None
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or not 0 <= t <= 1:
+        return "invalid", None
+    return "used", d
 
 
 @dataclass(frozen=True)
@@ -48,6 +73,15 @@ class Settings:
     doc_concurrency: int | None = None  # None = 4 local, 32 remote (so vLLM can batch)
     doc_samples: int = 3  # self-consistency samples per page when the client supports them
     review_threshold: float = ExtractOpts.review_threshold
+
+    # Where review_threshold came from: "conformal" (eval/results/conformal_threshold.json or CLARIO_REVIEW_CALIBRATION,
+    # a finite-sample guarantee at review_alpha), "env" (CLARIO_REVIEW_THRESHOLD / default 0.7) or "override" (code).
+    review_source: str = "env"
+    review_alpha: float | None = None
+    review_delta: float | None = None
+    review_calibration_n: int | None = None
+    review_calibration_status: str = "missing"
+    review_calibration_file: str | None = None
 
     sc_n: int = ExtractOpts.sc_n
     trust_model_confidence: bool = ExtractOpts.trust_model_confidence
@@ -88,6 +122,9 @@ class Settings:
         default_dir = Path.home() / (".clario" if mode == "patient" else ".clario-clinic")
         dist = e.get("FRONTEND_DIST")
         d = ExtractOpts()
+        cal_path = Path(e.get("CLARIO_REVIEW_CALIBRATION") or here.parent / "eval" / "results" / CALIBRATION_FILE)
+        cal_status, cal = load_review_calibration(cal_path)
+        threshold = float(cal["threshold"]) if cal else float(e.get("CLARIO_REVIEW_THRESHOLD") or d.review_threshold)
         s = cls(
             mode=mode,
             llm_base_url=(e.get("LLM_BASE_URL") or DEFAULT_LOCAL_BASE).strip(),
@@ -107,8 +144,17 @@ class Settings:
             sc_n=max(1, int(e.get("CLARIO_SC_N") or d.sc_n)),
             trust_model_confidence=bool(_flag(e.get("CLARIO_TRUST_MODEL_CONFIDENCE"), d.trust_model_confidence)),
             hpo_pick=bool(_flag(e.get("CLARIO_HPO_PICK"), d.hpo_pick)),
-            review_threshold=float(e.get("CLARIO_REVIEW_THRESHOLD") or d.review_threshold),
+            review_threshold=threshold,
+            review_source="conformal" if cal else "env",
+            review_alpha=cal.get("alpha") if cal else None,
+            review_delta=cal.get("delta") if cal else None,
+            review_calibration_n=cal.get("n") if cal else None,
+            review_calibration_status=cal_status,
+            review_calibration_file=str(cal_path) if cal else None,
             demo_instance=bool(_flag(e.get("CLARIO_DEMO_INSTANCE"))),
             gpu_metrics_url=(e.get("CLARIO_GPU_METRICS_URL") or "").strip() or None,
         )
+        if "review_threshold" in overrides:  # an explicit value in code beats both the file and the env
+            overrides = {"review_source": "override", "review_alpha": None, "review_delta": None,
+                         "review_calibration_n": None, **overrides}
         return replace(s, **overrides) if overrides else s

@@ -569,6 +569,7 @@ def run(redactor: str | None = None, baseline: str | None = None) -> dict:
         "dataset": f"synthetic templates v1, seed {SEED}",
         "model": f"clario-privacy {git_sha()}",
         "backend": "cpu",
+        "hardware": {"gpu_name": "none (CPU only, no model)", "gpu_count": 0, "vram_total_gb": None, "source": "none"},
         "date": datetime.date.today().isoformat(),
         "split_note": ("Two halves with disjoint vocabulary (names, surnames, eponyms, drugs, places, street names, "
                        "email domains), disjoint template wording and disjoint number formats. The redactor was tuned "

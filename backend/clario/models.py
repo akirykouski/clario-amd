@@ -266,12 +266,26 @@ class PrivacyVerify(BaseModel):
     count: int = 0
 
 
+class ReviewPolicy(BaseModel):
+    """Which review threshold is in force. source "conformal": certified by eval/conformal.py, so auto-accepted
+    entities have error <= alpha with probability >= 1 - delta on data like the calibration set."""
+
+    threshold: float
+    source: Literal["conformal", "env", "override"]
+    alpha: float | None = None
+    delta: float | None = None
+    calibration_n: int | None = None
+    calibration_status: Literal["used", "missing", "invalid", "dry_run_ignored", "no_valid_threshold"] = "missing"
+
+
 class Health(BaseModel):
     ok: bool
     mode: Literal["patient", "clinic"]
     llm: dict
     locked: bool | None = None
     ontology: dict = Field(default_factory=dict)
+    demo_instance: bool = False
+    review: ReviewPolicy | None = None
 
 
 class LabResult(BaseModel):
