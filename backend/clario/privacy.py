@@ -32,7 +32,10 @@ from .vault import Locked, Vault
 GENESIS = "0" * 64
 PURPOSES = ("extract", "rationale", "brief", "next_question", "document", "other")
 PLACEHOLDER = {"email": "[EMAIL]", "iban": "[IBAN]", "codice_fiscale": "[CODICE_FISCALE]", "address": "[ADDRESS]",
-               "date": "[DATE]", "phone": "[PHONE]", "name": "[NAME]"}
+               "date": "[DATE]", "phone": "[PHONE]", "name": "[NAME]", "health_id": "[HEALTH_ID]", "record": "[RECORD_NO]"}
+# The kind a replacement reports (models.PrivacyReplacement / the Cloud-saw panel know seven kinds). The tessera
+# sanitaria and hospital record numbers are national and hospital identifiers and share the codice_fiscale kind.
+KIND = {"health_id": "codice_fiscale", "record": "codice_fiscale"}
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "0.0.0.0")
 
 
@@ -50,42 +53,123 @@ _MONTH = "(?:" + "|".join([_ci(m) for m in _MONTHS_FULL] + ["May"] + [m + r"\.?"
 _DAY = r"\d{1,2}(?:st|nd|rd|th|°)?"
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+# "name [at] host.it" and "name (at) host.it": written that way to dodge scrapers, still an address
+_EMAIL_OBFUSCATED = re.compile(r"[A-Za-z0-9._%+-]+\s*[\[(]\s*(?i:at)\s*[\])]\s*[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
 _IBAN = re.compile(r"\b[A-Za-z]{2}\d{2}(?:\s?[A-Za-z0-9]{4}){3,7}(?:\s?[A-Za-z0-9]{1,4})?\b")
 _CF = re.compile(r"\b[A-Za-z]{6}\d{2}[A-Za-z]\d{2}[A-Za-z]\d{3}[A-Za-z]\b")
+_CF_SPACED = re.compile(r"\b[A-Za-z]{3}[ .]?[A-Za-z]{3}[ .]?\d{2}[A-Za-z]\d{2}[ .]?[A-Za-z]\d{3}[A-Za-z]\b")
+# Tessera sanitaria: 20 digits that start with 80380, written solid or in groups.
+_TS = re.compile(r"(?<!\d)80380(?:[ \t-]?\d){15}(?!\d)")
+_TS_LABELLED = re.compile(
+    r"\b(?i:tessera\s+sanitaria|health\s+card|codice\s+tessera|tessera|T\.?E\.?A\.?M\.?|TS)(?:[ \t]+(?i:n\.?|n°|nr\.?|no\.?|numero|number))?"
+    r"[ \t]*[:#-]?[ \t]*(?P<v>\d(?:[\d \t-]){8,26}\d)(?!\d)")
+# Hospital and record numbers: the value after a label such as MRN, "cartella clinica n.", "patient ID", "NHS number".
+_REC_LABEL = (r"(?:\bMRN|\bM\.R\.N\.?|\bNHS\s+(?i:no\.?|number)|\b(?i:(?:hospital|medical|patient|case|record|file|chart|admission|clinical|clinic)"
+              r"\s+(?:record\s+|file\s+)?(?:no\.?|nr\.?|number|num\.?|id|#)|record\s+(?:no\.?|number)|"
+              r"cartella(?:\s+clinica)?(?:\s+(?:n\.?|n°|nr\.?|numero))?|nosologico|"
+              r"(?:n\.?|n°|numero|codice|id)\s+(?:di\s+)?(?:ricovero|cartella|paziente|pratica|accettazione|nosologico|referto)|"
+              r"codice\s+paziente|id\s+paziente|pratica(?:\s+n\.?)?|accettazione(?:\s+n\.?)?))")
+_REC = re.compile(_REC_LABEL + r"[ \t]*[:#]?[ \t]*(?P<v>(?:[A-Za-z]{1,3}[-/]?)?\d[\d/-]*(?:[ ]\d{3,4}){0,3})(?!\w)")
+_REF = re.compile(r"\b(?:Ref|Rif|Reference|Riferimento)\b\.?[ \t]*[:#]?[ \t]*(?P<v>(?:[A-Za-z]{1,3}[-/]?)?\d[\d/-]*)(?!\w)")
+# A long digit run with no label is an identifier too (record, card or account number); doses, lab values and
+# dates are shorter or carry separators.
+_LONG_DIGITS = re.compile(r"(?<![\d.,:/-])\d{7,}(?![\d]|[.,]\d)")
+_DIGITS_SLASH = re.compile(r"(?<![\d/.])\d{2,4}/\d{5,8}(?![\d/])")
+_CODE_SLASH = re.compile(r"\b[A-Z]{1,3}-\d{3,6}/\d{2}\b")  # C-2291/24
+# Codice fiscale read off a scan or retyped: 16 characters in the 6 letters, 2 digits, letter, 2 digits, letter,
+# 3 digits, letter layout, where up to 2 characters may be a look-alike (O/0, I/1, S/5, B/8, Z/2).
+_CF_TOKEN = re.compile(r"(?<![A-Za-z0-9])[A-Za-z0-9]{16}(?![A-Za-z0-9])")
+_CF_LETTER_POS = (0, 1, 2, 3, 4, 5, 8, 11, 15)
+_CF_DIGIT_POS = (6, 7, 9, 10, 12, 13, 14)
+_CF_AS_DIGIT, _CF_AS_LETTER = set("OILSZB"), set("015825")
+
+
+def _cf_like(tok: str) -> bool:
+    errors = 0
+    for k in _CF_LETTER_POS:
+        if tok[k].isdigit():
+            if tok[k] not in _CF_AS_LETTER:
+                return False
+            errors += 1
+    for k in _CF_DIGIT_POS:
+        if not tok[k].isdigit():
+            if tok[k].upper() not in _CF_AS_DIGIT:
+                return False
+            errors += 1
+    return errors <= 2
 _NAME_WORD = r"[A-ZÀ-Ý][\w'’]+"
+_STREET_IT = (r"via|viale|piazza|piazzale|corso|vicolo|largo|lungarno|lungotevere|lungomare|strada|contrada|borgo|salita|"
+              r"vico|stradone|traversa|localit[àa]|frazione")
+_STREET_EN = r"street|st|road|rd|avenue|ave|lane|drive|close|way|court|gardens|place|crescent|terrace|square|mews|grove"
+# words after "via" that make it the preposition ("via WhatsApp", "via email")
+_NOT_STREET = r"(?i:email|e-mail|mail|phone|whatsapp|sms|app|skype|zoom|telefono|posta|web|the|a|an|telegram|portal|portale|video|call)"
 _ADDRESS = [
-    re.compile(rf"\b(?i:via|viale|piazza|piazzale|corso|vicolo|largo)\s+(?:(?i:di|del|della|dei|degli|delle|dell['’])\s*)?"
-               rf"{_NAME_WORD}(?:\s+{_NAME_WORD}){{0,2}}(?:,?\s*(?:(?i:n\.?|civico)\s*)?\d{{1,4}}[A-Za-z]?)?"),
-    re.compile(rf"\b\d{{1,4}}\s+{_NAME_WORD}(?:\s+{_NAME_WORD}){{0,2}}\s+(?i:street|st|road|rd|avenue|ave|lane|drive)\b\.?"),
-    re.compile(rf"\b{_NAME_WORD}(?:\s+{_NAME_WORD}){{0,2}}\s+(?:Street|Road|Avenue|Lane|Drive)\b(?:,?\s*\d{{1,4}})?"),
+    re.compile(rf"\b(?i:{_STREET_IT})\s+(?!{_NOT_STREET}\b)(?:(?i:di|del|della|dei|degli|delle|dell['’])\s*)?"
+               rf"{_NAME_WORD}(?:\s+{_NAME_WORD}){{0,2}}"
+               rf"(?:,?\s*(?:(?i:n\.?|civico|n°)\s*)?\d{{1,4}}(?:[A-Za-z]\b|/[A-Za-z0-9]{{1,3}})?(?:,?\s*(?i:int\.?|interno|scala|sc\.?)\s*\w{{1,3}})?)?"),
+    # named residences and localities: "Condominio Le Rose, scala B, int. 4", "loc. Fontana 12"
+    re.compile(rf"\b(?i:condominio|loc\.|localit[àa]|frazione|c\.da)\s+{_NAME_WORD}(?:\s+{_NAME_WORD}){{0,2}}"
+               rf"(?:,?\s*(?i:scala|sc\.)\s*\w{{1,3}})?(?:,?\s*(?i:int\.?|interno)\s*\w{{1,3}})?(?:,?\s*\d{{1,4}}\b)?"),
+    # typed in lower case: only with a house number, and never "via email 2 times"
+    re.compile(rf"\b(?i:via|viale|piazza|piazzale|vicolo|lungarno)\s+(?!{_NOT_STREET}\b)"
+               rf"(?:(?i:di|del|della|dei|degli|delle|dell['’])\s*)?[A-Za-zÀ-ÿ'’]{{2,}}(?:\s+[A-Za-zÀ-ÿ'’]{{2,}}){{0,2}}?,?\s*(?:(?i:n\.?|civico|n°)\s*)?"
+               rf"\d{{1,4}}(?:[A-Za-z]\b|/[A-Za-z0-9]{{1,3}})?"),
+    re.compile(rf"\b(?:(?i:flat|apartment|apt|unit)\s+\d{{1,3}}[A-Za-z]?,\s*)?\d{{1,4}}\s+{_NAME_WORD}(?:\s+{_NAME_WORD}){{0,2}}\s+(?i:{_STREET_EN})\b\.?"),
+    re.compile(rf"\b{_NAME_WORD}(?:\s+{_NAME_WORD}){{0,2}}\s+(?:Street|Road|Avenue|Lane|Drive|Close|Gardens|Crescent|Terrace)\b(?:,?\s*\d{{1,4}})?"),
 ]
 _DATE = [
     re.compile(r"\b\d{4}-\d{1,2}-\d{1,2}\b"),
     re.compile(r"\b\d{1,2}([/.-])\d{1,2}\1(?:\d{4}|\d{2})\b"),
-    re.compile(rf"\b{_DAY}\s+(?:(?i:of)\s+)?{_MONTH}(?:,?\s+\d{{4}})?\b"),
-    re.compile(rf"\b{_MONTH}\s+{_DAY}\b(?:,?\s+\d{{4}})?"),
+    re.compile(r"\b\d{1,2}-[A-Za-z]{3}-(?:\d{4}|\d{2})\b"),
+    re.compile(rf"\b{_DAY}\s+(?:(?i:of)\s+)?{_MONTH}(?:,?\s+(?:\d{{4}}|['’]\d{{2}}))?\b"),
+    re.compile(rf"\b{_MONTH}\s+{_DAY}\b(?:,?\s+(?:\d{{4}}|['’]\d{{2}}))?"),
 ]
 _PHONE = [
-    re.compile(r"(?<![\w+])\(?(?:\+|00)\d{1,3}\)?[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}(?!\d)"),
-    re.compile(r"(?<![\d.])3\d{2}[\s.-]?\d{3}[\s.-]?\d{3,4}(?!\d)"),
-    re.compile(r"(?<![\d.])0\d{1,3}[\s.-]\d{5,8}(?!\d)"),
-    re.compile(r"(?<![\d.])\d{3}[\s.-]\d{3}[\s.-]\d{4}(?!\d)"),
+    re.compile(r"(?<![\w+])(?<!\d[\s.-])\(?(?:\+|00)\d{1,3}\)?[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}(?!\d)"),
+    re.compile(r"(?<![\d.])3\d{2}(?:[\s./-]?\d){6,7}(?!\d)"),  # Italian mobile in any grouping (3-3-4, 3-2-2-3, solid)
+    re.compile(r"(?<![\d.])0\d{1,3}[\s./-]\d{5,8}(?!\d)"),
+    re.compile(r"(?<![\d.])0\d{1,3}(?:[\s./-]\d{2}){3,4}(?!\d)"),  # landline in pairs: 02 12 34 56 78
+    re.compile(r"(?<![\d.])\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}(?!\d)"),
 ]
-_TITLE_NAME = re.compile(r"\b(?:Dr|Dott|Prof|Mr|Mrs|Ms|Sig)(?:\.|\.ssa|\.ra)?(?:ssa)?\s+" + _NAME_WORD)
+_TITLE_NAME = re.compile(
+    r"\b(?:(?:Dr|DR|Dott|DOTT|Prof|PROF|Mr|MR|Mrs|MRS|Ms|MS|Miss|Mx|Sig|SIG|Primario)(?:\.ssa|\.ra|\.na|\.|ssa)?"
+    r"|[Dd]ottor(?:e|essa)?|[Pp]rofessor(?:e|essa)?|dott\.(?:ssa)?|dr\.|prof\.(?:ssa)?)\s+" + _NAME_WORD)
 
 # A surname that follows a first name or a title: one or two capitalised words, optionally behind a particle
 # ("De Luca", "Della Valle"). Medical terms and sentence words are never taken.
 _PARTICLES = {"de", "di", "da", "del", "della", "dei", "degli", "dal", "dalla", "lo", "la", "le", "van", "von", "mc", "mac"}
-_NOT_SURNAME = {
+# Medical eponyms: never a surname, and never redacted when a name rule fires on them.
+_EPONYMS = {
     "lupus", "raynaud", "sjogren", "sjögren", "crohn", "hashimoto", "graves", "behcet", "behçet", "addison", "cushing",
     "parkinson", "alzheimer", "asperger", "down", "hodgkin", "kawasaki", "meniere", "ménière", "marfan", "wilson",
+    "huntington", "gilbert", "paget", "takayasu", "hughes", "still", "bell", "reiter", "felty", "gaucher", "duchenne",
+    "becker", "charcot", "osler", "wegener", "horton", "kaposi", "peyronie", "dupuytren", "ehlers", "danlos", "tourette",
+    "bechterew", "waldenstrom", "waldenström", "hirschsprung", "whipple", "burkitt", "hansen", "kikuchi", "sneddon",
+    "guillain", "barre", "barré", "bright", "hurler", "tay", "sachs", "lyme", "turner", "klinefelter", "sturge", "weber",
+    "wolff", "parkinson-white", "conn", "zollinger", "ellison", "lambert", "eaton", "castleman", "schnitzler", "sweet",
+    "basedow", "pott", "meckel", "crouzon", "apert", "noonan", "williams", "prader", "willi", "angelman", "rett",
+}
+_NOT_SURNAME = _EPONYMS | {
     "syndrome", "sindrome", "disease", "malattia", "morbo", "fenomeno", "phenomenon", "test", "the", "a", "an", "and",
     "or", "but", "i", "my", "in", "on", "at", "it", "he", "she", "we", "is", "was", "il", "un", "una", "e", "ma", "ho",
     "mi", "ha", "ed", "se", "che", "per", "con", "oggi", "ieri", "domani", "today", "yesterday", "tomorrow",
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "lunedì", "martedì", "mercoledì",
-    "giovedì", "venerdì", "sabato", "domenica", "may",
+    "giovedì", "venerdì", "sabato", "domenica", "may", "dr", "dott", "dottor", "dottore", "dottoressa", "prof",
+    "professor", "professore", "mr", "mrs", "ms", "miss", "sig", "italian", "english", "german", "french", "covid",
+    "christmas", "easter", "natale", "pasqua", "internet", "nhs", "asl", "usl", "gp",
 } | {m.lower() for m in _MONTHS_FULL} | {m.lower().rstrip(".") for m in _MONTHS_ABBR}
 _SURNAME_WORD = re.compile(r"[ \t]+([A-ZÀ-Ý][\w'’]*)")
+# A word that names a disease right after / before a candidate: "Graves disease", "morbo di Crohn", "Sjogren's syndrome".
+_EPONYM_AFTER = re.compile(r"(?:['’]s)?[ \t]+(?i:disease|syndrome|sindrome|malattia|morbo|phenomenon|fenomeno|palsy|paralisi|test|"
+                           r"thyroiditis|tiroidite|lymphoma|linfoma|arteritis|arterite|anaemia|anemia|sign|segno|ulcer|ulcera)\b")
+_EPONYM_BEFORE = re.compile(r"(?i:malattia|morbo|sindrome|disease|syndrome|fenomeno|phenomenon|tiroidite|thyroiditis)[ \t]+(?:(?i:di|del|of)[ \t]+)?$")
+# Saints and places of care: "Ospedale San Raffaele", "St Thomas' Hospital", "in Siena".
+_PLACE_BEFORE = re.compile(r"(?i:\b(?:san|santa|santo|sant['’]|st\.?|saint|ospedale|hospital|policlinico|clinica|clinic|presso|in|at|near)[ \t]*)$")
+_FIELD_WORDS = {
+    "id", "mrn", "dob", "cf", "ts", "tel", "sesso", "nato", "nata", "data", "date", "born", "codice", "via", "nome", "cognome",
+    "name", "surname", "paziente", "patient", "esame", "visita", "referto", "report", "motivo", "diagnosi", "note", "note:",
+    "information", "info", "portal", "details", "history", "number", "numero", "reparto", "ward", "email", "mail",
+}
 
 
 def _surname_end(text: str, pos: int) -> int:
@@ -107,35 +191,190 @@ def _surname_end(text: str, pos: int) -> int:
 
 _NAMES_FILE = Path(__file__).parent / "data" / "first_names.txt"
 _name_re: re.Pattern | None = None
+_name_caps_re: re.Pattern | None = None
+_name_set: set[str] | None = None
 
 
 def _names() -> re.Pattern:
-    global _name_re
+    global _name_re, _name_set
     if _name_re is None:
         names = [n.strip() for n in _NAMES_FILE.read_text(encoding="utf-8").splitlines() if n.strip()]
+        _name_set = {n.lower() for n in names}
         alts = "|".join(sorted({a for n in names for a in (n, n.upper())}, key=len, reverse=True))
         _name_re = re.compile(rf"\b(?:{alts})\b")
     return _name_re
+
+
+def _is_first_name(word: str) -> bool:
+    _names()
+    return word.lower() in (_name_set or ())
+
+
+# Labels that introduce the patient or a clinician in a referto header or a form: "Paziente: Rossi Mario".
+_LABEL_NAME = re.compile(
+    r"\b(?:Paziente|PAZIENTE|Patient|PATIENT|Nome|NOME|Cognome|COGNOME|Name|NAME|Surname|Intestatario|INTESTATARIO|"
+    r"Intestato\s+a|Referto\s+per|Referral\s+for|Firmato\s+da|Signed\s+by|Medico\s+curante|Medico|Doctor|Referente)"
+    r"\b(?P<sep>[ \t]*[:\-–][ \t]*|[ \t]+)(?=[A-ZÀ-Ý])")
+# People named through a relation or a verb of contact: "my friend Harry", "mia cugina Ilaria", "called Harry",
+# "lunch with Isabelle", "parlato con Elena". Eponyms, dates and titles are never taken.
+_KIN = (r"friend|sister|brother|cousin|neighbou?r|mother|father|mom|mum|dad|husband|wife|partner|colleague|boss|aunt|uncle|"
+        r"daughter|son|nurse|physio|therapist|doctor|GP|girlfriend|boyfriend|amica|amico|sorella|fratello|cugina|cugino|vicina|"
+        r"vicino|madre|padre|mamma|pap[àa]|marito|moglie|compagna|compagno|collega|zia|zio|figlia|figlio|infermiera|"
+        r"infermiere|dottoressa|medico|nonna|nonno|nipote|suocera|suocero|cognata|cognato|fidanzata|fidanzato")
+_CUE_VERB = (r"called|told|asked|texted|thanked|emailed|messaged|phoned|met|visited|"
+             r"(?:spoke|speak|spoken|talked|talk|chatted|chat)\s+(?:to|with)|"
+             r"(?:lunch|dinner|coffee|breakfast|supper|walk|drinks|pranzo|cena|colazione|caff[eè]|passeggiata|aperitivo)\s+(?:with|con)|"
+             r"chiamato|chiamata|chiamare|chiamo|ringraziato|ringraziata|incontrato|incontrata|visto|"
+             r"(?:parlato|parlare|parlo|uscito|uscita|uscire|sentito|sentita)\s+con|"
+             r"(?:telefonato|scritto|risposto|detto)\s+a|accompagnat[oa]\s+da|(?:driven|brought|taken|helped)\s+by|"
+             r"portat[oa]\s+da|aiutat[oa]\s+da|"
+             r"(?:firmato|firmata|refertato|refertata|redatto|compilato|visitato|visitata|seguito|seguita|in\s+cura)(?:\s+da)?|"
+             r"(?:signed|seen|treated|followed|referred)\s+by|signed")
+_CUE = re.compile(rf"(?:\b(?i:my|mia|mio|la\s+mia|il\s+mio|his|her|our|nostra|nostro|sua|suo)\s+(?i:{_KIN})|"
+                  rf"\b(?i:{_CUE_VERB}))[ \t]+(?P<n>{_NAME_WORD})")
+
+
+def _word_ok(w: str) -> bool:
+    return w.lower() not in _NOT_SURNAME and w.lower() not in _FIELD_WORDS
+
+
+def _name_suppressed(text: str, s: int, e: int) -> bool:
+    """A name rule fired on [s, e): is it really a disease, a saint or a place of care?"""
+    word = text[s:e].split()[0] if text[s:e].split() else ""
+    if word.lower() in _EPONYMS:
+        return True
+    if _EPONYM_AFTER.match(text, e) or _EPONYM_BEFORE.search(text, max(0, s - 24), s):
+        return True
+    return bool(_PLACE_BEFORE.search(text, max(0, s - 16), s))
+
+
+def _label_names(text: str) -> list[tuple[int, int, str]]:
+    out = []
+    for m in _LABEL_NAME.finditer(text):
+        pos, words = m.end(), []
+        while len(words) < 3:
+            w = re.compile(r"([A-ZÀ-Ý][\w'’]*)").match(text, pos)
+            if not w or not _word_ok(w.group(1)):
+                break
+            words.append(w)
+            sp = re.compile(r"[ \t]+").match(text, w.end())
+            if not sp:
+                pos = w.end()
+                break
+            pos = sp.end()
+        if not words:
+            continue
+        end = words[-1].end()
+        colon = re.search(r"[:\-–]", m.group("sep")) is not None
+        tokens = [w.group(1) for w in words]
+        # Without a colon the label is also an ordinary word ("Patient Portal"): then only an upper-case pair
+        # or a known first name counts.
+        if not colon and not (any(_is_first_name(t) for t in tokens) or (len(tokens) >= 2 and all(t.isupper() for t in tokens))):
+            continue
+        out.append((words[0].start(), end, "name"))
+    return out
+
+
+def _lexicon_names(text: str) -> list[tuple[int, int, str]]:
+    out = []
+    for m in _names().finditer(text):
+        if _name_suppressed(text, m.start(), m.end()):
+            continue
+        start = m.start()
+        # surname first: "Moretti Tommaso", "MORETTI TOMMASO", "Della Valle Sara" (not at a sentence start)
+        prev = re.search(r"([A-ZÀ-Ý][\w'’]+)[ \t]+$", text[max(0, start - 40):start])
+        if prev and _word_ok(prev.group(1)) and prev.group(1).lower() not in _PARTICLES:
+            ps = max(0, start - 40) + prev.start(1)
+            before = text[:ps].rstrip(" \t")
+            if before and before[-1] not in ".!?:;\n" and not _is_first_name(prev.group(1)):
+                start = ps
+                while True:  # particles in front of the surname
+                    pm = re.search(r"\b([A-Za-zÀ-ÿ]+)[ \t]+$", text[max(0, start - 20):start])
+                    if pm and pm.group(1).lower() in _PARTICLES:
+                        start = max(0, start - 20) + pm.start(1)
+                    else:
+                        break
+        out.append((start, _surname_end(text, m.end()), "name"))
+    return out
+
+
+# A capitalised name before a verb of speech or contact: "Esposito said ...", "Giuli mi ha scritto".
+_SAYS = re.compile(rf"(?<![\w'’])(?P<n>{_NAME_WORD}(?:[ \t]+{_NAME_WORD})?)[ \t]+"
+                   r"(?i:said|says|called|rang|texted|wrote|told|asked|replied|answered|thinks|agreed|confirmed|suggested|"
+                   r"insisted|mentioned|reminded|ha\s+(?:detto|chiamato|scritto|risposto|confermato|telefonato)|dice|"
+                   r"mi\s+(?:ha\s+)?(?:detto|dice|chiama|chiamato|scrive|scritto|telefona|telefonato|manda|mandato))\b")
+_SUBJECT_WORDS = {"he", "she", "they", "we", "it", "who", "mom", "mum", "dad", "mother", "father", "doctor", "nurse",
+                  "everyone", "nobody", "somebody", "lui", "lei", "loro", "noi", "mamma", "papà", "medico", "dottore",
+                  "dottoressa", "infermiera", "everybody", "someone", "anyone", "gp", "surgeon", "consultant", "registrar",
+                  "midwife", "carer", "secretary", "segretaria", "ostetrica", "chirurgo", "radiologo"}
+_ROLE_SUFFIX = re.compile(r"(?i)(?:ologist|ologo|ologa|iatra|iatrist|ician|apist|apista|macist|macista|dentista|dentist|specialist|receptionist)$")
+
+
+def _is_role(word: str) -> bool:
+    """Job titles that open a sentence ("Rheumatologist said ...") are not a person's name."""
+    return word.lower() in _SUBJECT_WORDS or bool(_ROLE_SUFFIX.search(word))
+
+
+def _says_names(text: str) -> list[tuple[int, int, str]]:
+    out = []
+    for m in _SAYS.finditer(text):
+        words = m.group("n").split()
+        if len(words) == 2 and (words[0].lower() in _NOT_SURNAME or _is_role(words[0]) or not _word_ok(words[0])):
+            words = words[1:]  # "Then Esposito said": only the last word is the name
+        if not words or any(not _word_ok(w) or _is_role(w) for w in words):
+            continue
+        s = m.end("n") - len(" ".join(words))
+        if _name_suppressed(text, s, m.end("n")):
+            continue
+        out.append((s, m.end("n"), "name"))
+    return out
+
+
+def _cue_names(text: str) -> list[tuple[int, int, str]]:
+    out = []
+    for m in _CUE.finditer(text):
+        s, e = m.start("n"), m.end("n")
+        if not _word_ok(m.group("n")) or _name_suppressed(text, s, e):
+            continue
+        out.append((s, _surname_end(text, e), "name"))
+    return out
 
 
 def _candidates(text: str) -> list[tuple[int, int, str]]:
     """(start, end, type) in priority order (earlier = wins an overlap)."""
     out: list[tuple[int, int, str]] = []
 
-    def add(rx: re.Pattern, typ: str) -> None:
-        out.extend((m.start(), m.end(), typ) for m in rx.finditer(text))
+    def add(rx: re.Pattern, typ: str, group: str | None = None) -> None:
+        for m in rx.finditer(text):
+            if group is None:
+                out.append((m.start(), m.end(), typ))
+            elif sum(c.isdigit() for c in m.group(group)) >= 5:
+                out.append((m.start(group), m.end(group), typ))
 
     add(_EMAIL, "email")
+    add(_EMAIL_OBFUSCATED, "email")
     add(_IBAN, "iban")
     add(_CF, "codice_fiscale")
+    add(_CF_SPACED, "codice_fiscale")
+    add(_TS, "health_id")
+    add(_TS_LABELLED, "health_id", "v")
+    add(_REC, "record", "v")
     for rx in _ADDRESS:
         add(rx, "address")
     for rx in _DATE:
         add(rx, "date")
     for rx in _PHONE:
         add(rx, "phone")
-    for rx in (_TITLE_NAME, _names()):
-        out.extend((m.start(), _surname_end(text, m.end()), "name") for m in rx.finditer(text))
+    out.extend((m.start(), _surname_end(text, m.end()), "name") for m in _TITLE_NAME.finditer(text))
+    out.extend(_label_names(text))
+    out.extend(_cue_names(text))
+    out.extend(_says_names(text))
+    out.extend(_lexicon_names(text))
+    out.extend((m.start(), m.end(), "codice_fiscale") for m in _CF_TOKEN.finditer(text) if _cf_like(m.group()))
+    add(_REF, "record", "v")
+    add(_DIGITS_SLASH, "record")
+    add(_LONG_DIGITS, "record")
+    add(_CODE_SLASH, "record")
     return out
 
 
@@ -160,7 +399,7 @@ def pseudonymize(text: str) -> tuple[str, list[dict]]:
         out_len += len(chunk)
         ph = PLACEHOLDER[typ]
         parts.append(ph)
-        reps.append({"type": typ, "start": s, "end": e, "out_start": out_len, "out_end": out_len + len(ph)})
+        reps.append({"type": KIND.get(typ, typ), "start": s, "end": e, "out_start": out_len, "out_end": out_len + len(ph)})
         out_len += len(ph)
         pos = e
     parts.append(text[pos:])
