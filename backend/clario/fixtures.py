@@ -53,6 +53,10 @@ class OfflineLLM(LLM):
                                             f"{payload.get('condition')}. It may be worth discussing with your doctor."}), _stats()
         if task == "document":
             return json.dumps(self._document(payload)), _stats(200)
+        if task == "next_question":
+            lay = payload.get("plain_description", "")
+            return json.dumps({"question": f"Le capita di avere: {lay}?" if payload.get("lang") == "it"
+                               else f"Do you sometimes have: {lay}?"}), _stats(20)
         if task == "brief":
             return json.dumps(self._brief(payload)), _stats(300)
         return "{}", _stats()

@@ -100,3 +100,13 @@ export const flagNote: Record<string, string> = {
 export function confidencePct(c: number | null): number | null {
   return c === null ? null : Math.round(Math.max(0, Math.min(1, c)) * 100);
 }
+
+/** How each id moved between two orderings: negative = moved up, positive = moved down. Ids missing from either are skipped. */
+export function reorderDelta(before: string[], after: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const id of after) {
+    const b = before.indexOf(id);
+    if (b >= 0) out[id] = after.indexOf(id) - b;
+  }
+  return out;
+}

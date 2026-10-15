@@ -33,6 +33,7 @@ export interface Evidence {
 export interface Pattern {
   disease_id: string; disease_name: string; signal: Signal; score: number;
   matched: Evidence[]; missing: Term[]; rationale: string; rationale_source: "model" | "template";
+  neutral_label: string;
 }
 
 export interface ShareRequest {
@@ -125,3 +126,9 @@ export interface LabResult {
   value_text: string | null; unit: string; ref_low: number | null; ref_high: number | null; flag: LabFlag | null;
   date: string; page: number; confidence: number | null; review: LabReview; model: string | null;
 }
+export interface NextQuestion {
+  feature_id: string; question: string; why: string; ig: number; splits: string[]; question_source: "model" | "template";
+}
+export interface RankedPattern { disease_id: string; label: string; score: number; rank: number }
+export interface AnswerResult { before: RankedPattern[]; after: RankedPattern[]; entry_id: string | null }
+export type Answer = "yes" | "no" | "unsure";

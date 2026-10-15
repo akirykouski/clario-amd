@@ -1,5 +1,5 @@
 import type {
-  AiCall, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
+  AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
   ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState,
 } from "./types";
 
@@ -61,6 +61,9 @@ export const api = {
   searchTerms: (q: string) => request<Term[]>("GET", "/terms/search", { params: { q } }),
   timeline: () => request<Timeline>("GET", "/timeline"),
   patterns: () => request<PatternsResponse>("GET", "/patterns"),
+  nextQuestion: (lang: string) => request<NextQuestion | null>("GET", "/patterns/next-question", { params: { lang } }),
+  answerQuestion: (b: { feature_id: string; answer: Answer; question?: string; lang?: string }) =>
+    request<AnswerResult>("POST", "/patterns/answer", { body: b }),
   demo: () => request<unknown>("POST", "/demo", { body: { persona: "giulia" } }),
   share: (b: ShareRequest) => request<ShareResult>("POST", "/share", { body: b }),
   clinicKey: (url?: string) => request<ClinicKey>("GET", "/clinic/key", { params: { url } }),

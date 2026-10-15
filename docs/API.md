@@ -25,6 +25,8 @@ Shapes: `backend/clario/models.py`. One codebase, two modes: `CLARIO_MODE=patien
 | GET | `/api/terms/search` | `?q=` | `Term[]` (ontology lookup for manual fixes) |
 | GET | `/api/timeline` | | `{days: [{date, entries, terms: [{hpo_id,label}]}], terms: Evidence[]}` |
 | GET | `/api/patterns` | | `{patterns: Pattern[], confirmed_terms: int, note: string}` (computed from confirmed or corrected entities only; negated, family-history, `needs_review` and rejected entities never count) |
+| GET | `/api/patterns/next-question` | `?lang=en\|it` | `NextQuestion \| null`: the one yes/no question with the highest expected information gain over the top patterns (null while fewer than 3 confirmed terms or nothing askable). Never names a condition or medicine; red-flag, medicine and lab-only terms are never asked |
+| POST | `/api/patterns/answer` | `{feature_id, answer: "yes"\|"no"\|"unsure", question?, lang?}` | `AnswerResult {before: RankedPattern[5], after: RankedPattern[5], entry_id}`. yes/no saves a diary entry "Answer to a question: <question> Yes\|No" with one confirmed entity (negated for no); unsure only records that it was skipped (`entry_id` null) |
 | POST | `/api/demo` | `{persona: "giulia"}` | loads synthetic entries (marked as demo) |
 | POST | `/api/share` | `ShareRequest` | `{package_id, clinic_url, expires_at, qr_payload, entities: n, entries: n}` |
 | GET | `/api/clinic/key` | `?url=` | proxy fetch of the clinic's public key (shown to the patient as a fingerprint) |

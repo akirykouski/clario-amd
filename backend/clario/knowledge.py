@@ -108,6 +108,10 @@ class Ontology:
     def ancestors(self, hpo_id: str) -> set[str]:
         return set(self._ancestors(hpo_id))
 
+    def descendants(self, hpo_id: str) -> set[str]:
+        """The term itself and everything below it."""
+        return set(self._descendants(hpo_id))
+
     def systems(self, hpo_id: str) -> set[str]:
         """Top-level organ systems (direct children of Phenotypic abnormality) a term belongs to."""
         top = set(self._children.get("HP:0000118", ()))

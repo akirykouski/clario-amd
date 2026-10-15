@@ -56,6 +56,35 @@ def evidence_from(entries: list[Entry], onto: Ontology) -> dict[str, Evidence]:
     return out
 
 
+def neutral_label(labels: list[str]) -> str:
+    """Evidence-first title for a pattern card: the strongest matched features, no condition name."""
+    feats = [l.strip() for l in labels if l.strip()][:3]
+    return (", ".join(feats[:1]).capitalize() + "".join(", " + f.lower() for f in feats[1:])) if feats else "Recorded features"
+
+
+def negated_ids(entries: list[Entry]) -> set[str]:
+    """Confirmed HPO terms the patient said are absent and never reported present in another note."""
+    conf = [ent for e in entries for ent in e.entities if ent.review in COUNTED and ent.hpo_id and not ent.family_history]
+    return {x.hpo_id for x in conf if x.negated} - {x.hpo_id for x in conf if not x.negated}
+
+
+def annotated_freq(onto: Ontology, disease, feature: str, floor: float = 0.02) -> float:
+    """P(feature | disease): annotated frequency, counting a more specific annotated descendant, else a floor."""
+    best = floor
+    for q, w in disease.phenotypes.items():
+        if w > best and (q == feature or feature in onto.ancestors(q)):
+            best = w
+    return min(best, 0.98)
+
+
+def negation_factor(onto: Ontology, negated: set[str], disease) -> float:
+    """Likelihood of the 'no' answers under a disease (softened so one answer never erases a pattern)."""
+    f = 1.0
+    for n in negated:
+        f *= 1.0 - 0.85 * annotated_freq(onto, disease, n)
+    return f
+
+
 def signal_for(score: float, n_matched: int) -> str | None:
     if score >= 0.75 and n_matched >= 5:
         return "strong"
@@ -106,12 +135,14 @@ def score_patterns(entries: list[Entry], onto: Ontology) -> list[Pattern]:
     if len(ev) < MIN_TERMS:
         return []
     patient = set(ev)
+    negated = negated_ids(entries)
     out: list[Pattern] = []
     families: set[str] = set()
     for disease, score, contrib in onto.top_diseases(patient, k=60):
         name = display_name(disease.name)
         if name.lower() in families:
             continue
+        score *= negation_factor(onto, negated, disease)
         matched_ids = [p for p, d, c in contrib if c > 0 and close(onto, p, d)]
         sig = signal_for(score, len(matched_ids))
         if not sig:
@@ -120,7 +151,8 @@ def score_patterns(entries: list[Entry], onto: Ontology) -> list[Pattern]:
         matched = sorted((ev[p] for p in matched_ids if p in ev), key=lambda e: -e.count)
         out.append(Pattern(disease_id=disease.id, disease_name=name, signal=sig, score=round(score, 3),
                            matched=matched, missing=missing_terms(onto, disease, patient),
-                           rationale=template_rationale(name, matched)))
+                           rationale=template_rationale(name, matched),
+                           neutral_label=neutral_label([m.label for m in matched])))
     rank = {"strong": 0, "moderate": 1, "weak": 2}
     return sorted(out, key=lambda p: (rank[p.signal], -p.score))[:MAX_PATTERNS]
 
