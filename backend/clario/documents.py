@@ -212,7 +212,7 @@ def compute_flag(num: float | None, lo: float | None, hi: float | None, given: s
         if lo is not None and num < lo:
             return "low"
         return "normal"
-    return given
+    return None  # no printed range to compare with: never claim "normal"
 
 
 def _vkey(r: RawLab) -> str:

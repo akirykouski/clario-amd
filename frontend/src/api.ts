@@ -71,6 +71,8 @@ export const api = {
   clinicKey: (url?: string) => request<ClinicKey>("GET", "/clinic/key", { params: { url } }),
   inbox: () => request<InboxRow[]>("GET", "/inbox"),
   package: (id: string) => request<SharePackage>("GET", `/inbox/${encodeURIComponent(id)}`),
+  decideLab: (pkg: string, labId: string, decision: "accepted" | "rejected" | "pending") =>
+    request<SharePackage>("PUT", `/inbox/${encodeURIComponent(pkg)}/labs/${encodeURIComponent(labId)}`, { body: { decision } }),
   startBrief: (id: string, lang?: string) => request<{ run_id: string }>("POST", `/inbox/${encodeURIComponent(id)}/brief${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
   brief: (id: string, v?: BriefView) => request<Brief>("GET", `/inbox/${encodeURIComponent(id)}/brief`, { params: v }),
   reviewItem: (pkg: string, item: string, b: { review: BriefItem["review"]; text?: string }) =>

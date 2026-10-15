@@ -133,8 +133,8 @@ class SharedEntity(BaseModel):
 
 
 class SharedLab(BaseModel):
-    """One lab row in the shared period. Rows a person confirmed or corrected, or that were read with high confidence
-    (`reviewed=false`, the brief says so). needs_review and rejected rows never leave the device."""
+    """One lab row. Rows a person confirmed or corrected, or that were read with high confidence
+    (`reviewed=false`: the clinic must accept or reject them before the brief is final). needs_review and rejected rows never leave the device."""
 
     test_name: str
     value_numeric: float | None = None
@@ -146,7 +146,12 @@ class SharedLab(BaseModel):
     date: str
     page: int = Field(description="Page within the imported document batch")
     entry_id: str | None = Field(None, description="The diary entry of the import, when known: what the brief cites")
-    reviewed: bool = Field(True, description="False: read by the model and not checked by a person")
+    reviewed: bool = Field(True, description="False: read from a document and not checked by a person (the clinic labels it 'From documents, pending check')")
+    id: str = Field("", description="Stable row id; the clinic's accept or reject decision is keyed by it")
+    test_key: str = Field("", description="Folded test name: groups the same test across documents into one history")
+    name_en: str | None = Field(None, description="English name of a known test, for an English clinic UI; test_name is as printed")
+    abnormal: bool = Field(False, description="Flag is low or high, or a text result reads positive")
+    decision: Literal["accepted", "rejected"] | None = Field(None, description="Set by the clinic server for unreviewed rows; absent in the sealed package")
 
 
 class SharePackage(BaseModel):

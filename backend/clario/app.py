@@ -84,6 +84,10 @@ class InboxIn(BaseModel):
     sealed: str
 
 
+class LabDecisionIn(BaseModel):
+    decision: str
+
+
 class ReviewIn(BaseModel):
     review: str
     text: str | None = None
@@ -388,7 +392,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             return len(evidence_from(entries, onto)), patient_patterns(entries, onto, lang)
 
         n_terms, pats = await asyncio.to_thread(compute)
-        return {"patterns": pats, "confirmed_terms": n_terms, "note": PATTERNS_NOTE[lang][0 if pats else 1]}
+        return {"patterns": pats, "confirmed_terms": n_terms, "note": PATTERNS_NOTE[lang][1 if n_terms < 3 else 0 if pats else 2]}
 
     doc_routes.register(app, s, vault, llm, spawn, gpu_reader)
     asked: dict[str, str] = {}  # feature_id -> question text last shown (so the diary entry quotes what was asked)
@@ -501,6 +505,8 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, runs: Runs, spawn, onto: Ontology) -> None:
     inbox_dir = s.data_dir / "inbox"
     briefs_dir = s.data_dir / "briefs"
+    labdec_dir = s.data_dir / "labdec"
+    labdec_dir.mkdir(parents=True, exist_ok=True)
     inbox_dir.mkdir(parents=True, exist_ok=True)
     briefs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -521,7 +527,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         return pkg
 
     def purge(pid: str) -> None:
-        for d in (inbox_dir, briefs_dir):
+        for d in (inbox_dir, briefs_dir, labdec_dir):
             with contextlib.suppress(FileNotFoundError):
                 (d / f"{pid}.json").unlink()
 
@@ -536,6 +542,26 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             b = Brief.model_validate_json(raw)
             save_brief(b)
             return b
+
+    def load_decisions(pid: str) -> dict[str, str]:
+        f = labdec_dir / f"{safe_id(pid)}.json"
+        if not f.exists():
+            return {}
+        try:
+            return json.loads(keys.open_data(f.read_bytes()))
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def decided(pkg: SharePackage, drop_rejected: bool) -> SharePackage:
+        """The package with the clinic's lab decisions applied. Unchecked rows the clinician accepted count as checked."""
+        dec = load_decisions(pkg.package_id)
+        labs = []
+        for l in pkg.labs:
+            d = dec.get(l.id) if not l.reviewed else None
+            if d == "rejected" and drop_rejected:
+                continue
+            labs.append(l.model_copy(update={"decision": d, "reviewed": l.reviewed or d == "accepted"}))
+        return pkg.model_copy(update={"labs": labs})
 
     def save_brief(b: Brief) -> Brief:
         """Briefs quote the diary, so they are encrypted at rest (key derived from the clinic key). The inbox is already sealed."""
@@ -581,7 +607,29 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
 
     @app.get("/api/inbox/{pid}")
     def get_pkg(pid: str) -> SharePackage:
-        return open_pkg(pid)
+        return decided(open_pkg(pid), drop_rejected=False)
+
+    @app.put("/api/inbox/{pid}/labs/{lab_id}")
+    def decide_lab(pid: str, lab_id: str, body: LabDecisionIn) -> SharePackage:
+        """The clinician accepts or rejects a lab row read from a document and not checked by the patient."""
+        pkg = open_pkg(pid)
+        row = next((l for l in pkg.labs if l.id == lab_id), None)
+        if row is None:
+            raise HTTPException(404, "lab row not found")
+        if row.reviewed:
+            raise HTTPException(409, "The patient already checked this row")
+        b = load_brief(pid)
+        if b and b.finalized:
+            raise HTTPException(409, "Brief is final")
+        if body.decision not in ("pending", "accepted", "rejected"):
+            raise HTTPException(422, "decision must be pending, accepted or rejected")
+        dec = load_decisions(pid)
+        if body.decision == "pending":
+            dec.pop(lab_id, None)
+        else:
+            dec[lab_id] = body.decision
+        (labdec_dir / f"{pid}.json").write_bytes(keys.seal_data(json.dumps(dec).encode()))
+        return decided(pkg, drop_rejected=False)
 
     async def draft(rid: str, pkg: SharePackage, lang: str = "en") -> None:
         try:
@@ -626,7 +674,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     def view(pid: str, audience: str | None, lang: str | None) -> tuple[SharePackage, Brief, str, str]:
         if audience not in (None, "clinician", "patient"):
             raise HTTPException(422, "audience must be clinician or patient")
-        pkg = open_pkg(pid)
+        pkg = decided(open_pkg(pid), drop_rejected=True)
         b = load_brief(pid)
         if not b:
             raise HTTPException(404, "No brief yet")
@@ -671,6 +719,12 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         pending = [i for i in b.items if i.review == "pending"]
         if pending:
             raise HTTPException(409, f"{len(pending)} AI item(s) still need review")
+        dpkg = decided(open_pkg(pid), drop_rejected=False)
+        unchecked = [l for l in dpkg.labs if not l.reviewed and l.decision is None]
+        if unchecked:
+            raise HTTPException(409, f"{len(unchecked)} lab row(s) from documents still need a decision")
+        b.items = [i for i in b.items if not (i.section == "labs" and i.origin == "patient")] + \
+            briefing.lab_items(dpkg.model_copy(update={"labs": [l for l in dpkg.labs if l.decision != "rejected"]}), b.lang)
         b.finalized = True
         return save_brief(b)
 

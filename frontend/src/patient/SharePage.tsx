@@ -95,7 +95,7 @@ function Success({ res, onAgain }: { res: ShareResult; onAgain: () => void }) {
       <h1 className="text-3xl">{t("share.sent")}</h1>
       <div className="card space-y-1" role="status">
         <p className="font-bold text-lg">{t("share.validUntil", { date: fmtDate(res.expires_at, { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) })}</p>
-        <p>{t("share.counts", { entries: res.entries, entities: res.entities })}</p>
+        <p>{t("share.counts", { entries: res.entries, m: res.mentions ?? res.entities, t: res.terms ?? res.entities })}</p>
         <p className="text-xs text-muted">{t("share.package")} <span className="font-mono break-all">{res.package_id}</span></p>
       </div>
       <div className="card flex flex-col items-center gap-2">

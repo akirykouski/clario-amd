@@ -10,8 +10,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from cryptography.hazmat.primitives import hashes
@@ -58,14 +59,37 @@ def _clinic_copy(x: Entity) -> Entity:
     return x.model_copy(update={"hpo_id": None, "hpo_label": None}) if x.family_history else x
 
 
+# English names for the tests the shipped Italian referti print; test_name stays as printed.
+LAB_NAMES_EN = {
+    "proteineurinarie": "Urine protein", "sodio": "Sodium", "pcr": "CRP", "mcv": "MCV", "c3": "C3", "c4": "C4",
+    "glicemia": "Glucose", "emoglobina": "Hemoglobin", "antidsdna": "Anti-dsDNA", "neutrofili": "Neutrophils",
+    "ematocrito": "Hematocrit", "ft3": "FT3", "tsh": "TSH", "ves": "ESR", "potassio": "Potassium", "ana": "ANA",
+    "alt": "ALT", "creatinina": "Creatinine", "piastrine": "Platelets", "vitamina d": "Vitamin D", "vitamind": "Vitamin D",
+    "colesterolototale": "Total cholesterol", "sideremia": "Serum iron", "globulibianchi": "White blood cells",
+    "globulirossi": "Red blood cells", "azotemia": "Blood urea nitrogen", "linfociti": "Lymphocytes",
+}
+_POSITIVE = re.compile(r"^\s*(positiv|reattiv|reactive|detected|rilevat)", re.I)
+RECENT_DAYS = 365
+
+
+def lab_abnormal(l: LabResult) -> bool:
+    return l.flag in ("low", "high") or bool(l.value_text and _POSITIVE.match(l.value_text))
+
+
 def shared_labs(labs: list[LabResult], since: str, until: str, batch_entry: dict[str, str] | None = None) -> list[SharedLab]:
-    """Lab rows in the period a person confirmed or corrected, plus confident rows nobody has looked at (marked)."""
+    """Lab history a clinic needs: every result of each test that appears in the period (so an earlier positive stays
+    visible next to a later negative), plus any out-of-range result from the 12 months before the end date.
+    Rows a person confirmed or corrected, plus confident rows nobody has looked at (marked, the clinic must check them)."""
     batch_entry = batch_entry or {}
-    rows = [l for l in labs if since <= l.date <= until and l.review in (*COUNTED, "auto")]
+    ok = [l for l in labs if l.date <= until and l.review in (*COUNTED, "auto")]
+    in_period = {l.test_key for l in ok if since <= l.date <= until}
+    floor = (date.fromisoformat(until) - timedelta(days=RECENT_DAYS)).isoformat()
+    rows = [l for l in ok if l.test_key in in_period or (l.date >= floor and lab_abnormal(l))]
     rows.sort(key=lambda l: (l.date, l.test_key, l.page))
     return [SharedLab(test_name=l.test_name, value_numeric=l.value_numeric, value_text=l.value_text, unit=l.unit,
                       ref_low=l.ref_low, ref_high=l.ref_high, flag=l.flag, date=l.date, page=l.page,
-                      entry_id=batch_entry.get(l.batch_id), reviewed=l.review in COUNTED) for l in rows]
+                      entry_id=batch_entry.get(l.batch_id), reviewed=l.review in COUNTED, id=l.id, test_key=l.test_key,
+                      name_en=LAB_NAMES_EN.get(l.test_key), abnormal=lab_abnormal(l)) for l in rows]
 
 
 def build_package(entries: list[Entry], since: str, until: str, patient_alias: str, note: str | None,

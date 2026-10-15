@@ -40,6 +40,7 @@ class DraftOut(BaseModel):
 
 
 NOT_REVIEWED = "not reviewed by a person"
+LAB_PENDING = {"en": "from documents, pending check", "it": "da documenti, da verificare"}
 SECTIONS = {"summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"}
 
 
@@ -69,10 +70,11 @@ def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
     it = lang == "it"
     groups: dict[str, list] = {}
     for l in pkg.labs:
-        groups.setdefault(l.test_name, []).append(l)
+        groups.setdefault(l.test_key or l.test_name, []).append(l)
     items = []
-    for name, rows in sorted(groups.items(), key=lambda kv: min(r.date for r in kv[1])):
+    for _, rows in sorted(groups.items(), key=lambda kv: min(r.date for r in kv[1])):
         rows = sorted(rows, key=lambda r: (r.date, r.page))
+        name = rows[0].name_en if lang == "en" and rows[0].name_en else rows[0].test_name
         parts = []
         for r in rows:
             val = r.value_text or (f"{r.value_numeric:g}" if r.value_numeric is not None else "?")
@@ -87,7 +89,7 @@ def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
             rtxt = f"; {'intervallo stampato' if it else 'printed range'} {lo} {'a' if it else 'to'} {hi}".replace("  ", " ")
         mark = ""
         if any(not r.reviewed for r in rows):
-            mark = f" ({'non verificato da una persona' if it else NOT_REVIEWED})"
+            mark = f" ({LAB_PENDING[lang]})"
         cites = sorted({r.entry_id for r in rows if r.entry_id})
         items.append(BriefItem(id=_id(), section="labs", text=f"{name}: {'; '.join(parts)}{rtxt}{mark}", cites=cites,
                                origin="patient", review="accepted"))

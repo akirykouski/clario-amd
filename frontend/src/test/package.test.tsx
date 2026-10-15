@@ -21,8 +21,11 @@ const pkg: SharePackage = {
     ent("Systemic lupus erythematosus", null, { family_history: true, type: "finding" }),
   ],
   labs: [
-    { test_name: "Cholesterol", value_numeric: 264, value_text: null, unit: "mg/dL", ref_low: 0, ref_high: 200, flag: "high", date: "2026-09-15", page: 2, entry_id: "e1", reviewed: true },
-    { test_name: "Glucose", value_numeric: 90, value_text: null, unit: "mg/dL", ref_low: 70, ref_high: 100, flag: "normal", date: "2026-09-15", page: 3, entry_id: "e1", reviewed: false },
+    { test_name: "Cholesterol", value_numeric: 264, value_text: null, unit: "mg/dL", ref_low: 0, ref_high: 200, flag: "high", date: "2026-09-15", page: 2, entry_id: "e1", reviewed: true, id: "l1", test_key: "colesterolototale", name_en: null, abnormal: true, decision: null },
+    { test_name: "Glucose", value_numeric: 90, value_text: null, unit: "mg/dL", ref_low: 70, ref_high: 100, flag: "normal", date: "2026-09-15", page: 3, entry_id: "e1", reviewed: false, id: "l2", test_key: "glicemia", name_en: null, abnormal: false, decision: null },
+    { test_name: "ANA", value_numeric: null, value_text: "Positivo 1:160", unit: "", ref_low: null, ref_high: null, flag: null, date: "2026-04-07", page: 1, entry_id: "e1", reviewed: true, id: "l3", test_key: "ana", name_en: "ANA", abnormal: true, decision: null },
+    { test_name: "ANA", value_numeric: null, value_text: "Negativo", unit: "", ref_low: null, ref_high: null, flag: null, date: "2026-09-15", page: 1, entry_id: "e1", reviewed: true, id: "l4", test_key: "ana", name_en: "ANA", abnormal: false, decision: null },
+    { test_name: "Glicemia", value_numeric: 80, value_text: null, unit: "mg/dL", ref_low: null, ref_high: null, flag: null, date: "2026-09-16", page: 3, entry_id: "e1", reviewed: true, id: "l5", test_key: "glicemia", name_en: "Glucose", abnormal: false, decision: null },
   ],
   patterns: [
     { disease_id: "ORPHA:1", disease_name: "Strong one", signal: "moderate", score: 0.5, matched: [], missing: [], rationale: "", rationale_source: "template", neutral_label: "" },
@@ -38,12 +41,23 @@ describe("clinic package page", () => {
     expect(await screen.findByTestId("pkg-counts")).toHaveTextContent("2 mentions of 1 terms");
     const terms = screen.getByRole("heading", { name: "Confirmed terms" }).parentElement as HTMLElement;
     expect(within(terms).queryByText("Systemic lupus erythematosus")).toBeNull();
-    expect(within(terms).getByText("Arthralgia")).toBeInTheDocument();
+    expect(within(terms).getAllByText("Arthralgia").length).toBeGreaterThan(0);
     const fam = screen.getByRole("heading", { name: "Family history (reported by the patient)" }).parentElement as HTMLElement;
     expect(within(fam).getByText(/Systemic lupus erythematosus/)).toBeInTheDocument();
     const labs = screen.getByTestId("pkg-labs");
     expect(within(labs).getAllByText("Cholesterol").length).toBeGreaterThan(0);
-    expect(within(labs).getAllByText(/not reviewed by a person/).length).toBeGreaterThan(0);
+    expect(within(labs).getAllByText(/From documents, pending check/).length).toBeGreaterThan(0);
+    // one history per test, oldest to newest: the earlier positive stays visible next to the later negative
+    const ana = within(labs).getAllByTestId("lab-test").find((x) => x.textContent?.includes("ANA")) as HTMLElement;
+    const vals = within(ana).getAllByRole("listitem").map((x) => x.textContent ?? "");
+    expect(vals[0]).toContain("Positivo 1:160");
+    expect(vals[0]).toContain("Positive");
+    expect(vals[1]).toContain("Negativo");
+    // lab names follow the UI language: Glucose in English
+    expect(within(labs).getAllByText("Glucose").length).toBeGreaterThan(0);
+    expect(within(labs).queryByText("Glicemia")).toBeNull();
+    // an unchecked row blocks finalizing until the clinician decides
+    expect(within(labs).getAllByRole("button", { name: /Accept/ }).length).toBeGreaterThan(0);
     const weak = screen.getByText("Weaker signals (1)").closest("details") as HTMLElement;
     expect(within(weak).getByText("Weak one")).toBeInTheDocument();
     expect(within(weak).queryByText("Strong one")).toBeNull();

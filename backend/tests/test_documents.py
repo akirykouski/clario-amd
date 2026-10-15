@@ -103,7 +103,8 @@ def test_flag_is_recomputed_in_code():
     assert docs.compute_flag(5.1, 0.0, 5.0, "normal") == "high"
     assert docs.compute_flag(0.3, 0.5, 0.9, None) == "low"
     assert docs.compute_flag(0.6, 0.5, 0.9, "high") == "normal"
-    assert docs.compute_flag(None, None, None, "high") == "high"
+    assert docs.compute_flag(None, None, None, "high") is None  # no printed range: no flag
+    assert docs.compute_flag(5.0, None, None, "normal") is None
 
 
 def test_raw_lab_reads_italian_decimals_and_text_results():
