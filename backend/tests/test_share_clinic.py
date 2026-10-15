@@ -49,7 +49,15 @@ def test_share_draft_review_finalize(unlocked, clinic_server, tmp_path):
             review = ["accepted", "rejected", "edited"][i % 3]
             body = {"review": review} | ({"text": "Edited by clinician."} if review == "edited" else {})
             assert clinic.patch(f"/api/brief-items/{pid}/{item['id']}", json=body).status_code == 200
-        assert clinic.post(f"/api/inbox/{pid}/brief/finalize").json()["finalized"] is True
+        assert clinic.get("/api/clinic/metrics").json() == {"briefs": [], "totals": {"accepted": 0, "edited": 0, "rejected": 0},
+                                                            "finalized": 0, "timed": 0, "mean_review_seconds": None}
+        fin = clinic.post(f"/api/inbox/{pid}/brief/finalize", json={"seconds": 220.44}).json()
+        assert fin["finalized"] is True and fin["review_seconds"] == 220.4
+        want = {k: sum(1 for j in range(len(ai)) if ["accepted", "rejected", "edited"][j % 3] == k) for k in ("accepted", "rejected", "edited")}
+        m = clinic.get("/api/clinic/metrics").json()
+        assert m["finalized"] == 1 and m["timed"] == 1 and m["mean_review_seconds"] == 220.4
+        assert m["totals"] == want and m["briefs"][0]["package_id"] == pid and m["briefs"][0]["accepted"] == want["accepted"]
+        assert "text" not in m["briefs"][0]
         md = clinic.get(f"/api/inbox/{pid}/brief.md").text
         rejected = [it["text"] for k, it in enumerate(ai) if k % 3 == 1]
         assert all(t not in md for t in rejected)

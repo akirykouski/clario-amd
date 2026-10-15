@@ -2,7 +2,7 @@
 
 Record on the live AMD URLs (patient app `https://<ip>.sslip.io`, clinic console `https://clinic.<ip>.sslip.io`); localhost would hide the compute, so it is not used. Persona: Giulia, 29, Milan, synthetic (`backend/clario/data/demo`, loaded by "load the demo patient"). The synthetic-data banner stays visible. Phone-width window for the patient app (390 px), desktop width for the clinic console.
 
-Numbers on screen come from result files only. Markers: **[AMD]** where GPU telemetry must be visible, **[NUM]** where a real eval or bench number appears. If the file behind a marker does not exist at recording time, cut that line.
+Record the AMD lines only after the stack has run on the droplet; before that, cut every **[AMD]** and **[NUM]** line. Numbers on screen come from result files only. Markers: **[AMD]** where GPU telemetry must be visible, **[NUM]** where a real eval or bench number appears. If the file behind a marker does not exist at recording time, cut that line.
 
 | # | Time | Screen (route) | Action | Voice-over | On-screen caption |
 |---|---|---|---|---|---|
@@ -13,9 +13,9 @@ Numbers on screen come from result files only. Markers: **[AMD]** where GPU tele
 | 5 | 1:05 to 1:25 | Import documents (`/import`) then Labs (`/labs`) | Drop the demo lab PDF. Pages per second counter runs. **[AMD]** the chip "AMD Instinct MI300X, GPU n%" visible. Cut to the lab history with a flagged value | "Her lab report goes in as a PDF. Pages are read in parallel by Gemma 4 vision on the MI300X, and the counter shows pages per second. Flags are recomputed in code from the printed range." | "**[AMD]** Live MI300X utilisation. **[NUM]** `{{documents.pages_per_sec}}` pages per second" |
 | 6 | 1:25 to 1:40 | Patterns (`/patterns`) | Show a pattern card: neutral title, signal pill, recorded features, what is missing, then the next-question card, answer "yes" | "Patterns appear as weak, moderate or strong, with the evidence and what is missing. No condition name, no percentage. The next question is the yes or no that would tell the picture apart most." | "Signals for the visit" |
 | 7 | 1:40 to 2:00 | Share (`/share`) | Enter the clinic address, show the key fingerprint, pick eight weeks, expiry 3 days, add a note, send. QR success screen | "She picks eight weeks and sends them to her clinic. Only confirmed terms and those notes leave. The package is sealed to the clinic's key and expires." | "Sealed to the clinic. Expires in 3 days" |
-| 8 | 2:00 to 2:10 | What left this device (`/privacy`) | Show the call list and the "chain verified" result | "Every model call is on this page, in a hash chain she can verify." | "Tamper-evident model call log" |
+| 8 | 2:00 to 2:10 | What left this device (`/privacy`) | Show the call list and the "chain verified" result | "Every model call is on this page, in a hash chain she can verify. Before text reaches a remote model, rules replace direct identifiers, and the preview shows the exact text the model receives. On our synthetic test set that misses 5.8% of identifiers." | "Tamper-evident model call log. **[NUM]** 5.8% of identifiers missed, synthetic test half, n = 712, `eval/results/pii_leak.json`" |
 | 9 | 2:10 to 2:35 | Clinic Inbox (`/`) then Package (`/p/:id`) | Open the package, press draft brief. **[AMD]** header chip "AMD Instinct MI300X, vLLM", tokens per second and latency stream while the brief fills. **[NUM]** `{{bench.brief.c1.out_tok_per_s}}` tokens per second at concurrency 1 only if the bench file exists | "At the clinic, the package opens on a server with an AMD Instinct MI300X. Gemma 4 31B on vLLM drafts the brief and cites her entries, and you can see the tokens per second as it writes." | "**[AMD]** Gemma 4 31B on vLLM, ROCm. **[NUM]** tokens per second" |
-| 10 | 2:35 to 2:50 | Brief panel (clinic) | Accept two items, edit one, reject one. Press Finalize (enabled once nothing is pending), open the print view | "The clinician accepts, edits or rejects every AI line. Finalize stays locked until nothing is pending. The printout says the AI-drafted items were reviewed." | "Human review before anything is final" |
+| 10 | 2:35 to 2:50 | Brief panel (clinic) | Accept two items, edit one, reject one. Point at the decision line (lines accepted, edited, rejected and time to finalize). Press Finalize (enabled once nothing is pending), open the print view | "The clinician accepts, edits or rejects every AI line. Finalize stays locked until nothing is pending. The printout says the AI-drafted items were reviewed." | "Human review before anything is final" |
 | 11 | 2:50 to 3:00 | Results slide, then cover | Show the extraction table. **[NUM]** entity F1 base vs LoRA from `eval/results` | "On held-out diseases, the fine-tuned extractor scores `{{extraction.ft-e4b-r16.entity_f1}}` entity F1 against `{{extraction.base-e4b.entity_f1}}` for the base model. Clario organises. Clinicians decide." | "**[NUM]** Held-out test split, n = `{{extraction.ft-e4b-r16.n}}`. Source: `eval/results`" |
 
 ## Placeholders in this video
@@ -24,11 +24,12 @@ Numbers on screen come from result files only. Markers: **[AMD]** where GPU tele
 |---|---|
 | `{{documents.pages_per_sec}}` | lab import run, `backend/scripts/eval_documents.py` output saved to `eval/results/` (or read the live counter and write down the value shown) |
 | `{{bench.brief.c1.out_tok_per_s}}` | `bench/results/amd-mi300x-gemma4-31b-<timestamp>.json` |
+| `5.8%`, `n = 712` (row 8) | `eval/results/pii_leak.json`, `metrics.test.overall_identifiers` (exists today) |
 | `{{extraction.ft-e4b-r16.entity_f1}}`, `{{extraction.base-e4b.entity_f1}}`, `{{extraction.ft-e4b-r16.n}}` | `eval/results/extraction_ft-e4b-r16.json`, `extraction_base-e4b.json` |
 
 ## Recording notes
 
-1. Run the bootstrap with `--app` and, if time allows, `--synth --train --eval --bench` first so the numbers exist. Without a LoRA served, the patient demo uses the base E4B and the results line must say so.
+1. Run the bootstrap with `--app` and, if time allows, `--synth N --train --eval --bench` first so the numbers exist; they are measured on the droplet and land in `eval/results`. Without a LoRA served, the patient demo uses the base E4B and the results line must say so. If the extraction result files do not exist at recording time, cut row 11's figures and end on the cover.
 2. The GPU chip only shows when `GET /api/system/gpu` returns data. Check it with `curl -s https://clinic.<ip>.sslip.io/api/system/gpu` before recording. If it returns `null`, fix telemetry or drop the AMD caption. Never show a mock.
 3. Do not type real health information. Use the demo persona.
 4. Export as .mp4 (H.264). Add captions as burned-in text. Keep the voice-over under 140 words per minute.

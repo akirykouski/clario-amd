@@ -33,7 +33,7 @@ from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
 from .knowledge import Ontology
 from .llm import extract_json, make_llm
-from .models import AnswerResult, Brief, Entity, Entry, LabResult, NextQuestion, ShareRequest, SharePackage, Term
+from .models import AnswerResult, Brief, BriefDecisions, ClinicMetrics, DecisionCounts, Entity, Entry, LabResult, NextQuestion, ShareRequest, SharePackage, Term
 from .next_question import as_ranked_patterns, next_question, template_question
 from .patterns import counts_as_evidence, evidence_from, patient_patterns, score_patterns
 from .review import ACTIONS, EntityReview, apply_entity_action, correction_record, register_review_kind
@@ -91,6 +91,10 @@ class LabDecisionIn(BaseModel):
 class ReviewIn(BaseModel):
     review: str
     text: str | None = None
+
+
+class FinalizeIn(BaseModel):
+    seconds: float | None = None  # opening the package to finalize, measured in the clinic UI
 
 
 # ---------------------------------------------------------------- run bus (SSE)
@@ -509,6 +513,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     labdec_dir.mkdir(parents=True, exist_ok=True)
     inbox_dir.mkdir(parents=True, exist_ok=True)
     briefs_dir.mkdir(parents=True, exist_ok=True)
+    decisions_file = s.data_dir / "decisions.jsonl"  # counts and timing only, no diary text
 
     def safe_id(pid: str) -> str:
         if not pid.startswith("pkg_") or not pid[4:].isalnum():
@@ -711,7 +716,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         raise HTTPException(404, "item not found")
 
     @app.post("/api/inbox/{pid}/brief/finalize")
-    def finalize(pid: str) -> Brief:
+    def finalize(pid: str, body: FinalizeIn | None = None) -> Brief:
         open_pkg(pid)
         b = load_brief(pid)
         if not b:
@@ -726,7 +731,34 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         b.items = [i for i in b.items if not (i.section == "labs" and i.origin == "patient")] + \
             briefing.lab_items(dpkg.model_copy(update={"labs": [l for l in dpkg.labs if l.decision != "rejected"]}), b.lang)
         b.finalized = True
-        return save_brief(b)
+        b.finalized_at = now_iso()
+        secs = body.seconds if body else None
+        b.review_seconds = round(secs, 1) if secs is not None and 0 <= secs < 86400 else None
+        save_brief(b)
+        tally = DecisionCounts()
+        for i in b.items:
+            if i.origin == "ai" and i.review in ("accepted", "edited", "rejected"):
+                setattr(tally, i.review, getattr(tally, i.review) + 1)
+        row = BriefDecisions(package_id=pid, finalized_at=b.finalized_at, review_seconds=b.review_seconds, **tally.model_dump())
+        with decisions_file.open("a") as fh:
+            fh.write(row.model_dump_json() + "\n")
+        return b
+
+    @app.get("/api/clinic/metrics")
+    def clinic_metrics() -> ClinicMetrics:
+        latest: dict[str, BriefDecisions] = {}
+        if decisions_file.exists():
+            for line in decisions_file.read_text().splitlines():
+                with contextlib.suppress(ValueError):
+                    r = BriefDecisions.model_validate_json(line)
+                    latest[r.package_id] = r
+        rows = sorted(latest.values(), key=lambda r: r.finalized_at, reverse=True)
+        timed = [r.review_seconds for r in rows if r.review_seconds is not None]
+        return ClinicMetrics(
+            briefs=rows, finalized=len(rows), timed=len(timed),
+            totals=DecisionCounts(accepted=sum(r.accepted for r in rows), edited=sum(r.edited for r in rows),
+                                  rejected=sum(r.rejected for r in rows)),
+            mean_review_seconds=round(sum(timed) / len(timed), 1) if timed else None)
 
     @app.get("/api/inbox/{pid}/brief.md", response_class=PlainTextResponse)
     def brief_md(pid: str, audience: str | None = None, lang: str | None = None):

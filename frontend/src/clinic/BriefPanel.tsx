@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Pencil, Printer, X } from "lucide-react";
 import { api } from "../api";
 import type { Brief, BriefItem, BriefSection, SharePackage } from "../types";
@@ -6,9 +6,16 @@ import { canFinalize, fmtDate, fmtNum } from "../lib";
 import { ErrorBox, Spinner } from "../components/ui";
 import { tn, useT, type Key } from "../i18n";
 import { useRun } from "./useRun";
+import { DecisionLine } from "./Metrics";
 
 const SECTIONS: BriefSection[] = ["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"];
 const sectionTitle = (s: BriefSection) => `brief.section.${s}` as Key;
+
+export function countDecisions(items: BriefItem[]) {
+  const c = { accepted: 0, edited: 0, rejected: 0 };
+  for (const i of items) if (i.origin === "ai" && i.review !== "pending") c[i.review] += 1;
+  return c;
+}
 
 export function jumpTo(entryId: string) {
   const el = document.getElementById(`entry-${entryId}`);
@@ -54,6 +61,7 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
   const { state, start } = useRun();
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const openedAt = useRef(Date.now()); // the panel mounts when the clinician opens the package
   const [copy, setCopy] = useState<"clinician" | "patient">("clinician");
   const [patientCopy, setPatientCopy] = useState<Brief | null>(null);
   const shown = brief ?? (state.status === "done" ? state.brief ?? null : null);
@@ -74,7 +82,7 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
   };
   const finalize = async () => {
     setBusy(true); setErr(null);
-    try { setBrief(await api.finalize(pkg.package_id)); } catch (x) { setErr((x as Error).message); }
+    try { setBrief(await api.finalize(pkg.package_id, (Date.now() - openedAt.current) / 1000)); } catch (x) { setErr((x as Error).message); }
     setBusy(false);
   };
 
@@ -131,6 +139,9 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
                     </section>
                   );
                 })}
+                {shown.items.some((i) => i.origin === "ai" && i.review !== "pending") && (
+                  <DecisionLine counts={countDecisions(shown.items)} seconds={shown.finalized ? shown.review_seconds : null} />
+                )}
                 <div className="flex items-start gap-3 flex-wrap">
                   {!shown.finalized && <FinalizeButton items={shown.items} onClick={finalize} busy={busy} pendingLabs={pendingLabs} />}
                   {shown.finalized && (

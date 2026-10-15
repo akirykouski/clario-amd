@@ -384,6 +384,13 @@ export const en = {
   "brief.chipLatency": "{s} s",
   "brief.chipGpu": "GPU {name}",
   "brief.flagged": "Citation mismatch",
+  "metrics.lines": "Lines accepted {a} · edited {e} · rejected {r}",
+  "metrics.finalizeTime": "{d} to finalize",
+  "metrics.avgTime": "{d} average to finalize",
+  "metrics.briefs_one": "{n} finalized brief",
+  "metrics.briefs_other": "{n} finalized briefs",
+  "metrics.duration.min": "{m} min {s} s",
+  "metrics.duration.sec": "{s} s",
 } as const;
 
 export type Key = keyof typeof en;
