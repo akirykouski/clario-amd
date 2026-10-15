@@ -37,3 +37,9 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 - GPU telemetry: `GET /api/system/gpu` (backend/clario/gpu.py, stdlib only, also the sidecar server). amd-smi JSON shape is from AMD docs, unverified on hardware.
 - `CLARIO_DEMO_INSTANCE=1` shows the synthetic-data banner in both apps (health.demo_instance).
 - Tooling quirk: worktree-isolated shells refuse compound commands containing git/globs/heredocs; use plain commands and the Write/Edit tools.
+## ML lane (train/, eval/) must-knows
+- Claude/Haiku output never becomes a training target. `synth.py` refuses anthropic.com; Haiku only drafts gold for human review (`train/gold_draft.py`) and acts as an eval comparator.
+- Targets are extraction_v3 (`confidence` null in training data). `prompt.py` is the single prompt source; `prep.check_sft` refuses old-format chat files.
+- `eval/results/extraction_*.json` must carry n, dataset, model, backend, date. Dry-run and offline files are labelled (`dry_run: true`) and rendered apart by `eval/make_results_md.py`.
+- PsyTAR is only available through a store page that returns 403 to scripts: download in a browser, then run `train/psytar_hpo.py`.
+- Run train tests from `train/` with `../backend/.venv/bin/python -m pytest -q`.

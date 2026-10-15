@@ -193,6 +193,7 @@ def test_batch_upload_sse_and_labs(unlocked, folder):
 
 def test_gpu_is_read_from_system_route_when_it_exists(tmp_path, folder):
     app = create_app(settings(tmp_path))
+    app.router.routes[:] = [r for r in app.router.routes if getattr(r, "path", "") != "/api/system/gpu"]  # swap in a stub
 
     @app.get("/api/system/gpu")
     def gpu():
