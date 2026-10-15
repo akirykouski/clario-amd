@@ -106,9 +106,10 @@ def is_generic(onto: Ontology, hid: str) -> bool:
 
 
 # Signal tiers, set from the calibration benchmark (eval/pattern_calibration.py -> eval/results/pattern_calibration.json).
-# The benchmark showed the raw score barely separates right from wrong cards: precision sits at 45-55% across scores
-# 0.3-0.65 and falls above 0.7 (short annotation lists score high by chance). What predicts a correct card is its LEAD,
-# the score minus the best other condition's score: precision climbs from about 25% at no lead to about 90% at 0.15+.
+# The benchmark showed the raw score is a weak signal: precision of a card rises from 9% (score 0.2-0.3) to a ceiling of
+# 47% (0.6-0.7) and falls above 0.7 (short annotation lists score high by chance), so no score reaches 80%. What predicts
+# a correct card is its LEAD, the score minus the best other condition's score: precision climbs from 25% at no lead to
+# 77% at 0.10 and 87% at 0.15.
 # Each tier is a band of lead with a stated precision target (share of cards in that tier that are the simulated
 # condition, held-out run; the cut-off is the lowest lead that reaches target + 3 points on the calibration run):
 #   strong   = lead >= STRONG_LEAD    target >= 80% precision

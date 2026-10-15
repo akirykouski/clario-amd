@@ -243,9 +243,9 @@ def rationale(cuts: dict, tiers: dict, scores: list[dict]) -> str:
     flat = [r["precision"] for r in scores if r["precision"] is not None and r["cards"] >= MIN_SUPPORT] or [0.0]
     prec = tiers["precision"]
     parts = [
-        f"The raw score is a poor tier signal: held-out precision per 0.1 score band ranges only {min(flat):.2f} to {max(flat):.2f} "
-        f"with no steady rise (score_table_validation). The lead (the card's score minus the best other condition's score) "
-        f"does separate (lead_table_validation), so tiers are bands of lead.",
+        f"The raw score is a weak tier signal: held-out precision per 0.1 score band peaks at {max(flat):.2f} and falls again "
+        f"at the top bands, so no score cut-off reaches the strong target (score_table_validation). The lead (the card's "
+        f"score minus the best other condition's score) does separate (lead_table_validation), so tiers are bands of lead.",
         "Targets (share of cards in the tier that are the simulated condition): " +
         ", ".join(f"{t} >= {int(TARGETS[t]*100)}%" for t in ("strong", "moderate", "weak")) +
         f". Each cut-off is the lowest lead that reaches its target plus {int(SLACK*100)} points on the calibration run (twice the "
