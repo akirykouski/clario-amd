@@ -5,6 +5,8 @@
 set -euo pipefail
 
 MODEL="${1:-${MODEL:-google/gemma-4-31B-it}}"
+# Pin: newest release tag on Docker Hub on 2026-10-16 (https://hub.docker.com/r/vllm/vllm-openai-rocm/tags). Flags follow the vLLM Gemma 4
+# recipe (https://docs.vllm.ai/projects/recipes/en/latest/Google/Gemma4.html); TRITON_ATTN is only a fallback (see docker-compose.yml).
 IMAGE="${VLLM_IMAGE:-vllm/vllm-openai-rocm:v0.31.0}"
 NAME="${CONTAINER_NAME:-clario-vllm}"
 PORT="${PORT:-8001}"

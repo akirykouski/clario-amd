@@ -50,8 +50,15 @@ services:
       HIP_FORCE_DEV_KERNARG: "1"
       VLLM_ROCM_USE_AITER: ${VLLM_ROCM_USE_AITER:-0}
       VLLM_ATTENTION_BACKEND:
-    # VLLM_ATTENTION_BACKEND (no value) passes through only if exported on the host. AMD's Gemma 4 note says the TRITON_ATTN backend is needed on
-    # ROCm; if startup fails on attention, run: export VLLM_ATTENTION_BACKEND=TRITON_ATTN  (see README, unverified).
+    # Image pin and flags (checked 2026-10-16): v0.31.0 is the newest release tag of vllm/vllm-openai-rocm on Docker Hub
+    # (pushed 2026-10-04): https://hub.docker.com/r/vllm/vllm-openai-rocm/tags . The vLLM Gemma 4 recipe lists MI300X in BF16 with
+    # a plain `vllm serve` and the ROCm image, with no attention flag: https://docs.vllm.ai/projects/recipes/en/latest/Google/Gemma4.html
+    # AMD's ROCm optimization guide prefers the default ROCM_ATTN backend and names TRITON_ATTN as the fallback when it is slow or
+    # fails for a model: https://rocm.docs.amd.com/projects/ai-ecosystem/en/latest/optimization/vllm-v1-optimization.html
+    # So the attention backend stays at the default; bootstrap.sh retries once with TRITON_ATTN if startup fails on attention.
+    # VLLM_ATTENTION_BACKEND (no value) passes through only if exported on the host (bootstrap.sh also reads it from deploy/amd/.env).
+    # Optional, via BIG_EXTRA_ARGS: --kv-cache-dtype fp8 (about half the KV memory, per the recipe; check F1 before using it for results).
+    # Structured output needs no server flag: clients send response_format json_schema and vLLM constrains decoding to it.
     volumes:
       - ${HF_CACHE:-${HOME}/.cache/huggingface}:/root/.cache/huggingface
     command: >
