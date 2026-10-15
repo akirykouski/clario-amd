@@ -73,6 +73,38 @@ _PHONE = [
 ]
 _TITLE_NAME = re.compile(r"\b(?:Dr|Dott|Prof|Mr|Mrs|Ms|Sig)(?:\.|\.ssa|\.ra)?(?:ssa)?\s+" + _NAME_WORD)
 
+# A surname that follows a first name or a title: one or two capitalised words, optionally behind a particle
+# ("De Luca", "Della Valle"). Medical terms and sentence words are never taken.
+_PARTICLES = {"de", "di", "da", "del", "della", "dei", "degli", "dal", "dalla", "lo", "la", "le", "van", "von", "mc", "mac"}
+_NOT_SURNAME = {
+    "lupus", "raynaud", "sjogren", "sjögren", "crohn", "hashimoto", "graves", "behcet", "behçet", "addison", "cushing",
+    "parkinson", "alzheimer", "asperger", "down", "hodgkin", "kawasaki", "meniere", "ménière", "marfan", "wilson",
+    "syndrome", "sindrome", "disease", "malattia", "morbo", "fenomeno", "phenomenon", "test", "the", "a", "an", "and",
+    "or", "but", "i", "my", "in", "on", "at", "it", "he", "she", "we", "is", "was", "il", "un", "una", "e", "ma", "ho",
+    "mi", "ha", "ed", "se", "che", "per", "con", "oggi", "ieri", "domani", "today", "yesterday", "tomorrow",
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "lunedì", "martedì", "mercoledì",
+    "giovedì", "venerdì", "sabato", "domenica", "may",
+} | {m.lower() for m in _MONTHS_FULL} | {m.lower().rstrip(".") for m in _MONTHS_ABBR}
+_SURNAME_WORD = re.compile(r"[ \t]+([A-ZÀ-Ý][\w'’]*)")
+
+
+def _surname_end(text: str, pos: int) -> int:
+    """End of the personal-name span that continues after `pos` (a first name or a title), or `pos`."""
+    end, taken = pos, 0
+    while taken < 2:
+        m = _SURNAME_WORD.match(text, end)
+        if not m or m.group(1).lower() in _NOT_SURNAME:
+            break
+        if m.group(1).lower() in _PARTICLES:  # a particle only counts when a capitalised word follows it
+            nxt = _SURNAME_WORD.match(text, m.end())
+            if not nxt or nxt.group(1).lower() in _NOT_SURNAME or nxt.group(1).lower() in _PARTICLES:
+                break
+            end, taken = nxt.end(), taken + 2
+            continue
+        end, taken = m.end(), taken + 1
+    return end
+
+
 _NAMES_FILE = Path(__file__).parent / "data" / "first_names.txt"
 _name_re: re.Pattern | None = None
 
@@ -102,8 +134,8 @@ def _candidates(text: str) -> list[tuple[int, int, str]]:
         add(rx, "date")
     for rx in _PHONE:
         add(rx, "phone")
-    add(_TITLE_NAME, "name")
-    add(_names(), "name")
+    for rx in (_TITLE_NAME, _names()):
+        out.extend((m.start(), _surname_end(text, m.end()), "name") for m in rx.finditer(text))
     return out
 
 
