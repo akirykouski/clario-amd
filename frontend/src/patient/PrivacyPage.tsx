@@ -3,7 +3,8 @@ import { api } from "../api";
 import type { AiCall, PrivacyVerify } from "../types";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
-import { getLang, tn, useT } from "../i18n";
+import { tn, useT } from "../i18n";
+import { fmtDate } from "../lib";
 
 export function ChainStatus({ v }: { v: PrivacyVerify }) {
   const { t } = useT();
@@ -24,7 +25,7 @@ export function CallRow({ c }: { c: AiCall }) {
     <li className="card" data-testid="ai-call">
       <div className="flex flex-wrap justify-between gap-x-3 text-sm text-muted">
         <span className="font-mono">{c.id}</span>
-        <time dateTime={c.ts}>{new Date(c.ts).toLocaleString(getLang() === "it" ? "it-IT" : "en-GB", { dateStyle: "medium", timeStyle: "short" })}</time>
+        <time dateTime={c.ts}>{fmtDate(c.ts, { dateStyle: "medium", timeStyle: "short" })}</time>
       </div>
       <p className="mt-1 font-bold">{t(`purpose.${c.purpose}`)} <span className="font-normal text-muted">{t("privacy.on", { backend: c.backend, model: c.model })}</span></p>
       <p className="text-sm">

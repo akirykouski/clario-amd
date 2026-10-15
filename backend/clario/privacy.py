@@ -13,6 +13,7 @@ Medical content (terms, doses, lab values, scores) is deliberately left alone: t
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -202,7 +203,7 @@ class Redaction:
 
 
 # ====================================================================== call log
-def now_iso() -> str:
+def now_iso_ms() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
@@ -224,11 +225,26 @@ class VaultStore:
     def __init__(self, vault: Vault):
         self.v = vault
 
+    HEAD = "ai_call_head"
+
     def records(self) -> list[dict]:
         return sorted(self.v.all("ai_call"), key=lambda r: r.get("seq", 0))
 
+    def recent(self, limit: int) -> list[dict]:
+        """Newest first."""
+        return sorted(self.v.recent("ai_call", limit), key=lambda r: r.get("seq", 0), reverse=True)
+
+    def head(self) -> tuple[int, str] | None:
+        """(seq, hash) of the last record, from vault meta; a log written before the head was kept falls back to its newest row."""
+        raw = self.v.sealed_meta(self.HEAD)
+        if raw is not None:
+            h = json.loads(raw)
+            return h["seq"], h["hash"]
+        last = self.recent(1)
+        return (last[0].get("seq", 1), last[0].get("hash", GENESIS)) if last else None
+
     def add(self, rec: dict) -> None:
-        self.v.put("ai_call", rec["id"], rec)
+        self.v.put("ai_call", rec["id"], rec, meta={self.HEAD: json.dumps({"seq": rec["seq"], "hash": rec["hash"]}).encode()})
 
 
 class FileStore:
@@ -252,6 +268,21 @@ class FileStore:
             except Exception:  # noqa: BLE001 - wrong key or damaged: show nothing rather than the cipher text
                 rec = {**rec, "redacted_preview": ""}
         return rec
+
+    def recent(self, limit: int) -> list[dict]:
+        """Newest first."""
+        return self.records()[::-1][:limit]
+
+    def head(self) -> tuple[int, str] | None:
+        """(seq, hash) from the last line only; None when the file is empty or its last line is damaged."""
+        if not self.path.exists():
+            return None
+        lines = [ln for ln in self.path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        try:
+            last = json.loads(lines[-1]) if lines else None
+        except json.JSONDecodeError:
+            last = None
+        return (last["seq"], last["hash"]) if last and "seq" in last and "hash" in last else None
 
     def records(self) -> list[dict]:
         if not self.path.exists():
@@ -282,13 +313,16 @@ class CallLog:
         return cls(VaultStore(vault) if vault is not None else FileStore(s.data_dir / "ai_calls.jsonl", keys))
 
     def _load_head(self) -> tuple[int, str]:
-        recs = self.store.records()
+        head = self.store.head()
+        if head is not None:
+            return head
+        recs = self.store.records()  # empty log, or a last line that cannot be read: walk it
         return (recs[-1].get("seq", len(recs)), recs[-1].get("hash", GENESIS)) if recs else (0, GENESIS)
 
     def append(self, *, backend: str, model: str, purpose: str, preview: str, sent_text: str,
                redacted: bool = False, replacements: int = 0, images: int = 0) -> dict | None:
         purpose = purpose if purpose in PURPOSES else "other"
-        entry = {"ts": now_iso(), "backend": backend, "model": model, "purpose": purpose,
+        entry = {"ts": now_iso_ms(), "backend": backend, "model": model, "purpose": purpose,
                  "redacted_preview": preview[:200], "payload_sha256": sha256(sent_text),
                  "redacted": redacted, "replacements": replacements, "images": images}
         with self._lock:
@@ -312,8 +346,7 @@ class CallLog:
                 return None
 
     def calls(self, limit: int = 50) -> list[dict]:
-        recs = self.store.records()
-        return list(reversed(recs))[: max(1, min(limit, 500))]
+        return self.store.recent(max(1, min(limit, 500)))
 
     def verify(self) -> dict:
         prev, expect = GENESIS, 1
@@ -347,7 +380,12 @@ class PrivacyLLM:
         self._inner, self.log, self.pseudonymize = inner, log, pseudonymize
 
     def __getattr__(self, name: str):
-        return getattr(self._inner, name)
+        """Plain attributes of the inner client (backend, model, is_amd) pass through. A method never does: every
+        way to call the model is defined below, so a method added to LLM later cannot skip redaction and the log."""
+        value = getattr(self._inner, name)
+        if callable(value):
+            raise AttributeError(f"{type(self).__name__} does not forward {name}(); define it so the call is redacted and logged")
+        return value
 
     # -- internals
     def _prepare(self, task: str, messages: list[dict], payload: dict | None, purpose: str | None):
@@ -377,13 +415,15 @@ class PrivacyLLM:
         pl = payload
         if self.pseudonymize and payload and isinstance(payload.get("text"), str):
             pl = {**payload, "text": pseudonymize(payload["text"])[0]}  # the local hint must match what is sent
-        self._log(task, out, last_user, purpose, red)
-        return out, pl, red
+        return out, pl, red, (task, out, last_user, purpose, red)
+
+    async def _record(self, args: tuple) -> None:
+        """Write the log record off the event loop: it touches sqlite or a file."""
+        await asyncio.to_thread(self._log, *args)
 
     def _log(self, task: str, sent: list[dict], preview: str, purpose: str | None, red: Redaction) -> None:
         images = sum(1 for m in sent if isinstance(m.get("content"), list)
                      for p in m["content"] if isinstance(p, dict) and p.get("type") != "text")
-        task = "extract" if task == "hpo_pick" else task  # the HPO pick is part of extraction
         p = purpose or (task if task in PURPOSES else "other")
         self.log.append(backend=self._inner.backend, model=self._inner.model, purpose=p, preview=preview,
                         sent_text=json.dumps(sent, ensure_ascii=False, sort_keys=True), redacted=self.pseudonymize,
@@ -391,21 +431,25 @@ class PrivacyLLM:
 
     # -- LLM surface
     async def complete(self, task, messages, *, purpose=None, payload=None, **kw):
-        msgs, pl, _red = self._prepare(task, messages, payload, purpose)
+        msgs, pl, _red, rec = self._prepare(task, messages, payload, purpose)
+        await self._record(rec)
         return await self._inner.complete(task, msgs, payload=pl, **kw)
 
     async def stream(self, task, messages, *, purpose=None, payload=None, **kw):
-        msgs, pl, _red = self._prepare(task, messages, payload, purpose)
+        msgs, pl, _red, rec = self._prepare(task, messages, payload, purpose)
+        await self._record(rec)
         async for item in self._inner.stream(task, msgs, payload=pl, **kw):
             yield item
 
     async def json(self, task, messages, cls, *, purpose=None, payload=None, **kw):
-        msgs, pl, red = self._prepare(task, messages, payload, purpose)
+        msgs, pl, red, rec = self._prepare(task, messages, payload, purpose)
+        await self._record(rec)
         res, st = await self._inner.json(task, msgs, cls, payload=pl, **kw)
         return red.restore_in(res), st
 
     async def samples(self, task, messages, *args, purpose=None, payload=None, **kw):
-        msgs, pl, red = self._prepare(task, messages, payload, purpose)
+        msgs, pl, red, rec = self._prepare(task, messages, payload, purpose)
+        await self._record(rec)
         texts, st = await self._inner.samples(task, msgs, *args, payload=pl, **kw)
         return [self._restore_text(t, red) for t in texts], st
 

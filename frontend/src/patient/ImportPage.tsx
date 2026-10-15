@@ -3,7 +3,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Cpu, FileUp } from "lucide-react";
 import { api } from "../api";
 import { ErrorBox } from "../components/ui";
+import { useEventStream } from "../components/useEventStream";
 import { useT } from "../i18n";
+import { notifyReview } from "../lib";
 import type { BatchEvent, BatchStarted } from "../types";
 
 /** GPU load in percent from the reading `GET /api/system/gpu` puts on the progress stream (`util_pct`). */
@@ -26,24 +28,22 @@ export default function ImportPage() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const input = useRef<HTMLInputElement>(null);
-  const es = useRef<EventSource | null>(null);
+  const [stream, setStream] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ev, setEv] = useState<BatchEvent | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => () => es.current?.close(), []);
+  useEventStream<BatchEvent>(
+    stream,
+    (e) => e.done,
+    (e) => { setEv(e); if (e.done) { notifyReview(); setTimeout(() => nav("/labs"), 1200); } },
+    () => { setErr(t("import.lost")); setBusy(false); },
+  );
 
   const follow = ({ batch_id, pages }: BatchStarted) => {
     setEv({ batch_id, pages_done: 0, pages_total: pages, pages_per_sec: 0, gpu: null, errors: 0, labs: 0, needs_review: 0, done: false });
-    const src = new EventSource(api.batchEventsUrl(batch_id));
-    es.current = src;
-    src.onmessage = (m) => {
-      const e = JSON.parse(m.data) as BatchEvent;
-      setEv(e);
-      if (e.done) { src.close(); setTimeout(() => nav("/labs"), 1200); }
-    };
-    src.onerror = () => { src.close(); setErr(t("import.lost")); setBusy(false); };
+    setStream(api.batchEventsUrl(batch_id));
   };
 
   const run = async (go: () => Promise<BatchStarted>) => {

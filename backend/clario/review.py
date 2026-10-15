@@ -1,12 +1,8 @@
 """Human review queue: anything the system is unsure about goes to a person before it counts.
 
-`kind` names what is being reviewed. Each kind is a small handler registered in `app.state.review_kinds`
-(patient mode), so another module (for example lab values) can add a kind without touching the routes:
-
-    class ReviewKind(Protocol):
-        def items(self) -> list[dict]: ...                      # queue rows, shape of `item()` below
-        def apply(self, item_id, action, value) -> dict: ...    # raises LookupError (404) / ValueError (422);
-                                                                # returns {"before", "after", "entry_id"?, "source_excerpt"?}
+`kind` names what is being reviewed. Each kind is a small handler (see `ReviewKind`) added with
+`register_review_kind(app, name, handler)` (patient mode), so another module (for example lab values) can add a kind
+without touching the routes.
 
 Every decision is also written to the vault as a `correction_log` record (before/after), kept for later fine-tuning.
 """
@@ -15,20 +11,17 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timezone
 from typing import Callable, Protocol
+
+from fastapi import FastAPI
 
 from . import documents as docs
 from .knowledge import Ontology
-from .models import Entity, Entry, LabResult
+from .share import now_iso
+from .models import Entity, Entry, LabResult, route_review  # noqa: F401 - route_review re-exported
 
 ACTIONS = ("confirm", "correct", "reject")
 EXCERPT_WIDTH = 90
-
-
-def route_review(confidence: float | None, threshold: float) -> str:
-    """Below the threshold -> needs_review. No confidence measured -> auto."""
-    return "needs_review" if confidence is not None and confidence < threshold else "auto"
 
 
 def excerpt(text: str, quote: str, width: int = EXCERPT_WIDTH) -> str:
@@ -66,8 +59,18 @@ def apply_entity_action(ent: Entity, action: str, value: str | None, onto: Ontol
 
 
 class ReviewKind(Protocol):
-    def items(self) -> list[dict]: ...
-    def apply(self, item_id: str, action: str, value: str | None) -> dict: ...
+    def items(self) -> list[dict]:
+        """Queue rows, shaped like `entity_item` / `lab_item`."""
+
+    def apply(self, item_id: str, action: str, value: str | None) -> dict:
+        """Raises LookupError (404) or ValueError (422); returns {"before", "after", "entry_id"?, "source_excerpt"?}."""
+
+
+def register_review_kind(app: FastAPI, name: str, handler: ReviewKind) -> None:
+    """Add a review kind to the queue behind GET /api/review and POST /api/review/{kind}/{id}."""
+    if not hasattr(app.state, "review_kinds"):
+        app.state.review_kinds = {}
+    app.state.review_kinds[name] = handler
 
 
 class EntityReview:
@@ -118,7 +121,7 @@ def _lab_snap(x: LabResult) -> dict:
             "date": x.date, "page": x.page}
 
 
-class LabReview:
+class LabReviewKind:
     """Rows read from scanned lab reports. Same confirm / correct / reject as entities, same log, same badge."""
 
     def __init__(self, all_labs: Callable[[], list[LabResult]], save: Callable[[LabResult], None]):
@@ -149,5 +152,5 @@ def _snap(x: Entity) -> dict:
 
 def correction_record(kind: str, item_id: str, action: str, detail: dict) -> tuple[str, dict]:
     rid = f"cl_{uuid.uuid4().hex[:10]}"
-    return rid, {"id": rid, "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), "kind": kind,
+    return rid, {"id": rid, "ts": now_iso(), "kind": kind,
                  "item_id": item_id, "action": action, **detail}

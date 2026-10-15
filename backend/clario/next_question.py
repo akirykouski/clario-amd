@@ -11,6 +11,7 @@ medicine terms and lab-only terms are never asked.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -264,7 +265,8 @@ async def next_question(llm: LLM, onto: Ontology, entries: list[Entry], lang: st
                         lay: dict[str, list[str]] | None = None, skip: set[str] | None = None,
                         min_terms: int = MIN_TERMS) -> NextQuestion | None:
     lang = lang if lang in LANG_NAME else "en"
-    for c in choose(onto, entries, lay, skip, min_terms, top=12 if lang == "it" else 6)[:12 if lang == "it" else 6]:
+    top = 12 if lang == "it" else 6
+    for c in (await asyncio.to_thread(choose, onto, entries, lay, skip, min_terms, top=top))[:top]:
         got = await phrase(llm, onto, c, lang)
         if not got:
             continue

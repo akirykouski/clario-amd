@@ -84,7 +84,7 @@ class OfflineLLM(LLM):
             return json.dumps(self._brief(payload)), _stats(300)
         return "{}", _stats()
 
-    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None):
+    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None, purpose=None):
         """n deterministic samples. In extraction, a phrase in a hedged sentence ("maybe", "forse") shows up only in
         every other sample, so self-consistency confidence is below 1 and the review queue can be exercised offline."""
         if task != "extract":

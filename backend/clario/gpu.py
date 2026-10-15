@@ -9,6 +9,7 @@ objects or "N/A", and the top level may be a list or {"gpu_data": [...]}. Anythi
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import subprocess
@@ -125,6 +126,32 @@ def read_cached(ttl: float = 2.0) -> dict | None:
     if now - _cache["t"] > ttl:
         _cache.update(t=now, v=read_local())
     return _cache["v"]
+
+
+_remote: dict[str, Any] = {"t": -1e9, "v": None, "url": None, "loop": None, "client": None}
+
+
+async def read_gpu(s, ttl: float = 2.0) -> dict | None:
+    """GPU summary for the app: the sidecar at `s.gpu_metrics_url` when set, else amd-smi on this machine.
+    None when there is no telemetry. Never raises. Cached for `ttl` seconds so several viewers cost one read."""
+    if not s.gpu_metrics_url:
+        return await asyncio.to_thread(read_cached, ttl)
+    now = time.monotonic()
+    if _remote["url"] == s.gpu_metrics_url and now - _remote["t"] <= ttl:
+        return _remote["v"]
+    import httpx  # kept out of module import: this file also runs standalone as the sidecar (stdlib only)
+
+    loop = asyncio.get_running_loop()
+    if _remote["loop"] is not loop:  # a client is bound to the loop that made it
+        _remote.update(loop=loop, client=httpx.AsyncClient(timeout=4))
+    try:
+        r = await _remote["client"].get(s.gpu_metrics_url)
+        r.raise_for_status()
+        value = r.json()
+    except (httpx.HTTPError, ValueError):
+        value = None
+    _remote.update(t=time.monotonic(), v=value, url=s.gpu_metrics_url)
+    return value
 
 
 def serve(port: int = 9100, host: str = "0.0.0.0") -> None:

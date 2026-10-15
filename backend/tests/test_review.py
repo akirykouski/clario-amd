@@ -1,6 +1,7 @@
 from conftest import confirm_all, wait_extracted
 from clario.brief import NOT_REVIEWED, patient_items
 from clario.models import Entry, SharedEntity, SharePackage
+from clario.review import register_review_kind
 from clario.share import build_package
 
 
@@ -89,16 +90,16 @@ def test_review_kinds_are_pluggable(unlocked):
         def apply(self, item_id, action, value):
             return {"before": {"value": "3.1"}, "after": {"value": value or "3.1"}}
 
-    unlocked.app.state.review_kinds["lab"] = Lab()
+    register_review_kind(unlocked.app, "lab", Lab())
     assert queue(unlocked)["count"] == 1
     assert unlocked.post("/api/review/lab/lab_1", json={"action": "confirm"}).status_code == 200
     assert unlocked.app.state.vault.all("correction_log")[0]["kind"] == "lab"
 
 
-def test_legacy_status_patch_still_works(unlocked):
+def test_patch_review_values(unlocked):
     unlocked.post("/api/entries", json={"text": "So tired"})
     x = wait_extracted(unlocked)[0]["entities"][0]
-    assert unlocked.patch(f"/api/entities/{x['id']}", json={"status": "confirmed"}).json()["review"] == "confirmed"
+    assert unlocked.patch(f"/api/entities/{x['id']}", json={"review": "confirmed"}).json()["review"] == "confirmed"
     assert unlocked.patch(f"/api/entities/{x['id']}", json={"review": "needs_review"}).status_code == 422
 
 

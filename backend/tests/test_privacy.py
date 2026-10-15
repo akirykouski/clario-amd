@@ -198,6 +198,29 @@ def test_calls_while_locked_are_chained_later(tmp_path):
     assert [c["seq"] for c in log.calls()] == [3, 2, 1] and log.verify()["ok"]
 
 
+def test_vault_log_appends_and_lists_without_reading_the_whole_chain(tmp_path, monkeypatch):
+    v = Vault(tmp_path)
+    v.setup(PASS)
+    _fill(privacy.CallLog(privacy.VaultStore(v)), 5)
+    fresh = privacy.CallLog(privacy.VaultStore(v))  # a restarted app: head comes from vault meta
+    monkeypatch.setattr(privacy.VaultStore, "records", lambda self: (_ for _ in ()).throw(AssertionError("walked the chain")))
+    fresh.append(backend="b", model="m", purpose="extract", preview="p", sent_text="t")
+    assert [c["seq"] for c in fresh.calls(2)] == [6, 5]
+    monkeypatch.undo()
+    assert fresh.verify() == {"ok": True, "broken_at": None, "count": 6}
+
+
+def test_vault_log_without_a_stored_head_falls_back_to_the_newest_row(tmp_path):
+    v = Vault(tmp_path)
+    v.setup(PASS)
+    _fill(privacy.CallLog(privacy.VaultStore(v)), 3)
+    v._db.execute("DELETE FROM meta WHERE k='ai_call_head'")  # a vault from before the head was kept
+    v._db.commit()
+    log = privacy.CallLog(privacy.VaultStore(v))
+    _fill(log, 1)
+    assert log.verify() == {"ok": True, "broken_at": None, "count": 4}
+
+
 # ---------------------------------------------------------------- app level
 def test_settings_default(tmp_path):
     base = dict(offline=False, data_dir=tmp_path, frontend_dist=None)
@@ -279,3 +302,18 @@ def test_clinic_keeps_its_own_log(tmp_path):
         assert [c["purpose"] for c in calls] == ["brief"] and calls[0]["redacted"] is False
         assert clinic.get("/api/privacy/verify").json()["ok"] is True
     assert (tmp_path / "clinic" / "ai_calls.jsonl").exists()
+
+
+def test_wrapper_forwards_attributes_but_never_methods(tmp_path):
+    class Inner(LLM):
+        backend, model = "fake", "fake-1"
+
+        async def future_method(self, *a, **k):  # a model call a later LLM version might add
+            return "unredacted", None
+
+    llm = privacy.PrivacyLLM(Inner(), privacy.CallLog(privacy.FileStore(tmp_path / "log.jsonl")), True)
+    assert (llm.backend, llm.model, llm.is_amd) == ("fake", "fake-1", False)  # plain attributes pass through
+    assert hasattr(llm, "samples") and hasattr(llm, "complete")  # the logged surface is defined on the wrapper
+    assert not hasattr(llm, "future_method")  # an unknown method cannot silently skip redaction and the log
+    with pytest.raises(AttributeError):
+        llm.future_method()

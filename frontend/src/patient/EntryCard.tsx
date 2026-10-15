@@ -2,22 +2,43 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import type { Entry } from "../types";
-import { fmtDate } from "../lib";
+import { fmtDate, notifyReview } from "../lib";
 import { entityName, entryText, useT } from "../i18n";
 import { Spinner } from "../components/ui";
 import { CloudSaw } from "./CloudSaw";
 
-/** Polls GET /api/entries/{id} every 2s while extraction is pending. */
+// One poll for every pending entry on screen: a single GET /api/entries every 2s while anyone is watching.
+const watchers = new Map<string, Set<(e: Entry) => void>>();
+let timer: ReturnType<typeof setInterval> | null = null;
+
+function tick() {
+  api.entries().then((list) => { for (const e of list) watchers.get(e.id)?.forEach((f) => f(e)); }).catch(() => {});
+}
+
+function watch(id: string, f: (e: Entry) => void): () => void {
+  const set = watchers.get(id) ?? new Set();
+  set.add(f);
+  watchers.set(id, set);
+  if (!timer) timer = setInterval(tick, 2000);
+  return () => {
+    set.delete(f);
+    if (set.size === 0) watchers.delete(id);
+    if (watchers.size === 0 && timer) { clearInterval(timer); timer = null; }
+  };
+}
+
+/** Follows an entry while its extraction is pending (shared poll), and tells the nav badge when it finishes. */
 export function useLiveEntry(initial: Entry, onChange?: (e: Entry) => void) {
   const [entry, setEntry] = useState(initial);
   const cb = useRef(onChange); cb.current = onChange;
   useEffect(() => setEntry(initial), [initial]);
   useEffect(() => {
     if (entry.extraction !== "pending") return;
-    const t = setInterval(() => {
-      api.entry(entry.id).then((e) => { setEntry(e); cb.current?.(e); }).catch(() => {});
-    }, 2000);
-    return () => clearInterval(t);
+    return watch(entry.id, (e) => {
+      setEntry(e);
+      cb.current?.(e);
+      if (e.extraction !== "pending") notifyReview();
+    });
   }, [entry.id, entry.extraction]);
   return entry;
 }

@@ -3,14 +3,12 @@ import { Link } from "react-router-dom";
 import { Check, Pencil, X } from "lucide-react";
 import { api } from "../api";
 import type { ReviewItem } from "../types";
-import { confidencePct, splitQuotes } from "../lib";
+import { confidencePct, notifyReview, splitQuotes } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { entityName, termLabel, useT } from "../i18n";
 import { refText } from "./LabsPage";
 import { TermFix } from "./EntryPage";
-
-export const REVIEW_EVENT = "clario-review-changed";
 
 export function ConfidenceBar({ value }: { value: number | null }) {
   const { t } = useT();
@@ -41,7 +39,7 @@ export default function ReviewPage() {
     try {
       await api.reviewAct(i.kind, i.id, action, value);
       setGone((g) => new Set(g).add(`${i.kind}:${i.id}`));
-      window.dispatchEvent(new Event(REVIEW_EVENT));
+      notifyReview();
     } catch (x) { setErr((x as Error).message); }
   };
 

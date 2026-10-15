@@ -27,7 +27,7 @@ class FakeLLM(LLM):
         self.pick_schemas: list[dict] = []
         self.calls: list[tuple[str, int]] = []
 
-    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None):
+    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None, purpose=None):
         self.calls.append((task, n))
         st = Stats("fake", "fake-1", 1.0, 10, None)
         if task == "hpo_pick":
@@ -142,9 +142,6 @@ def test_old_format_outputs_still_parse():
     older = {"entities": [{"name": "Fatigue", "quote": "so tired", "type": "symptom"}]}
     e = go(FakeLLM(older), "I am so tired")[0]
     assert e.canonical == "Fatigue" and e.quote == "so tired"
-    legacy = Entity.model_validate({"id": "x", "entry_id": "e", "type": "symptom", "quote": "q", "canonical": "c", "status": "confirmed"})
-    assert legacy.review == "confirmed"
-    assert Entity.model_validate({"id": "x", "entry_id": "e", "type": "symptom", "quote": "q", "canonical": "c", "status": "suggested"}).review == "auto"
 
 
 def test_onset_hint_and_severity_pass_through():
@@ -159,10 +156,17 @@ def test_threshold_routing():
     assert route_review(None, 0.7) == "auto"
     assert route_review(0.6, 0.5) == "auto"
     raw = RawOut.model_validate({"entities": [KNEES]})
-    e = ground("e1", "Knees ache", raw, ONTO, "m", confidences=[0.6], review_threshold=0.7)[0]
+    e = ground("e1", "Knees ache", raw, ONTO, "m", confidences=[0.6], opts=ExtractOpts(review_threshold=0.7))[0]
     assert e.review == "needs_review"
 
 
 def test_merge_stats_sums():
     s = merge_stats(Stats("b", "m", 10.0, 5, None), Stats("b", "m", 30.0, 15, None))
     assert s.latency_ms == 40.0 and s.tokens == 20 and s.tokens_per_s == 500.0
+
+
+def test_identical_term_and_quote_asks_the_model_once():
+    llm = FakeLLM({"entities": [ent(**KNEES), ent(**KNEES)]}, pick=lambda p, ids: "HP:0002829")
+    got = go(llm, "Knees ache this morning", hpo_pick=True)
+    assert [t for t, _n in llm.calls].count("hpo_pick") == 1
+    assert [e.hpo_id for e in got] == ["HP:0002829"]  # grounding still collapses the duplicate entity

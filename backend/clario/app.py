@@ -9,7 +9,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -26,6 +26,7 @@ from . import doc_routes
 from . import gpu as gpumetrics
 from . import share as sharing
 from .config import Settings
+from .share import now_iso
 from . import documents as docs
 from .demo import PERSONA_LANG, PERSONAS, demo_referti, persona_entries
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
@@ -35,7 +36,7 @@ from .llm import extract_json, make_llm
 from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage, Term
 from .next_question import as_ranked_patterns, next_question, rank_diseases, template_question
 from .patterns import counts_as_evidence, evidence_from, explain, negated_ids, score_patterns
-from .review import ACTIONS, EntityReview, correction_record
+from .review import ACTIONS, EntityReview, apply_entity_action, correction_record, register_review_kind
 from .safety import check_entry
 from .vault import BadPassphrase, Locked, Vault
 
@@ -56,7 +57,6 @@ class EntryIn(BaseModel):
 
 class EntityPatch(BaseModel):
     review: str | None = None
-    status: str | None = None  # legacy alias of `review`: confirmed | rejected | suggested (= auto)
     canonical: str | None = None
     hpo_id: str | None = None
     severity: int | None = None
@@ -89,18 +89,21 @@ class ReviewIn(BaseModel):
     text: str | None = None
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
 # ---------------------------------------------------------------- run bus (SSE)
+FINISHED_TTL = 15 * 60  # seconds a finished run is kept for late subscribers, then dropped
+
+
 class Runs:
-    def __init__(self) -> None:
+    def __init__(self, ttl: float = FINISHED_TTL) -> None:
         self.runs: dict[str, dict] = {}
+        self.ttl = ttl
 
     def new(self) -> str:
+        now = time.monotonic()
+        for k in [k for k, r in self.runs.items() if r["finished"] is not None and now - r["finished"] > self.ttl]:
+            del self.runs[k]
         rid = f"run_{uuid.uuid4().hex[:10]}"
-        self.runs[rid] = {"events": [], "cond": asyncio.Condition(), "done": False}
+        self.runs[rid] = {"events": [], "cond": asyncio.Condition(), "done": False, "finished": None}
         return rid
 
     async def emit(self, rid: str, stage: str, message: str, progress: float = 0.0, **kw: Any) -> None:
@@ -108,6 +111,8 @@ class Runs:
         async with r["cond"]:
             r["events"].append({"stage": stage, "message": message, "progress": round(progress, 3), **kw})
             r["done"] = r["done"] or stage in ("done", "error")
+            if r["done"] and r["finished"] is None:
+                r["finished"] = time.monotonic()
             r["cond"].notify_all()
 
     async def stream(self, rid: str):
@@ -124,7 +129,7 @@ class Runs:
                 return
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
     s = settings or Settings.from_env()
     onto = Ontology.load()
     vault = Vault(s.data_dir, s.auto_lock_minutes) if s.mode == "patient" else None
@@ -154,15 +159,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/system/gpu")
     async def system_gpu():
         """GPU summary {gpu_name, util_pct, vram_used_gb, vram_total_gb}, or null when there is no telemetry."""
-        if s.gpu_metrics_url:
-            try:
-                async with httpx.AsyncClient(timeout=4) as c:
-                    r = await c.get(s.gpu_metrics_url)
-                    r.raise_for_status()
-                    return JSONResponse(r.json())
-            except (httpx.HTTPError, ValueError):
-                return JSONResponse(None)
-        return JSONResponse(await asyncio.to_thread(gpumetrics.read_cached))
+        return JSONResponse(await gpumetrics.read_gpu(s))
 
     @app.get("/api/runs/{rid}/events")
     async def run_events(rid: str):
@@ -175,8 +172,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse({"detail": "Diary is locked"}, status_code=423)
 
     if s.mode == "patient":
-        _patient_routes(app, s, vault, onto, llm, spawn)
-        privacy.routes(app, s, call_log, lambda eid: Entry.model_validate(vault.get(eid)) if vault.get(eid) else None)
+        _patient_routes(app, s, vault, onto, llm, spawn, gpu_reader)
+        privacy.routes(app, s, call_log, lambda eid: Entry.model_validate(d) if (d := vault.get(eid)) else None)
     else:
         privacy.routes(app, s, call_log)
         _clinic_routes(app, s, keys, llm, runs, spawn, onto)
@@ -204,8 +201,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 # ====================================================================== patient
-def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm, spawn) -> None:
-    pattern_cache: dict[str, Any] = {}
+def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm, spawn, gpu_reader=None) -> None:
+    pattern_cache: dict[tuple[str, str], list] = {}  # (lang, evidence state) -> explained patterns
     opts = ExtractOpts.from_settings(s)
 
     def load(eid: str) -> Entry:
@@ -316,28 +313,23 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
                 if x.id != ent_id:
                     continue
                 upd = body.model_dump(exclude_none=True)
-                legacy = upd.pop("status", None)
-                if legacy is not None:
-                    upd.setdefault("review", "auto" if legacy == "suggested" else legacy)
                 if "review" in upd and upd["review"] not in ("auto", "confirmed", "rejected"):
                     raise HTTPException(422, "review must be auto, confirmed or rejected")
-                if "hpo_id" in upd and "review" not in upd:
-                    upd["review"] = "corrected"
-                if "hpo_id" in upd:
-                    if not onto.exists(upd["hpo_id"]):
+                base = x
+                if "hpo_id" in upd:  # same correction as the review queue; fields sent in the same body win over it
+                    try:
+                        base = apply_entity_action(x, "correct", upd.pop("hpo_id"), onto)
+                    except ValueError:
                         raise HTTPException(422, "Unknown HPO term")
-                    upd["hpo_label"] = onto.label(upd["hpo_id"])
-                    upd.setdefault("canonical", upd["hpo_label"])
-                    upd["flags"] = [f for f in x.flags if not f.startswith(("hpo_", "no_hpo"))] + ["fixed_by_patient"]
-                new = x.model_copy(update=upd)
+                new = base.model_copy(update=upd)
                 e.entities[i] = Entity.model_validate(new.model_dump())
                 save(e)
                 return e.entities[i]
         raise HTTPException(404, "entity not found")
 
-    # ---- human review queue; other modules add kinds via app.state.review_kinds[kind] = handler
+    # ---- human review queue; other modules add kinds with review.register_review_kind
     app.state.vault = vault
-    app.state.review_kinds = {"entity": EntityReview(all_entries, save, onto)}
+    register_review_kind(app, "entity", EntityReview(all_entries, save, onto))
 
     @app.get("/api/review")
     def review_queue():
@@ -390,17 +382,22 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
     @app.get("/api/patterns")
     async def patterns(lang: str = "en"):
         lang = norm_lang(lang)
-        entries = all_entries()
-        ev = evidence_from(entries, onto)
-        key = json.dumps([lang, sorted((k, v.count) for k, v in ev.items()), sorted(negated_ids(entries))])
-        if key not in pattern_cache:
-            pattern_cache.clear()
-            pattern_cache[key] = await explain(llm, score_patterns(entries, onto), lang)
-        pats = pattern_cache[key]
+
+        def evidence_state():  # vault reads and scoring are CPU work: keep them off the event loop
+            entries = all_entries()
+            ev = evidence_from(entries, onto)
+            return entries, ev, json.dumps([sorted((k, v.count) for k, v in ev.items()), sorted(negated_ids(entries))])
+
+        entries, ev, state = await asyncio.to_thread(evidence_state)
+        for k in [k for k in pattern_cache if k[1] != state]:  # the evidence changed: older explanations are stale
+            del pattern_cache[k]
+        if (lang, state) not in pattern_cache:  # switching language back and forth does not call the model again
+            pattern_cache[(lang, state)] = await explain(llm, await asyncio.to_thread(score_patterns, entries, onto), lang)
+        pats = pattern_cache[(lang, state)]
         note = PATTERNS_NOTE[lang][0 if pats else 1]
         return {"patterns": pats, "confirmed_terms": len(ev), "note": note}
 
-    doc_routes.register(app, s, vault, llm, spawn)
+    doc_routes.register(app, s, vault, llm, spawn, gpu_reader)
     asked: dict[str, str] = {}  # feature_id -> question text last shown (so the diary entry quotes what was asked)
 
     def unsure_ids() -> set[str]:
@@ -408,13 +405,14 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 
     @app.get("/api/patterns/next-question")
     async def pattern_next_question(lang: str = "en") -> NextQuestion | None:
-        q = await next_question(llm, onto, all_entries(), lang, skip=unsure_ids())
+        entries, skip = await asyncio.to_thread(lambda: (all_entries(), unsure_ids()))
+        q = await next_question(llm, onto, entries, lang, skip=skip)
         if q:
             asked[q.feature_id] = q.question
         return q
 
     @app.post("/api/patterns/answer")
-    async def pattern_answer(body: AnswerIn) -> AnswerResult:
+    def pattern_answer(body: AnswerIn) -> AnswerResult:
         if body.answer not in ("yes", "no", "unsure"):
             raise HTTPException(422, "answer must be yes, no or unsure")
         label = onto.label(body.feature_id)

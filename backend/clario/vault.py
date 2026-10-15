@@ -112,11 +112,30 @@ class Vault:
         return self._key  # type: ignore[return-value]
 
     # ------------------------------------------------------------ records
-    def put(self, kind: str, rid: str, doc: dict[str, Any]) -> None:
-        blob = self._seal(self._k(), json.dumps(doc, ensure_ascii=False).encode())
+    def put(self, kind: str, rid: str, doc: dict[str, Any], meta: dict[str, bytes] | None = None) -> None:
+        """Store a record. `meta` (key -> bytes, sealed like records) is written in the same transaction, so a pointer
+        kept next to a record (the call log's chain head) never disagrees with it."""
+        k = self._k()
+        blob = self._seal(k, json.dumps(doc, ensure_ascii=False).encode())
+        sealed = {mk: self._seal(k, mv) for mk, mv in (meta or {}).items()}
         with self._lock:
             self._db.execute("INSERT OR REPLACE INTO records VALUES (?,?,?)", (rid, kind, blob))
+            for mk, mv in sealed.items():
+                self._db.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (mk, mv))
             self._db.commit()
+
+    def sealed_meta(self, mk: str) -> bytes | None:
+        """A value written through `put(..., meta=...)`, or None."""
+        k = self._k()
+        v = self._meta(mk)
+        return self._open(k, v) if v is not None else None
+
+    def recent(self, kind: str, limit: int) -> list[dict[str, Any]]:
+        """The `limit` newest records of a kind, newest first. Order is by id (plaintext), so only these rows are decrypted."""
+        k = self._k()
+        with self._lock:
+            rows = self._db.execute("SELECT blob FROM records WHERE kind=? ORDER BY id DESC LIMIT ?", (kind, limit)).fetchall()
+        return [json.loads(self._open(k, r[0])) for r in rows]
 
     def get(self, rid: str) -> dict[str, Any] | None:
         k = self._k()

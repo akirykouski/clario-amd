@@ -4,21 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import inspect
 import json
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Awaitable, Callable, Literal
 
-from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from . import documents as docs
+from . import gpu as gpumetrics
 from .config import Settings
-from .review import LabReview
+from .review import LabReviewKind, register_review_kind
+from .share import now_iso
 from .models import Entry, LabResult, LabsResponse, LabTest, LabValue
 from .vault import Locked, Vault
 
@@ -26,7 +26,7 @@ log = logging.getLogger("clario")
 
 MAX_PAGES = 400
 MAX_FILE_BYTES = 60 * 1024 * 1024
-GPU_ROUTE = "/api/system/gpu"
+FINISHED_TTL = 15 * 60  # seconds a finished batch stays readable for its progress stream, then dropped
 
 
 class LabPatch(BaseModel):
@@ -38,14 +38,11 @@ class LabPatch(BaseModel):
     ref_high: float | None = None
 
 
-def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
+def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
+             gpu_reader: Callable[[Settings], Awaitable[dict | None]] | None = None) -> None:
+    """`gpu_reader(settings)` is the telemetry source for the progress stream; tests pass a stub."""
     batches: dict[str, dict] = {}
-
-    def widen_llm() -> None:
-        """The client's own semaphore would cap the pool below CLARIO_DOC_CONCURRENCY and starve vLLM batching."""
-        inner = getattr(llm, "_inner", llm)  # PrivacyLLM forwards reads only: assigning on the wrapper would not reach the client
-        if getattr(inner, "_sem", None) is not None and s.doc_workers > s.llm_concurrency:
-            inner._sem = asyncio.Semaphore(s.doc_workers)
+    read_gpu = gpu_reader or gpumetrics.read_gpu
 
     def labs() -> list[LabResult]:
         return [LabResult.model_validate(d) for d in vault.all("lab")]
@@ -54,19 +51,13 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
         vault.put("lab", lab.id, lab.model_dump(mode="json"))
 
     # labs wait in the same review queue as entities (GET /api/review, nav badge, correction_log)
-    app.state.review_kinds["lab"] = LabReview(labs, save_lab)
+    register_review_kind(app, "lab", LabReviewKind(labs, save_lab))
 
     async def gpu_info() -> dict | None:
-        """GET /api/system/gpu if another module registered it, else None. amd-smi is not called here."""
-        for r in app.routes:
-            if getattr(r, "path", None) == GPU_ROUTE and hasattr(r, "endpoint"):
-                try:
-                    out = r.endpoint()
-                    out = await out if inspect.isawaitable(out) else out
-                    return json.loads(out.body) if isinstance(out, Response) else out  # route may return JSONResponse
-                except Exception:  # noqa: BLE001 - telemetry must never break the import
-                    return None
-        return None
+        try:
+            return await read_gpu(s)
+        except Exception:  # noqa: BLE001 - telemetry must never break the import
+            return None
 
     async def run_batch(bid: str, pages: list[docs.Page]) -> None:
         b = batches[bid]
@@ -117,8 +108,11 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
 
     def start_batch(pages: list[docs.Page]) -> dict:
         """Store the pages encrypted, add the diary entry, start reading in the background."""
+        now_m = time.monotonic()
+        for k in [k for k, b in batches.items() if b["finished"] is not None and now_m - b["finished"] > FINISHED_TTL]:
+            del batches[k]
         bid = f"b_{uuid.uuid4().hex[:10]}"
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        now = now_iso()
         occurred = docs.today_iso()
         for i, p in enumerate(pages):
             vault.put("docpage", f"{bid}_p{i + 1}", {"batch_id": bid, "page": i + 1, "source": p.source,
@@ -128,7 +122,6 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn) -> None:
         vault.put("entry", entry.id, entry.model_dump(mode="json"))
         batches[bid] = {"total": len(pages), "done": 0, "errors": 0, "labs": 0, "needs_review": 0,
                         "started": time.monotonic(), "finished": None, "entry_id": entry.id, "occurred_on": occurred}
-        widen_llm()
         spawn(run_batch(bid, pages))
         return {"batch_id": bid, "pages": len(pages), "entry_id": entry.id}
 

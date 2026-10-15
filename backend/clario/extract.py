@@ -17,15 +17,13 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import unicodedata
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .config import Settings
-from .knowledge import Ontology
+from .config import ExtractOpts  # noqa: F401 - defined in config, importable from here too
+from .knowledge import Ontology, fold
 from .llm import LLM, LLMError, Stats, extract_json, merge_stats
 from .models import Entity
 from .prompt import build_messages
@@ -41,6 +39,7 @@ thing. If no candidate is a good match, answer NONE. Return JSON only: {"hpo_id"
 MATCH_THRESHOLD = 0.6
 PICK_K = 20
 _TYPES = {"symptom", "finding", "lab", "medication", "trigger", "body_site", "bodypart"}
+# Cue lists mirror train/synth.py NEG / FAM (train stays standalone); backend/tests/test_cue_parity.py pins the differences.
 _NEG = re.compile(r"\b(no|not|without|never|denies|nessun[ao]?|non|senza|niente)\b[^.;,]{0,25}$", re.I)
 _REL_EN = r"(?:my|his|her|their)\s+(?:mother|mom|mum|father|dad|sister|brother|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|parents?|family)"
 _REL_IT = r"(?:mia|mio|mie|miei|sua|suo)\s+(?:madre|mamma|padre|papa|papà|sorella|fratello|nonna|nonno|zia|zio|cugin[ao]|genitori|famiglia)"
@@ -98,35 +97,18 @@ class RawOut(BaseModel):
     entities: list[RawEntity] = Field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class ExtractOpts:
-    sc_n: int = 5
-    trust_model_confidence: bool = False
-    hpo_pick: bool = True
-    review_threshold: float = 0.7
-
-    @classmethod
-    def from_settings(cls, s: Settings) -> "ExtractOpts":
-        return cls(s.sc_n, s.trust_model_confidence, s.hpo_pick, s.review_threshold)
-
-
 def messages_for(text: str, confidence: bool = False) -> list[dict]:
     """The exact messages the LoRA saw in training (clario/prompt.py is a verbatim copy of train/prompt.py): one system
     prompt, the diary as the only user turn, no few-shot. `confidence` selects the variant that asks for a probability."""
     return build_messages(text, confidence)
 
 
-def _fold(s: str) -> str:
-    s = unicodedata.normalize("NFKD", s)
-    return "".join(c for c in s if not unicodedata.combining(c)).lower()
-
-
 def find_quote(text: str, quote: str) -> tuple[int, int] | None:
     """Locate quote in text ignoring case, accents and whitespace runs. Returns (start, end) in text."""
-    q = re.sub(r"\s+", " ", _fold(quote).strip(" .,;:\"'"))
+    q = re.sub(r"\s+", " ", fold(quote).strip(" .,;:\"'"))
     if len(q) < 2:
         return None
-    folded = _fold(text)
+    folded = fold(text)
     pattern = re.escape(q).replace(r"\ ", r"\s+")
     m = re.search(pattern, folded)
     return (m.start(), m.end()) if m else None
@@ -170,7 +152,7 @@ def self_consistency(primary: list[RawEntity], samples: list[RawOut], text: str)
 # ---------------------------------------------------------------- grounding
 def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | None, *,
            picks: dict[int, str | None] | None = None, confidences: list[float | None] | None = None,
-           review_threshold: float = 0.7, trust_model_confidence: bool = False) -> list[Entity]:
+           opts: ExtractOpts = ExtractOpts()) -> list[Entity]:
     """`picks[i]`: id the model chose from the ontology candidates for raw entity i (None = NONE).
     Entities with a pick skip the free-form HPO proposal entirely."""
     out: list[Entity] = []
@@ -195,7 +177,7 @@ def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | N
             flags.append("family_history_from_text")
         sev = r.severity
         sev = int(round(sev)) if isinstance(sev, (int, float)) and 0 <= sev <= 10 else None
-        conf = r.confidence if trust_model_confidence and r.confidence is not None else (
+        conf = r.confidence if opts.trust_model_confidence and r.confidence is not None else (
             confidences[i] if confidences and i < len(confidences) else None)
         key = (hpo_id or r.canonical.lower(), quote.lower())
         if key in seen:
@@ -204,7 +186,7 @@ def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | N
         out.append(Entity(id=f"ent_{uuid.uuid4().hex[:10]}", entry_id=entry_id, type=etype, quote=quote,
                           canonical=r.canonical.strip()[:120], hpo_id=hpo_id, hpo_label=hpo_label,
                           negated=negated, family_history=family, onset_hint=r.onset_hint, severity=sev,
-                          confidence=conf, review=route_review(conf, review_threshold),
+                          confidence=conf, review=route_review(conf, opts.review_threshold),
                           flags=flags, model=model))
     return out
 
@@ -224,12 +206,12 @@ def resolve_hpo(proposed: str | None, quote: str, canonical: str, onto: Ontology
     flags: list[str] = []
     pid = (proposed or "").strip().upper()
     if pid and re.fullmatch(r"HP:\d{7}", pid) and onto.exists(pid):
-        names = [_fold(n) for n in [onto.label(pid) or "", *onto.synonyms(pid)]]
+        names = [fold(n) for n in [onto.label(pid) or "", *onto.synonyms(pid)]]
         for phrase in (canonical, quote):
             m = onto.best_match(phrase)
             if m and (m[0].hpo_id == pid or pid in onto.ancestors(m[0].hpo_id) or m[0].hpo_id in onto.ancestors(pid)):
                 return pid, onto.label(pid), flags
-            if _fold(phrase).strip() in names:
+            if fold(phrase).strip() in names:
                 return pid, onto.label(pid), flags
         flags.append("hpo_dropped")
     elif pid:
@@ -257,7 +239,8 @@ async def pick_hpo(llm: LLM, onto: Ontology, quote: str, canonical: str, propose
     msgs = [{"role": "system", "content": PICK_SYSTEM},
             {"role": "user", "content": json.dumps({"quote": quote, "canonical": canonical,
                                                     "candidates": payload["candidates"]}, ensure_ascii=False)}]
-    texts, st = await llm.samples("hpo_pick", msgs, 1, temperature=0.0, schema=pick_schema(ids), payload=payload)
+    texts, st = await llm.samples("hpo_pick", msgs, 1, temperature=0.0, schema=pick_schema(ids), payload=payload,
+                                  purpose="extract")  # the pick is part of extraction
     try:
         got = str(extract_json(texts[0]).get("hpo_id", "")).strip().upper()
     except (ValueError, AttributeError):
@@ -282,7 +265,20 @@ async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
                   opts: ExtractOpts | None = None) -> tuple[list[Entity], Stats]:
     opts = opts or ExtractOpts()
     msgs = messages_for(text, opts.trust_model_confidence)
-    raw, st = await _primary(llm, msgs, text)
+
+    def sample_call():
+        return llm.samples("extract", msgs, opts.sc_n, temperature=0.7, schema=EXTRACTION_SCHEMA, payload={"text": text})
+
+    sampled = None
+    if opts.sc_n > 1 and not opts.trust_model_confidence:
+        # the samples do not depend on the primary answer: run both at once (a primary with no entities discards them)
+        prim, sampled = await asyncio.gather(_primary(llm, msgs, text), sample_call(), return_exceptions=True)
+        for r in (prim, sampled):
+            if isinstance(r, BaseException):
+                raise r
+        raw, st = prim
+    else:
+        raw, st = await _primary(llm, msgs, text)
     # drop ungrounded entities up front so the later calls only spend tokens on real ones
     raw = RawOut(entities=[r for r in raw.entities if find_quote(text, r.quote) and r.canonical.strip()])
 
@@ -290,8 +286,7 @@ async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
     need_sc = opts.sc_n > 1 and raw.entities and not (
         opts.trust_model_confidence and all(r.confidence is not None for r in raw.entities))
     if need_sc:
-        texts, st2 = await llm.samples("extract", msgs, opts.sc_n, temperature=0.7, schema=EXTRACTION_SCHEMA,
-                                       payload={"text": text})
+        texts, st2 = sampled if sampled is not None else await sample_call()
         st = merge_stats(st, st2)
         parsed: list[RawOut] = []
         for t in texts:
@@ -304,12 +299,16 @@ async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
     picks: dict[int, str | None] | None = None
     if opts.hpo_pick:
         idx = [i for i, r in enumerate(raw.entities) if (r.type if r.type in _TYPES else "symptom") in ("symptom", "finding")]
-        results = await asyncio.gather(*[pick_hpo(llm, onto, raw.entities[i].quote, raw.entities[i].canonical,
-                                                  raw.entities[i].hpo_id) for i in idx])
+        first: dict[tuple[str, str], int] = {}  # one call per distinct (canonical, quote)
+        for i in idx:
+            first.setdefault((raw.entities[i].canonical, raw.entities[i].quote), i)
+        done = dict(zip(first, await asyncio.gather(*[pick_hpo(llm, onto, raw.entities[i].quote, raw.entities[i].canonical,
+                                                               raw.entities[i].hpo_id) for i in first.values()])))
         picks = {}
-        for i, (hid, st3) in zip(idx, results):
-            picks[i] = hid
+        for i in idx:
+            picks[i] = done[(raw.entities[i].canonical, raw.entities[i].quote)][0]
+        for _hid, st3 in done.values():
             st = merge_stats(st, st3)
     ents = ground(entry_id, text, raw, onto, st.model, picks=picks, confidences=confidences,
-                  review_threshold=opts.review_threshold, trust_model_confidence=opts.trust_model_confidence)
+                  opts=opts)
     return ents, st

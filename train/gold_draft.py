@@ -28,7 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "backend"))
 from clario.knowledge import Ontology  # noqa: E402
-from prompt import TYPES  # noqa: E402
+from prompt import TYPES, _extract_json  # noqa: E402
 from synth import cues  # noqa: E402
 
 DEFAULT_OUT = HERE.parent / "eval" / "gold" / "drafts.jsonl"
@@ -80,8 +80,11 @@ def user_prompt(p: dict) -> str:
             "Include: " + "; ".join(p["features"]) + ".")
 
 
-def _json(text: str) -> dict:
-    return json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", (text or "").strip()))
+def _json(text: str | None) -> dict:
+    obj = _extract_json(text or "")
+    if obj is None:
+        raise json.JSONDecodeError("no JSON object in the reply", text or "", 0)
+    return obj
 
 
 def ground(onto: Ontology, canonical: str):
