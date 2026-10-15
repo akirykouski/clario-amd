@@ -1,7 +1,9 @@
-# Clario clinic: HTTPS front door. Replace clinic.example.com with a real DNS name pointing at the droplet.
-# Caddy obtains and renews the certificate automatically (ports 80 and 443 must be reachable).
-# For a demo without a domain, use: clinic.<DROPLET_IP>.sslip.io (resolves to the IP; Let's Encrypt works).
-clinic.example.com {
+# Clario on AMD: HTTPS front door for both apps. PUBLIC_HOST is set in the shell or .env, e.g. 203.0.113.7.sslip.io
+# (sslip.io resolves <ip>.sslip.io and any subdomain of it to <ip>, and Let's Encrypt works on it).
+#   https://{PUBLIC_HOST}          patient app (demo instance, small model)
+#   https://clinic.{PUBLIC_HOST}   clinic console (large model, GPU panel)
+# Ports 80 and 443 must be reachable for certificate issuance. vLLM is never proxied here.
+(front) {
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -9,9 +11,19 @@ clinic.example.com {
 		Referrer-Policy no-referrer
 		-Server
 	}
-	# SSE brief progress must not be buffered.
-	reverse_proxy clario:8800 {
+}
+
+{$PUBLIC_HOST} {
+	import front
+	# SSE extraction and brief progress must not be buffered.
+	reverse_proxy patient-demo:8800 {
 		flush_interval -1
 	}
-	# vLLM is never proxied here. It stays on loopback / the internal Docker network.
+}
+
+clinic.{$PUBLIC_HOST} {
+	import front
+	reverse_proxy clinic:8800 {
+		flush_interval -1
+	}
 }

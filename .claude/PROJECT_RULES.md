@@ -26,3 +26,7 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 
 ## Safety rails
 - No push without explicit yes. Secrets only via env.
+- Deploy: `deploy/amd/bootstrap.sh` (one command on the MI300X droplet) + `deploy/amd/docker-compose.yml`; runbook in deploy/amd/README.md. Root `Dockerfile` builds the app (`docker build -t clario-app .`). `.env.example` lists every variable. Validate compose: `PUBLIC_HOST=x.sslip.io VLLM_API_KEY=x HF_TOKEN=x docker compose -f deploy/amd/docker-compose.yml config -q`.
+- GPU telemetry: `GET /api/system/gpu` (backend/clario/gpu.py, stdlib only, also the sidecar server). amd-smi JSON shape is from AMD docs, unverified on hardware.
+- `CLARIO_DEMO_INSTANCE=1` shows the synthetic-data banner in both apps (health.demo_instance).
+- Tooling quirk: worktree-isolated shells refuse compound commands containing git/globs/heredocs; use plain commands and the Write/Edit tools.

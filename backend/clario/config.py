@@ -23,6 +23,8 @@ class Settings:
     clinic_name: str = "Clario clinic"
     frontend_dist: Path | None = None
     auto_lock_minutes: int = 15
+    demo_instance: bool = False
+    gpu_metrics_url: str | None = None
 
     @property
     def llm_host(self) -> str | None:
@@ -62,5 +64,7 @@ class Settings:
             clinic_name=e.get("CLARIO_CLINIC_NAME") or "Clario clinic",
             frontend_dist=Path(dist) if dist else here.parent / "frontend" / "dist",
             auto_lock_minutes=int(e.get("CLARIO_AUTO_LOCK_MINUTES") or 15),
+            demo_instance=(e.get("CLARIO_DEMO_INSTANCE") or "").strip().lower() in ("1", "true", "yes"),
+            gpu_metrics_url=(e.get("CLARIO_GPU_METRICS_URL") or "").strip() or None,
         )
         return replace(s, **overrides) if overrides else s

@@ -1,0 +1,194 @@
+# Clario on one AMD Instinct MI300X (192 GB): Gemma 4 31B + Gemma 4 E4B on vLLM/ROCm, both app modes, GPU telemetry, HTTPS.
+# Normally driven by deploy/amd/bootstrap.sh. By hand, from the repo root:
+#   export HF_TOKEN=hf_... VLLM_API_KEY=$(openssl rand -hex 24) PUBLIC_HOST=<droplet-ip>.sslip.io
+#   docker compose -f deploy/amd/docker-compose.yml up -d vllm-big     # start the big model first (it sizes its share of the GPU)
+#   docker compose -f deploy/amd/docker-compose.yml up -d --build      # then everything else
+# Validate without a GPU:  PUBLIC_HOST=x.sslip.io VLLM_API_KEY=x HF_TOKEN=x docker compose -f deploy/amd/docker-compose.yml config -q
+# Do not run this together with deploy/amd/serve_vllm.sh or deploy/docker-compose.clinic.yml (same GPU).
+#
+# Ports: only caddy publishes 80/443 publicly. vLLM and the metrics sidecar bind loopback on the host
+# (bootstrap.sh, smoke.sh and the bench use them) and are never proxied.
+#
+# GPU memory split (fractions of total VRAM, each vLLM process sizes itself against the whole card):
+#   vllm-big   0.62 -> ~119 GB: 31B bf16 weights (~62 GB) + KV cache
+#   vllm-small 0.22 -> ~42 GB:  E4B bf16 weights (~16 GB) + LoRA + KV cache
+#   remainder ~15% is headroom for activations, CUDA-graph/Triton workspaces and the gpu-metrics process.
+# Start vllm-big first. vllm-small waits for it to be healthy so the two do not race for memory.
+name: clario-amd
+
+x-vllm-common: &vllm-common
+  image: ${VLLM_IMAGE:-vllm/vllm-openai-rocm:v0.31.0}
+  restart: unless-stopped
+  ipc: host
+  shm_size: 16gb
+  devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+  group_add:
+    - video
+  cap_add:
+    - SYS_PTRACE
+  security_opt:
+    - seccomp=unconfined
+  networks: [internal]
+
+x-clario-app: &clario-app
+  image: clario-app
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  networks: [internal]
+
+services:
+  vllm-big:
+    <<: *vllm-common
+    environment:
+      HF_TOKEN: ${HF_TOKEN:?set HF_TOKEN}
+      # vLLM reads the bearer token from this variable (same effect as --api-key, keeps it out of the process list).
+      VLLM_API_KEY: ${VLLM_API_KEY:?set VLLM_API_KEY}
+      HIP_FORCE_DEV_KERNARG: "1"
+      VLLM_ROCM_USE_AITER: ${VLLM_ROCM_USE_AITER:-0}
+      VLLM_ATTENTION_BACKEND:
+    # VLLM_ATTENTION_BACKEND (no value) passes through only if exported on the host. AMD's Gemma 4 note says the TRITON_ATTN backend is needed on
+    # ROCm; if startup fails on attention, run: export VLLM_ATTENTION_BACKEND=TRITON_ATTN  (see README, unverified).
+    volumes:
+      - ${HF_CACHE:-${HOME}/.cache/huggingface}:/root/.cache/huggingface
+    command: >
+      --model ${BIG_MODEL:-google/gemma-4-31B-it}
+      --served-model-name ${BIG_MODEL:-google/gemma-4-31B-it}
+      --host 0.0.0.0 --port 8000
+      --dtype bfloat16
+      --max-model-len ${BIG_MAX_MODEL_LEN:-16384}
+      --max-num-seqs ${BIG_MAX_NUM_SEQS:-64}
+      --gpu-memory-utilization ${BIG_GPU_UTIL:-0.62}
+      --enable-prefix-caching
+      ${BIG_EXTRA_ARGS:-}
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 200
+      start_period: 120s
+
+  vllm-small:
+    <<: *vllm-common
+    depends_on:
+      vllm-big:
+        condition: service_healthy
+    environment:
+      HF_TOKEN: ${HF_TOKEN:?set HF_TOKEN}
+      VLLM_API_KEY: ${VLLM_API_KEY:?set VLLM_API_KEY}
+      HIP_FORCE_DEV_KERNARG: "1"
+      VLLM_ROCM_USE_AITER: ${VLLM_ROCM_USE_AITER:-0}
+      VLLM_ATTENTION_BACKEND:
+    volumes:
+      - ${HF_CACHE:-${HOME}/.cache/huggingface}:/root/.cache/huggingface
+      # Optional fine-tuned extractor (LoRA). Host dir with adapter_config.json, e.g. train/out/e4b-r16/adapter.
+      # Unset -> empty placeholder dir, LoRA stays off.
+      - ${LORA_PATH:-./.no-lora}:/lora/clario-extract:ro
+    # To serve the adapter export, before `up`:
+    #   LORA_PATH=/abs/path/to/adapter  SMALL_LORA_ARGS="--enable-lora --lora-modules clario-extract=/lora/clario-extract --max-lora-rank 16"
+    # then clients select it with model "clario-extract" (set PATIENT_LLM_MODEL=clario-extract). bootstrap.sh does this when LORA_PATH is set.
+    command: >
+      --model ${SMALL_MODEL:-google/gemma-4-E4B-it}
+      --served-model-name ${SMALL_MODEL:-google/gemma-4-E4B-it}
+      --host 0.0.0.0 --port 8001
+      --dtype bfloat16
+      --max-model-len ${SMALL_MAX_MODEL_LEN:-8192}
+      --max-num-seqs ${SMALL_MAX_NUM_SEQS:-32}
+      --gpu-memory-utilization ${SMALL_GPU_UTIL:-0.22}
+      --enable-prefix-caching
+      ${SMALL_LORA_ARGS:-}
+      ${SMALL_EXTRA_ARGS:-}
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 200
+      start_period: 120s
+
+  gpu-metrics:
+    # Reuses the vLLM ROCm image (already on the box) for its ROCm userland. Runs backend/clario/gpu.py as a tiny
+    # HTTP server: GET / -> {gpu_name, util_pct, vram_used_gb, vram_total_gb} or null. UNVERIFIED: that amd-smi
+    # exists in this image; if it does not, GET / returns null and the apps simply hide the GPU panel.
+    image: ${VLLM_IMAGE:-vllm/vllm-openai-rocm:v0.31.0}
+    restart: unless-stopped
+    entrypoint: ["sh", "-c", "PATH=$$PATH:/opt/rocm/bin exec python3 /srv/gpu.py 9100"]
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+    volumes:
+      - ../../backend/clario/gpu.py:/srv/gpu.py:ro
+    ports:
+      - "127.0.0.1:9100:9100"
+    networks: [internal]
+
+  clinic:
+    <<: *clario-app
+    depends_on:
+      vllm-big:
+        condition: service_healthy
+    environment:
+      CLARIO_MODE: clinic
+      CLARIO_CLINIC_NAME: ${CLARIO_CLINIC_NAME:-Clario demo clinic}
+      CLARIO_DEMO_INSTANCE: ${CLARIO_DEMO_INSTANCE:-1}
+      CLARIO_GPU_METRICS_URL: http://gpu-metrics:9100/
+      LLM_BASE_URL: http://vllm-big:8000/v1
+      LLM_API_KEY: ${VLLM_API_KEY:?set VLLM_API_KEY}
+      LLM_MODEL: ${BIG_MODEL:-google/gemma-4-31B-it}
+      LLM_IS_AMD: "1"
+    volumes:
+      - clinic-data:/data
+      - ../../bench/results:/app/bench/results:ro   # GET /api/bench serves the droplet's own results
+    expose:
+      - "8800"
+
+  patient-demo:
+    <<: *clario-app
+    depends_on:
+      vllm-small:
+        condition: service_healthy
+    environment:
+      CLARIO_MODE: patient
+      CLARIO_DEMO_INSTANCE: ${CLARIO_DEMO_INSTANCE:-1}
+      CLARIO_GPU_METRICS_URL: http://gpu-metrics:9100/
+      LLM_BASE_URL: http://vllm-small:8001/v1
+      LLM_API_KEY: ${VLLM_API_KEY:?set VLLM_API_KEY}
+      LLM_MODEL: ${PATIENT_LLM_MODEL:-google/gemma-4-E4B-it}
+      LLM_IS_AMD: "1"
+    volumes:
+      - patient-data:/data
+      - ../../bench/results:/app/bench/results:ro
+    expose:
+      - "8800"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [clinic, patient-demo]
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?set PUBLIC_HOST, e.g. 203.0.113.7.sslip.io}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    networks: [internal]
+
+networks:
+  internal:
+
+volumes:
+  clinic-data:
+  patient-data:
+  caddy-data:
+  caddy-config:

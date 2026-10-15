@@ -38,7 +38,7 @@ export default function PatientApp() {
 
   return (
     <div className="min-h-screen pb-24 md:pb-8">
-      <header className="sticky top-0 z-20 bg-paper/95 backdrop-blur border-b border-line">
+      <header className="sticky top-[var(--demo-h,0px)] z-20 bg-paper/95 backdrop-blur border-b border-line">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <span className="font-display text-2xl">Clario</span>
           <nav className="hidden md:flex gap-5 text-[15px] font-bold" aria-label="Main">

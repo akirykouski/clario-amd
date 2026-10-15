@@ -57,7 +57,7 @@ export interface Brief {
 export interface Health {
   ok: boolean; mode: "patient" | "clinic";
   llm: { backend?: string; model?: string; base_url_host?: string; is_amd?: boolean };
-  locked?: boolean | null; ontology?: { terms?: number; diseases?: number };
+  demo_instance?: boolean; locked?: boolean | null; ontology?: { terms?: number; diseases?: number };
 }
 
 export interface SafetyNotice { level: "emergency" | "advice"; message: string; matched: string }
