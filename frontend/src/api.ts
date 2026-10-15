@@ -1,5 +1,5 @@
 import type {
-  AiCall, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, PatternsResponse, SafetyNotice,
+  AiCall, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, PatternsResponse, SafetyNotice,
   ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState,
 } from "./types";
 
@@ -20,11 +20,11 @@ export function buildUrl(path: string, params?: Record<string, string | undefine
   return `/api${path}${q ? `?${q}` : ""}`;
 }
 
-async function request<T>(method: string, path: string, opts: { params?: Record<string, string | undefined>; body?: unknown; text?: boolean } = {}): Promise<T> {
+async function request<T>(method: string, path: string, opts: { params?: Record<string, string | undefined>; body?: unknown; form?: FormData; text?: boolean } = {}): Promise<T> {
   const res = await fetch(buildUrl(path, opts.params), {
     method,
     headers: opts.body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
   });
   if (res.status === 423) {
     lockedHandler();
@@ -72,5 +72,13 @@ export const api = {
   privacyPreview: (entryId: string) => request<PrivacyPreview>("GET", "/privacy/preview", { params: { entry_id: entryId } }),
   privacyCalls: (limit = 50) => request<AiCall[]>("GET", "/privacy/calls", { params: { limit: String(limit) } }),
   privacyVerify: () => request<PrivacyVerify>("GET", "/privacy/verify"),
-  runEventsUrl:(runId: string) => buildUrl(`/runs/${encodeURIComponent(runId)}/events`),
+  labs: () => request<LabsResponse>("GET", "/labs"),
+  patchLab: (id: string, b: LabPatch) => request<LabResult>("PATCH", `/labs/${encodeURIComponent(id)}`, { body: b }),
+  uploadBatch: (files: File[]) => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append("files", f));
+    return request<BatchStarted>("POST", "/documents/batch", { form: fd });
+  },
+  batchEventsUrl: (id: string) => buildUrl(`/documents/batch/${encodeURIComponent(id)}/events`),
+  runEventsUrl: (runId: string) => buildUrl(`/runs/${encodeURIComponent(runId)}/events`),
 };

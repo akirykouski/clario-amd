@@ -1,0 +1,22 @@
+{
+ "task": "document_extraction",
+ "field_exact_match": {
+  "value": 1.0,
+  "unit": 1.0,
+  "ref_low": 1.0,
+  "ref_high": 1.0
+ },
+ "row_recall": 1.0,
+ "n": 5,
+ "n_pages": 10,
+ "n_rows": 170,
+ "pages_failed": 0,
+ "pages_per_sec": 478.92,
+ "wall_s": 0.02,
+ "concurrency": 4,
+ "dataset": "synthetic-referti/evalset",
+ "model": "offline-fixture-v1",
+ "backend": "offline-fixtures",
+ "date": "2026-10-15",
+ "offline_fixture": true
+}

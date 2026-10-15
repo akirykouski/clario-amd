@@ -26,6 +26,12 @@ Shapes: `backend/clario/models.py`. One codebase, two modes: `CLARIO_MODE=patien
 | POST | `/api/demo` | `{persona: "giulia"}` | loads synthetic entries (marked as demo) |
 | POST | `/api/share` | `ShareRequest` | `{package_id, clinic_url, expires_at, qr_payload, entities: n, entries: n}` |
 | GET | `/api/clinic/key` | `?url=` | proxy fetch of the clinic's public key (shown to the patient as a fingerprint) |
+| POST | `/api/documents/batch` | multipart `files` (PDF, JPEG, PNG; max 400 pages) | `{batch_id, pages, entry_id}`; pages stored encrypted, entry "Imported documents (N pages)", extraction runs in the background |
+| GET | `/api/documents/batch/{id}/events` | | SSE once per second `{batch_id, pages_done, pages_total, pages_per_sec, gpu, errors, labs, needs_review, done}`; `gpu` = result of `GET /api/system/gpu` if that route exists, else null |
+| GET | `/api/labs` | `?include_rejected` | `{tests: LabTest[], n_results, needs_review, out_of_range}`; `LabTest = {test_key, test_name, unit, ref_low, ref_high, latest, out_of_range, values: LabValue[] (oldest first)}` |
+| PATCH | `/api/labs/{id}` | `{action: confirm \| correct \| reject, value_numeric?, value_text?, unit?, ref_low?, ref_high?}` | `LabResult` (`review` becomes confirmed, corrected or rejected; flag recomputed in code) |
+
+Lab rows carry `confidence` (self-consistency across samples when the client has `samples`, else the model's own) and `review`: `auto` or `needs_review` (confidence below `CLARIO_REVIEW_THRESHOLD`, default 0.7). Env: `CLARIO_DOC_CONCURRENCY` (default 4, 32 for remote backends), `CLARIO_DOC_SAMPLES` (3), `LLM_VISION_MODEL` (else `LLM_MODEL`).
 
 `SafetyNotice = {level: "emergency" \| "advice", message, matched}`: returned when the text matches a red-flag rule. Emergency text still saves, but the UI must show the notice first.
 

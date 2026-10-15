@@ -29,6 +29,16 @@ class Settings:
     frontend_dist: Path | None = None
     auto_lock_minutes: int = 15
     pseudonymize: bool | None = None  # None = auto: on in patient mode when the model is remote
+    llm_vision_model: str | None = None
+    doc_concurrency: int | None = None  # None = 4 local, 32 remote (so vLLM can batch)
+    doc_samples: int = 3  # self-consistency samples per page when the client supports them
+    review_threshold: float = 0.7
+
+    @property
+    def doc_workers(self) -> int:
+        if self.doc_concurrency:
+            return self.doc_concurrency
+        return 32 if self.llm_backend in ("amd-vllm", "openai-compatible") else 4
 
     @property
     def llm_host(self) -> str | None:
@@ -69,5 +79,9 @@ class Settings:
             frontend_dist=Path(dist) if dist else here.parent / "frontend" / "dist",
             auto_lock_minutes=int(e.get("CLARIO_AUTO_LOCK_MINUTES") or 15),
             pseudonymize=_flag(e.get("CLARIO_PSEUDONYMIZE")),
+            llm_vision_model=(e.get("LLM_VISION_MODEL") or "").strip() or None,
+            doc_concurrency=max(1, int(e["CLARIO_DOC_CONCURRENCY"])) if e.get("CLARIO_DOC_CONCURRENCY") else None,
+            doc_samples=max(1, int(e.get("CLARIO_DOC_SAMPLES") or 3)),
+            review_threshold=float(e.get("CLARIO_REVIEW_THRESHOLD") or 0.7),
         )
         return replace(s, **overrides) if overrides else s

@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { api, ApiError, buildUrl, onLocked } from "../api";
 import { initialRun, runReducer } from "../runReducer";
 import { SignalPill } from "../components/ui";
 import { FinalizeButton } from "../clinic/BriefPanel";
 import { HeatStrip } from "../components/HeatStrip";
 import { buildHeat, weekStart, splitQuotes } from "../lib";
-import type { BriefItem, Brief } from "../types";
+import { LabRow, refText, valueText } from "../patient/LabsPage";
+import { gpuLoad } from "../patient/ImportPage";
+import type { BriefItem, Brief, LabValue } from "../types";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -103,5 +106,38 @@ describe("splitQuotes", () => {
   it("marks verbatim spans case-insensitively", () => {
     expect(splitQuotes("My knees hurt badly", ["knees hurt"])).toEqual([
       { text: "My ", quoted: false }, { text: "knees hurt", quoted: true }, { text: " badly", quoted: false }]);
+  });
+});
+
+const lab = (o: Partial<LabValue> = {}): LabValue => ({ id: "l1", date: "2026-03-02", value_numeric: 57, value_text: null, flag: "high", review: "needs_review", confidence: 0.55, page: 1, batch_id: "b", ...o });
+describe("lab rows", () => {
+  it("formats values and ranges", () => {
+    expect(valueText(lab())).toBe("57");
+    expect(valueText(lab({ value_numeric: null, value_text: "Positivo 1:160" }))).toBe("Positivo 1:160");
+    expect(refText({ ref_low: 10, ref_high: 40 })).toBe("10 to 40");
+    expect(refText({ ref_low: null, ref_high: 5 })).toBe("up to 5");
+  });
+  it("needs_review rows show confirm, correct and reject; others do not", async () => {
+    const onAct = vi.fn().mockResolvedValue(undefined);
+    const { unmount } = render(<ul><LabRow v={lab()} unit="mg/dL" onAct={onAct} /></ul>);
+    expect(screen.getByText(/Needs a look, 55% sure/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(onAct).toHaveBeenCalledWith("l1", { action: "confirm" });
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    expect(onAct).toHaveBeenCalledWith("l1", { action: "reject" });
+    await userEvent.click(screen.getByRole("button", { name: "Correct" }));
+    const input = screen.getByLabelText("Value");
+    await userEvent.clear(input); await userEvent.type(input, "5,5");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onAct).toHaveBeenLastCalledWith("l1", { action: "correct", unit: "mg/dL", value_numeric: 5.5 });
+    unmount();
+    render(<ul><LabRow v={lab({ review: "confirmed" })} unit="mg/dL" onAct={onAct} /></ul>);
+    expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+    expect(screen.getByText("Confirmed")).toBeInTheDocument();
+  });
+  it("reads GPU load only when the backend reports it", () => {
+    expect(gpuLoad(null)).toBeNull();
+    expect(gpuLoad({ name: "x" })).toBeNull();
+    expect(gpuLoad({ util: 61.4 })).toBe(61);
   });
 });

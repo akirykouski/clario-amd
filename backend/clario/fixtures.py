@@ -45,6 +45,8 @@ class OfflineLLM(LLM):
             feats = ", ".join(payload.get("overlapping_features", [])[:3]).lower()
             return json.dumps({"rationale": f"What you recorded ({feats}) resembles some typical features of "
                                             f"{payload.get('condition')}. It may be worth discussing with your doctor."}), _stats()
+        if task == "document":
+            return json.dumps(self._document(payload)), _stats(200)
         if task == "brief":
             return json.dumps(self._brief(payload)), _stats(300)
         return "{}", _stats()
@@ -63,6 +65,22 @@ class OfflineLLM(LLM):
                          "type": "trigger" if hpo is None else "symptom", "negated": phrase.startswith("no "),
                          "severity": int(sev.group(1)) if sev and canonical == "Arthralgia" else None})
         return {"entities": ents}
+
+    @staticmethod
+    def _document(payload: dict) -> dict:
+        """Offline "reading" of a page: replays the truth sidecar embedded in generated PDFs (no OCR, no model).
+
+        Fixed confidences: every 6th row is 0.55 (below the default review threshold), the rest 0.93.
+        """
+        off = payload.get("offline")
+        if not off:
+            return {"date": None, "rows": []}
+        rows = []
+        for i, t in enumerate(off["rows"]):
+            rows.append({"test_name": t["test_name"], "value_numeric": t["value_numeric"], "value_text": t["value_text"],
+                         "unit": t["unit"], "ref_low": t["ref_low"], "ref_high": t["ref_high"], "flag": t["flag"],
+                         "confidence": 0.55 if i % 6 == 5 else 0.93})
+        return {"date": off["date"], "rows": rows}
 
     @staticmethod
     def _brief(payload: dict) -> dict:
