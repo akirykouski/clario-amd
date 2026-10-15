@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { api } from "../api";
-import { confidencePct, splitQuotes } from "../lib";
+import { REVIEW_EVENT, confidencePct, splitQuotes } from "../lib";
 import ReviewPage, { ConfidenceBar } from "../patient/ReviewPage";
 import { EntryCard } from "../patient/EntryCard";
 import type { Entity, Entry, ReviewItem } from "../types";
@@ -69,5 +69,25 @@ describe("review", () => {
     expect(link).toHaveAttribute("href", "/review");
     expect(link.className).toContain("chip-review");
     expect(screen.getByText("Fatigue").closest("a")).toBeNull();
+  });
+
+  it("pending entry cards share one poll and tell the nav badge when extraction finishes", async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = (id: string): Entry => ({ id, created_at: "x", occurred_on: "2026-09-01", text: `note ${id}`, mood: null, extraction: "pending", entities: [] });
+      const done = { ...pending("e2"), extraction: "done" as const };
+      const list = vi.spyOn(api, "entries").mockResolvedValue([pending("e1"), done]);
+      const single = vi.spyOn(api, "entry");
+      const changed = vi.fn();
+      window.addEventListener(REVIEW_EVENT, changed);
+      render(<MemoryRouter><EntryCard initial={pending("e1")} /><EntryCard initial={pending("e2")} /></MemoryRouter>);
+      await vi.advanceTimersByTimeAsync(2100);
+      expect(list).toHaveBeenCalledTimes(1);  // two pending cards, one request
+      expect(single).not.toHaveBeenCalled();
+      expect(changed).toHaveBeenCalledTimes(1);  // e2 finished
+      window.removeEventListener(REVIEW_EVENT, changed);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

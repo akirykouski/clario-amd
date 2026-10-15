@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FileUp } from "lucide-react";
 import { api } from "../api";
-import { fmtDate, locale } from "../lib";
+import { fmtDate, locale, notifyReview } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { t, useT } from "../i18n";
@@ -91,7 +91,7 @@ export default function LabsPage() {
 
   const act = async (id: string, b: LabPatch) => {
     setErr(null);
-    try { await api.patchLab(id, b); setData(await api.labs()); } catch (e) { setErr((e as Error).message); }
+    try { await api.patchLab(id, b); setData(await api.labs()); notifyReview(); } catch (e) { setErr((e as Error).message); }
   };
 
   return (

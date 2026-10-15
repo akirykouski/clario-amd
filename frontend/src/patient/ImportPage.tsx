@@ -5,6 +5,7 @@ import { api } from "../api";
 import { ErrorBox } from "../components/ui";
 import { useEventStream } from "../components/useEventStream";
 import { useT } from "../i18n";
+import { notifyReview } from "../lib";
 import type { BatchEvent, BatchStarted } from "../types";
 
 /** GPU load in percent from the reading `GET /api/system/gpu` puts on the progress stream (`util_pct`). */
@@ -36,7 +37,7 @@ export default function ImportPage() {
   useEventStream<BatchEvent>(
     stream,
     (e) => e.done,
-    (e) => { setEv(e); if (e.done) setTimeout(() => nav("/labs"), 1200); },
+    (e) => { setEv(e); if (e.done) { notifyReview(); setTimeout(() => nav("/labs"), 1200); } },
     () => { setErr(t("import.lost")); setBusy(false); },
   );
 

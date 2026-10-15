@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { Check, X } from "lucide-react";
 import { api } from "../api";
 import type { Entity, Entry, Term } from "../types";
-import { flagNote, splitQuotes } from "../lib";
+import { flagNote, notifyReview, splitQuotes } from "../lib";
 import { ErrorBox, Loading, Spinner } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { entityName, getLang, termLabel, useT } from "../i18n";
@@ -29,7 +29,7 @@ function Review({ initial }: { initial: Entry }) {
 
   const patch = async (e: Entity, body: Parameters<typeof api.patchEntity>[1]) => {
     setErr(null);
-    try { const u = await api.patchEntity(e.id, body); setLocal((l) => ({ ...l, [u.id]: u })); }
+    try { const u = await api.patchEntity(e.id, body); setLocal((l) => ({ ...l, [u.id]: u })); notifyReview(); }
     catch (x) { setErr((x as Error).message); }
   };
 
@@ -45,7 +45,7 @@ function Review({ initial }: { initial: Entry }) {
         {entry.extraction === "pending" && <Spinner label={t("entry.stillReading")} />}
         {entry.extraction === "failed" && (
           <div className="card"><p>{t("entry.failed")}</p>
-            <button className="btn mt-2" onClick={() => api.extract(entry.id).then((e) => setLocal(Object.fromEntries(e.entities.map((x) => [x.id, x])))).catch((x) => setErr(x.message))}>{t("common.tryAgain")}</button></div>
+            <button className="btn mt-2" onClick={() => api.extract(entry.id).then((e) => { setLocal(Object.fromEntries(e.entities.map((x) => [x.id, x]))); notifyReview(); }).catch((x) => setErr(x.message))}>{t("common.tryAgain")}</button></div>
         )}
       </div>
       {err && <p role="alert" className="text-strong text-sm">{err}</p>}

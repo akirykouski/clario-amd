@@ -90,6 +90,7 @@ class Ontology:
             for p in ps:
                 self._children[p].append(t)
         self._desc: dict[str, frozenset[str]] = {}
+        self._top = frozenset(self._children.get(ROOT, ()))
         self._build_search()
 
     # ---- lookup -------------------------------------------------------
@@ -109,17 +110,17 @@ class Ontology:
     def ic(self, hpo_id: str) -> float:
         return self._ic.get(hpo_id, 0.0)
 
-    def ancestors(self, hpo_id: str) -> set[str]:
-        return set(self._ancestors(hpo_id))
+    def ancestors(self, hpo_id: str) -> frozenset[str]:
+        """Shared and cached, never copied: safe in hot loops, immutable for callers."""
+        return self._ancestors(hpo_id)
 
-    def descendants(self, hpo_id: str) -> set[str]:
-        """The term itself and everything below it."""
-        return set(self._descendants(hpo_id))
+    def descendants(self, hpo_id: str) -> frozenset[str]:
+        """The term itself and everything below it (shared, cached)."""
+        return self._descendants(hpo_id)
 
-    def systems(self, hpo_id: str) -> set[str]:
+    def systems(self, hpo_id: str) -> frozenset[str]:
         """Top-level organ systems (direct children of Phenotypic abnormality) a term belongs to."""
-        top = set(self._children.get("HP:0000118", ()))
-        return ({hpo_id} | self._ancestors(hpo_id)) & top
+        return ({hpo_id} | self._ancestors(hpo_id)) & self._top
 
     def _ancestors(self, t: str) -> frozenset[str]:
         a = self._anc.get(t)
@@ -234,6 +235,7 @@ class Ontology:
                 out.append((p, bq, bv))
         return min(1.0, tot / denom), out
 
+    @lru_cache(maxsize=2048)  # noqa: B019 - the Ontology is a process-wide singleton (see _load)
     def _mica_map(self, p: str) -> dict[str, float]:
         """disease-term q (descendant-or-self of an informative ancestor of p) -> IC of MICA(p, q)."""
         m: dict[str, float] = {}

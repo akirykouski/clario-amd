@@ -163,3 +163,10 @@ def test_threshold_routing():
 def test_merge_stats_sums():
     s = merge_stats(Stats("b", "m", 10.0, 5, None), Stats("b", "m", 30.0, 15, None))
     assert s.latency_ms == 40.0 and s.tokens == 20 and s.tokens_per_s == 500.0
+
+
+def test_identical_term_and_quote_asks_the_model_once():
+    llm = FakeLLM({"entities": [ent(**KNEES), ent(**KNEES)]}, pick=lambda p, ids: "HP:0002829")
+    got = go(llm, "Knees ache this morning", hpo_pick=True)
+    assert [t for t, _n in llm.calls].count("hpo_pick") == 1
+    assert [e.hpo_id for e in got] == ["HP:0002829"]  # grounding still collapses the duplicate entity

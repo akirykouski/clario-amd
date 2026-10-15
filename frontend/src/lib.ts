@@ -1,6 +1,12 @@
 import { getLang, t, type Key } from "./i18n";
 import type { BriefItem, Evidence } from "./types";
 
+/** Fired whenever the review queue may have changed (extraction finished, a decision, an import), so the nav badge refetches. */
+export const REVIEW_EVENT = "clario-review-changed";
+export function notifyReview(): void {
+  window.dispatchEvent(new Event(REVIEW_EVENT));
+}
+
 export function canFinalize(items: BriefItem[]): boolean {
   return items.length > 0 && !items.some((i) => i.review === "pending");
 }

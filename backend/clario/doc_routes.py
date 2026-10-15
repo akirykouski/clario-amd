@@ -26,6 +26,7 @@ log = logging.getLogger("clario")
 
 MAX_PAGES = 400
 MAX_FILE_BYTES = 60 * 1024 * 1024
+FINISHED_TTL = 15 * 60  # seconds a finished batch stays readable for its progress stream, then dropped
 
 
 class LabPatch(BaseModel):
@@ -107,6 +108,9 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
 
     def start_batch(pages: list[docs.Page]) -> dict:
         """Store the pages encrypted, add the diary entry, start reading in the background."""
+        now_m = time.monotonic()
+        for k in [k for k, b in batches.items() if b["finished"] is not None and now_m - b["finished"] > FINISHED_TTL]:
+            del batches[k]
         bid = f"b_{uuid.uuid4().hex[:10]}"
         now = now_iso()
         occurred = docs.today_iso()

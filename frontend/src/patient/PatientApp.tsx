@@ -15,7 +15,8 @@ import SharePage from "./SharePage";
 import PrivacyPage from "./PrivacyPage";
 import LabsPage from "./LabsPage";
 import ImportPage from "./ImportPage";
-import ReviewPage, { REVIEW_EVENT } from "./ReviewPage";
+import ReviewPage from "./ReviewPage";
+import { REVIEW_EVENT } from "../lib";
 
 export default function PatientApp() {
   const nav = useNavigate();
@@ -33,11 +34,10 @@ export default function PatientApp() {
   useEffect(() => {
     if (!open0) return;
     const load = () => api.review().then((r) => setToReview(r.count)).catch(() => {});
-    load();
+    load();  // on mount; after that only when something says the queue changed (extraction done, a decision, an import)
     window.addEventListener(REVIEW_EVENT, load);
-    const t = setInterval(load, 5000); // extraction runs in the background; new items can appear
-    return () => { window.removeEventListener(REVIEW_EVENT, load); clearInterval(t); };
-  }, [open0, loc.pathname]);
+    return () => window.removeEventListener(REVIEW_EVENT, load);
+  }, [open0]);
 
   if (err) return <div className="max-w-md mx-auto p-6"><ErrorBox error={err} retry={refresh} /></div>;
   if (!vault) return <Loading />;

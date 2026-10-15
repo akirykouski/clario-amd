@@ -265,7 +265,20 @@ async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
                   opts: ExtractOpts | None = None) -> tuple[list[Entity], Stats]:
     opts = opts or ExtractOpts()
     msgs = messages_for(text, opts.trust_model_confidence)
-    raw, st = await _primary(llm, msgs, text)
+
+    def sample_call():
+        return llm.samples("extract", msgs, opts.sc_n, temperature=0.7, schema=EXTRACTION_SCHEMA, payload={"text": text})
+
+    sampled = None
+    if opts.sc_n > 1 and not opts.trust_model_confidence:
+        # the samples do not depend on the primary answer: run both at once (a primary with no entities discards them)
+        prim, sampled = await asyncio.gather(_primary(llm, msgs, text), sample_call(), return_exceptions=True)
+        for r in (prim, sampled):
+            if isinstance(r, BaseException):
+                raise r
+        raw, st = prim
+    else:
+        raw, st = await _primary(llm, msgs, text)
     # drop ungrounded entities up front so the later calls only spend tokens on real ones
     raw = RawOut(entities=[r for r in raw.entities if find_quote(text, r.quote) and r.canonical.strip()])
 
@@ -273,8 +286,7 @@ async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
     need_sc = opts.sc_n > 1 and raw.entities and not (
         opts.trust_model_confidence and all(r.confidence is not None for r in raw.entities))
     if need_sc:
-        texts, st2 = await llm.samples("extract", msgs, opts.sc_n, temperature=0.7, schema=EXTRACTION_SCHEMA,
-                                       payload={"text": text})
+        texts, st2 = sampled if sampled is not None else await sample_call()
         st = merge_stats(st, st2)
         parsed: list[RawOut] = []
         for t in texts:
@@ -287,11 +299,15 @@ async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
     picks: dict[int, str | None] | None = None
     if opts.hpo_pick:
         idx = [i for i, r in enumerate(raw.entities) if (r.type if r.type in _TYPES else "symptom") in ("symptom", "finding")]
-        results = await asyncio.gather(*[pick_hpo(llm, onto, raw.entities[i].quote, raw.entities[i].canonical,
-                                                  raw.entities[i].hpo_id) for i in idx])
+        first: dict[tuple[str, str], int] = {}  # one call per distinct (canonical, quote)
+        for i in idx:
+            first.setdefault((raw.entities[i].canonical, raw.entities[i].quote), i)
+        done = dict(zip(first, await asyncio.gather(*[pick_hpo(llm, onto, raw.entities[i].quote, raw.entities[i].canonical,
+                                                               raw.entities[i].hpo_id) for i in first.values()])))
         picks = {}
-        for i, (hid, st3) in zip(idx, results):
-            picks[i] = hid
+        for i in idx:
+            picks[i] = done[(raw.entities[i].canonical, raw.entities[i].quote)][0]
+        for _hid, st3 in done.values():
             st = merge_stats(st, st3)
     ents = ground(entry_id, text, raw, onto, st.model, picks=picks, confidences=confidences,
                   opts=opts)

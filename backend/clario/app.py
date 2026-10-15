@@ -90,13 +90,20 @@ class ReviewIn(BaseModel):
 
 
 # ---------------------------------------------------------------- run bus (SSE)
+FINISHED_TTL = 15 * 60  # seconds a finished run is kept for late subscribers, then dropped
+
+
 class Runs:
-    def __init__(self) -> None:
+    def __init__(self, ttl: float = FINISHED_TTL) -> None:
         self.runs: dict[str, dict] = {}
+        self.ttl = ttl
 
     def new(self) -> str:
+        now = time.monotonic()
+        for k in [k for k, r in self.runs.items() if r["finished"] is not None and now - r["finished"] > self.ttl]:
+            del self.runs[k]
         rid = f"run_{uuid.uuid4().hex[:10]}"
-        self.runs[rid] = {"events": [], "cond": asyncio.Condition(), "done": False}
+        self.runs[rid] = {"events": [], "cond": asyncio.Condition(), "done": False, "finished": None}
         return rid
 
     async def emit(self, rid: str, stage: str, message: str, progress: float = 0.0, **kw: Any) -> None:
@@ -104,6 +111,8 @@ class Runs:
         async with r["cond"]:
             r["events"].append({"stage": stage, "message": message, "progress": round(progress, 3), **kw})
             r["done"] = r["done"] or stage in ("done", "error")
+            if r["done"] and r["finished"] is None:
+                r["finished"] = time.monotonic()
             r["cond"].notify_all()
 
     async def stream(self, rid: str):
@@ -164,7 +173,7 @@ def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
 
     if s.mode == "patient":
         _patient_routes(app, s, vault, onto, llm, spawn, gpu_reader)
-        privacy.routes(app, s, call_log, lambda eid: Entry.model_validate(vault.get(eid)) if vault.get(eid) else None)
+        privacy.routes(app, s, call_log, lambda eid: Entry.model_validate(d) if (d := vault.get(eid)) else None)
     else:
         privacy.routes(app, s, call_log)
         _clinic_routes(app, s, keys, llm, runs, spawn, onto)
@@ -193,7 +202,7 @@ def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
 
 # ====================================================================== patient
 def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm, spawn, gpu_reader=None) -> None:
-    pattern_cache: dict[str, Any] = {}
+    pattern_cache: dict[tuple[str, str], list] = {}  # (lang, evidence state) -> explained patterns
     opts = ExtractOpts.from_settings(s)
 
     def load(eid: str) -> Entry:
@@ -373,13 +382,18 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
     @app.get("/api/patterns")
     async def patterns(lang: str = "en"):
         lang = norm_lang(lang)
-        entries = all_entries()
-        ev = evidence_from(entries, onto)
-        key = json.dumps([lang, sorted((k, v.count) for k, v in ev.items()), sorted(negated_ids(entries))])
-        if key not in pattern_cache:
-            pattern_cache.clear()
-            pattern_cache[key] = await explain(llm, score_patterns(entries, onto), lang)
-        pats = pattern_cache[key]
+
+        def evidence_state():  # vault reads and scoring are CPU work: keep them off the event loop
+            entries = all_entries()
+            ev = evidence_from(entries, onto)
+            return entries, ev, json.dumps([sorted((k, v.count) for k, v in ev.items()), sorted(negated_ids(entries))])
+
+        entries, ev, state = await asyncio.to_thread(evidence_state)
+        for k in [k for k in pattern_cache if k[1] != state]:  # the evidence changed: older explanations are stale
+            del pattern_cache[k]
+        if (lang, state) not in pattern_cache:  # switching language back and forth does not call the model again
+            pattern_cache[(lang, state)] = await explain(llm, await asyncio.to_thread(score_patterns, entries, onto), lang)
+        pats = pattern_cache[(lang, state)]
         note = PATTERNS_NOTE[lang][0 if pats else 1]
         return {"patterns": pats, "confirmed_terms": len(ev), "note": note}
 
@@ -391,13 +405,14 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 
     @app.get("/api/patterns/next-question")
     async def pattern_next_question(lang: str = "en") -> NextQuestion | None:
-        q = await next_question(llm, onto, all_entries(), lang, skip=unsure_ids())
+        entries, skip = await asyncio.to_thread(lambda: (all_entries(), unsure_ids()))
+        q = await next_question(llm, onto, entries, lang, skip=skip)
         if q:
             asked[q.feature_id] = q.question
         return q
 
     @app.post("/api/patterns/answer")
-    async def pattern_answer(body: AnswerIn) -> AnswerResult:
+    def pattern_answer(body: AnswerIn) -> AnswerResult:
         if body.answer not in ("yes", "no", "unsure"):
             raise HTTPException(422, "answer must be yes, no or unsure")
         label = onto.label(body.feature_id)
