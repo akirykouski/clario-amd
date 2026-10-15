@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clario/extraction_v3",
+  "title": "Clario extraction v3",
+  "description": "Single source of truth for diary-entry extraction. The app prompt, the vLLM guided-JSON schema, synth.py training targets and eval.py all use exactly this shape. Frozen 2026-10-15; change only with a version bump.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["entities"],
+  "properties": {
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["quote", "canonical", "hpo_id", "type", "negated", "family_history", "onset_hint", "severity", "confidence"],
+        "properties": {
+          "quote": {"type": "string", "description": "Verbatim substring of the entry text (code drops the entity if not found)"},
+          "canonical": {"type": "string", "description": "Standard clinical English term, e.g. 'Malar rash'"},
+          "hpo_id": {"type": ["string", "null"], "pattern": "^HP:\\d{7}$", "description": "Must be one of the ontology candidates offered, else null"},
+          "type": {"enum": ["symptom", "finding", "lab", "medication", "trigger", "body_site"]},
+          "negated": {"type": "boolean", "description": "The entry says it is absent ('no fever', 'niente febbre')"},
+          "family_history": {"type": "boolean", "description": "It belongs to a relative ('my mother has lupus'), not the patient"},
+          "onset_hint": {"type": ["string", "null"], "description": "ISO 8601 date or a relative phrase from the text ('since Tuesday'), else null"},
+          "severity": {"type": ["integer", "null"], "minimum": 0, "maximum": 10},
+          "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Model-reported; null for models not trained to emit it. The app's own confidence comes from self-consistency."}
+        }
+      }
+    }
+  }
+}
