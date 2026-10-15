@@ -7,6 +7,7 @@ import { flagNote, splitQuotes } from "../lib";
 import { ErrorBox, Loading, Spinner } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { useLiveEntry } from "./EntryCard";
+import { CloudSaw } from "./CloudSaw";
 
 export default function EntryPage() {
   const { id = "" } = useParams();
@@ -36,6 +37,7 @@ function Review({ initial }: { initial: Entry }) {
       <p className="card whitespace-pre-wrap" aria-label="Your note">
         {segs.map((s, i) => s.quoted ? <mark key={i} className="quote text-ink">{s.text}</mark> : <span key={i}>{s.text}</span>)}
       </p>
+      <CloudSaw entryId={entry.id} />
       <div aria-live="polite">
         {entry.extraction === "pending" && <Spinner label="Still reading your note" />}
         {entry.extraction === "failed" && (

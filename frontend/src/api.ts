@@ -1,5 +1,5 @@
 import type {
-  Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, PatternsResponse, SafetyNotice,
+  AiCall, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, PatternsResponse, SafetyNotice,
   ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState,
 } from "./types";
 
@@ -69,5 +69,8 @@ export const api = {
     request<BriefItem>("PATCH", `/brief-items/${encodeURIComponent(pkg)}/${encodeURIComponent(item)}`, { body: b }),
   finalize: (id: string) => request<Brief>("POST", `/inbox/${encodeURIComponent(id)}/brief/finalize`),
   briefMdUrl: (id: string) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.md`),
-  runEventsUrl: (runId: string) => buildUrl(`/runs/${encodeURIComponent(runId)}/events`),
+  privacyPreview: (entryId: string) => request<PrivacyPreview>("GET", "/privacy/preview", { params: { entry_id: entryId } }),
+  privacyCalls: (limit = 50) => request<AiCall[]>("GET", "/privacy/calls", { params: { limit: String(limit) } }),
+  privacyVerify: () => request<PrivacyVerify>("GET", "/privacy/verify"),
+  runEventsUrl:(runId: string) => buildUrl(`/runs/${encodeURIComponent(runId)}/events`),
 };

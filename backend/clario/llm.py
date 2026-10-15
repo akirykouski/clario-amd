@@ -167,9 +167,16 @@ class OpenAICompat(LLM):
         yield "", Stats(self.backend, self.model, round(dt * 1000, 1), toks, round(toks / dt, 1) if dt else None)
 
 
-def make_llm(s: Settings) -> LLM:
+def make_llm(s: Settings, call_log=None) -> LLM:
+    """The configured client. With a `call_log`, wrapped so every call is logged (and redacted when remote)."""
     if s.offline:
         from .fixtures import OfflineLLM
 
-        return OfflineLLM(s.llm_concurrency)
-    return OpenAICompat(s)
+        inner: LLM = OfflineLLM(s.llm_concurrency)
+    else:
+        inner = OpenAICompat(s)
+    if call_log is None:
+        return inner
+    from .privacy import wrap
+
+    return wrap(inner, s, call_log)  # type: ignore[return-value]

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { BookOpen, CalendarDays, Lock, Send, Waypoints } from "lucide-react";
+import { BookOpen, CalendarDays, Lock, Send, ShieldCheck, Waypoints } from "lucide-react";
 import { api, onLocked } from "../api";
 import type { VaultState } from "../types";
 import { ErrorBox, Loading } from "../components/ui";
@@ -10,6 +10,7 @@ import EntryPage from "./EntryPage";
 import TimelinePage from "./TimelinePage";
 import PatternsPage from "./PatternsPage";
 import SharePage from "./SharePage";
+import PrivacyPage from "./PrivacyPage";
 
 export default function PatientApp() {
   const nav = useNavigate();
@@ -46,7 +47,10 @@ export default function PatientApp() {
               <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => (isActive ? "text-accent" : "text-muted")}>{l}</NavLink>
             ))}
           </nav>
-          <button className="btn" onClick={lock} aria-label="Lock diary"><Lock size={16} aria-hidden /> Lock</button>
+          <div className="flex items-center gap-2">
+            <NavLink to="/privacy" className="btn" aria-label="What left this device" title="What left this device"><ShieldCheck size={18} aria-hidden /></NavLink>
+            <button className="btn" onClick={lock} aria-label="Lock diary"><Lock size={16} aria-hidden /> Lock</button>
+          </div>
         </div>
       </header>
       <main className="max-w-2xl mx-auto px-4 py-5">
@@ -56,6 +60,7 @@ export default function PatientApp() {
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/patterns" element={<PatternsPage />} />
           <Route path="/share" element={<SharePage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

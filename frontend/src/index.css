@@ -30,6 +30,7 @@ h1, h2, h3 { font-family: Newsreader, Georgia, serif; font-weight: 500; letter-s
   .label { @apply block text-sm font-bold mb-1; }
   .chip { @apply inline-flex items-center gap-1 rounded-full border border-line px-2.5 py-0.5 text-sm bg-panel; }
   .quote { background: var(--mark); border-radius: 3px; padding: 0 2px; }
+  .redact { background: transparent; color: var(--ink); border-radius: 3px; padding: 0 3px; font-weight: 700; box-shadow: inset 0 0 0 2px var(--moderate); }
 }
 .clinic-quote { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .print-only { display: none; }
