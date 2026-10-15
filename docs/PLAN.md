@@ -10,7 +10,7 @@ clinical terms with evidence, and lets a clinic review the full picture on its o
 | Improve one part of the patient journey | The months before diagnosis: capture, then a 15-minute visit that starts from the full picture |
 | No autonomous diagnosis or treatment advice | Pattern signals only ("resembles", "consider discussing"), checked by a hedge validator in code; red-flag and dosing questions are intercepted before any model call |
 | Sensitive data | Patient data encrypted at rest on the patient's device (Argon2id + AES-GCM). Sharing is per-visit, patient-selected, sealed to the clinic's public key, expiring. The clinic model runs on the clinic's own AMD server, never a third-party API |
-| Uncertainty | Signal levels (weak/moderate/strong) from a deterministic score, evidence counts, "what is missing", no percentages |
+| Uncertainty | Signal levels (weak/moderate/strong) from a deterministic score and the lead over the next condition (cut-offs calibrated on simulated patients, `eval/results/pattern_calibration.json`), evidence counts, "what is missing", no percentages |
 | Human review | Patient confirms extracted terms; clinician accepts or rejects each AI-suggested item before the brief is final; nothing AI-written reaches the brief unreviewed |
 
 ## Architecture

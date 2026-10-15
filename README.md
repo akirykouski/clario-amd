@@ -115,6 +115,17 @@ Throughput on the MI300X, Gemma 4 31B on vLLM. Source: `eval/results/bench_amd-m
 
 Training on the MI300X: wall time `{{train.e4b-r16.train_wall_s}}`, tokens/s `{{train.e4b-r16.tokens_per_s_est}}`, peak memory GB `{{train.e4b-r16.peak_mem_gb}}`, from `eval/results/train_e4b-r16.json` (fields n, dataset, model, backend, date, train_wall_s, tokens_per_s_est, peak_mem_gb; a copy of `train/out/e4b-r16/metrics.json`).
 
+Patterns engine, CPU only, no model. 1,200 simulated patients (frequency-weighted terms from a stratified set of the shipped disease annotations, imprecise terms, noise terms, negation) through the app's scorer. Source: `eval/results/pattern_calibration.json`, written by `python eval/pattern_calibration.py` (about a minute on 8 cores). The tier cut-offs come from a separate, larger calibration run, the numbers below from an independent held-out run.
+
+| Measure | Value |
+|---|---|
+| True condition ranked 1st / in the top 3 / in the top 10 | 51% / 68% / 79% |
+| Strong card is the simulated condition | 85% (95% interval 82 to 89) |
+| Moderate card is the simulated condition | 42% (37 to 47) |
+| Weak card is the simulated condition | 28% (23 to 35) |
+
+The simulated patients are not real people, and the annotations describe typical presentations, so these numbers say how well the scorer reads the knowledge it ships, not how it would do in a clinic. A tier is a band of the lead one card has over the next best condition, because the raw score alone never reaches 80% precision.
+
 Lab import: pages per second on the MI300X `{{documents.pages_per_sec}}`, from the lab import run output of `backend/scripts/eval_documents.py` once saved to `eval/results/`.
 
 ## Run it
