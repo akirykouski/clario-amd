@@ -31,7 +31,7 @@ def test_share_draft_review_finalize(unlocked, clinic_server, tmp_path):
         assert [p["package_id"] for p in inbox] == [pid] and inbox[0]["brief_state"] == "none"
         pkg = clinic.get(f"/api/inbox/{pid}").json()
         assert all(x["entry_id"] in {e["id"] for e in pkg["entries"]} for x in pkg["entities"])
-        assert all(ent["status"] == "confirmed" for e in pkg["entries"] for ent in e["entities"])
+        assert all(ent["review"] == "confirmed" for e in pkg["entries"] for ent in e["entities"])
 
         rid = clinic.post(f"/api/inbox/{pid}/brief").json()["run_id"]
         events = sse(clinic, rid)

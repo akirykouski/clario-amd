@@ -16,7 +16,7 @@ from pathlib import Path
 
 from nacl.public import PrivateKey, PublicKey, SealedBox
 
-from .models import Entry, Pattern, SharedEntity, SharePackage
+from .models import COUNTED, Entry, Pattern, SharedEntity, SharePackage
 
 
 def now_iso() -> str:
@@ -40,10 +40,11 @@ def build_package(entries: list[Entry], since: str, until: str, patient_alias: s
     chosen = sorted((e for e in entries if since <= e.occurred_on <= until), key=lambda e: e.occurred_on)
     shared_entities, slim = [], []
     for e in chosen:
-        confirmed = [x for x in e.entities if x.status == "confirmed"]
+        confirmed = [x for x in e.entities if x.review in COUNTED]  # a person decided; needs_review never leaves
         shared_entities += [SharedEntity(entry_id=e.id, occurred_on=e.occurred_on, type=x.type, quote=x.quote,
                                          canonical=x.canonical, hpo_id=x.hpo_id, negated=x.negated,
-                                         severity=x.severity) for x in confirmed]
+                                         family_history=x.family_history, severity=x.severity,
+                                         reviewed=x.review in COUNTED) for x in confirmed]
         slim.append(e.model_copy(update={"entities": confirmed}))
     created = datetime.now(timezone.utc)
     return SharePackage(package_id=f"pkg_{uuid.uuid4().hex[:12]}", patient_alias=patient_alias,

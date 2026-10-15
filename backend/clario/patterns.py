@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from .knowledge import Ontology
 from .llm import LLM
-from .models import Entry, Evidence, Pattern, Term
+from .models import COUNTED, Entity, Entry, Evidence, Pattern, Term
 from .safety import is_hedged
 
 MIN_TERMS = 3
@@ -34,12 +34,19 @@ class RationaleOut(BaseModel):
     rationale: str = ""
 
 
+def counts_as_evidence(ent: Entity) -> bool:
+    return bool(ent.hpo_id) and ent.review in COUNTED and not ent.negated and not ent.family_history
+
+
 def evidence_from(entries: list[Entry], onto: Ontology) -> dict[str, Evidence]:
-    """Confirmed, present (not negated) HPO terms with the entries that support them."""
+    """HPO terms a person confirmed or corrected, about the patient (not negated, not a relative's), with their entries.
+
+    Entities that are unreviewed, in the review queue (needs_review) or rejected never count.
+    """
     by_term: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for e in entries:
         for ent in e.entities:
-            if ent.status == "confirmed" and ent.hpo_id and not ent.negated:
+            if counts_as_evidence(ent):
                 by_term[ent.hpo_id].append((e.id, e.occurred_on))
     out = {}
     for hid, refs in by_term.items():

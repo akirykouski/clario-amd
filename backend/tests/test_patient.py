@@ -83,7 +83,7 @@ def test_rejected_and_negated_terms_do_not_count(unlocked):
     unlocked.post("/api/entries", json={"text": "No fever. Knees ache. Mouth sore again. So tired."})
     e = wait_extracted(unlocked)[0]
     for x in e["entities"]:
-        unlocked.patch(f"/api/entities/{x['id']}", json={"status": "confirmed" if x["canonical"] != "Oral ulcer" else "rejected"})
+        unlocked.patch(f"/api/entities/{x['id']}", json={"review": "confirmed" if x["canonical"] != "Oral ulcer" else "rejected"})
     terms = {t["label"] for t in unlocked.get("/api/timeline").json()["terms"]}
     assert "Fever" not in terms and "Oral ulcer" not in terms and "Arthralgia" in terms
 

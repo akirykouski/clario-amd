@@ -23,6 +23,10 @@ class Settings:
     clinic_name: str = "Clario clinic"
     frontend_dist: Path | None = None
     auto_lock_minutes: int = 15
+    sc_n: int = 5  # self-consistency samples; 1 disables
+    trust_model_confidence: bool = False
+    hpo_pick: bool = True  # second call: model picks the HPO id from ontology candidates
+    review_threshold: float = 0.7  # confidence below this goes to the human review queue
 
     @property
     def llm_host(self) -> str | None:
@@ -62,5 +66,9 @@ class Settings:
             clinic_name=e.get("CLARIO_CLINIC_NAME") or "Clario clinic",
             frontend_dist=Path(dist) if dist else here.parent / "frontend" / "dist",
             auto_lock_minutes=int(e.get("CLARIO_AUTO_LOCK_MINUTES") or 15),
+            sc_n=max(1, int(e.get("CLARIO_SC_N") or 5)),
+            trust_model_confidence=(e.get("CLARIO_TRUST_MODEL_CONFIDENCE") or "").strip() in ("1", "true", "yes"),
+            hpo_pick=(e.get("CLARIO_HPO_PICK") or "1").strip().lower() not in ("0", "false", "no"),
+            review_threshold=float(e.get("CLARIO_REVIEW_THRESHOLD") or 0.7),
         )
         return replace(s, **overrides) if overrides else s

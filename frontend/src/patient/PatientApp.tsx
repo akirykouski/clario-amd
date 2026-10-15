@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { BookOpen, CalendarDays, Lock, Send, Waypoints } from "lucide-react";
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { BookOpen, CalendarDays, ClipboardCheck, Lock, Send, Waypoints } from "lucide-react";
 import { api, onLocked } from "../api";
 import type { VaultState } from "../types";
 import { ErrorBox, Loading } from "../components/ui";
@@ -10,16 +10,28 @@ import EntryPage from "./EntryPage";
 import TimelinePage from "./TimelinePage";
 import PatternsPage from "./PatternsPage";
 import SharePage from "./SharePage";
+import ReviewPage, { REVIEW_EVENT } from "./ReviewPage";
 
 export default function PatientApp() {
   const nav = useNavigate();
   const loc = useLocation();
   const [vault, setVault] = useState<VaultState | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [toReview, setToReview] = useState(0);
 
   const refresh = () => api.vault().then(setVault).catch((e: Error) => setErr(e.message));
   useEffect(() => { refresh(); }, []);
   useEffect(() => onLocked(() => { setVault((v) => (v ? { ...v, locked: true } : v)); nav("/unlock", { replace: true }); }), [nav]);
+
+  const open0 = !!vault && vault.initialized && !vault.locked;
+  useEffect(() => {
+    if (!open0) return;
+    const load = () => api.review().then((r) => setToReview(r.count)).catch(() => {});
+    load();
+    window.addEventListener(REVIEW_EVENT, load);
+    const t = setInterval(load, 5000); // extraction runs in the background; new items can appear
+    return () => { window.removeEventListener(REVIEW_EVENT, load); clearInterval(t); };
+  }, [open0, loc.pathname]);
 
   if (err) return <div className="max-w-md mx-auto p-6"><ErrorBox error={err} retry={refresh} /></div>;
   if (!vault) return <Loading />;
@@ -46,6 +58,9 @@ export default function PatientApp() {
               <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => (isActive ? "text-accent" : "text-muted")}>{l}</NavLink>
             ))}
           </nav>
+          {toReview > 0 && (
+            <Link to="/review" className="chip chip-review font-bold min-h-[44px] px-3" aria-label={`${toReview} to review`}>{toReview} to review</Link>
+          )}
           <button className="btn" onClick={lock} aria-label="Lock diary"><Lock size={16} aria-hidden /> Lock</button>
         </div>
       </header>
@@ -56,6 +71,7 @@ export default function PatientApp() {
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/patterns" element={<PatternsPage />} />
           <Route path="/share" element={<SharePage />} />
+          <Route path="/review" element={<ReviewPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

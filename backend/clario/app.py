@@ -24,11 +24,12 @@ from . import brief as briefing
 from . import share as sharing
 from .config import Settings
 from .demo import giulia_entries
-from .extract import extract
+from .extract import ExtractOpts, extract
 from .knowledge import Ontology
 from .llm import extract_json, make_llm
 from .models import Brief, Entity, Entry, ShareRequest, SharePackage
-from .patterns import evidence_from, explain, score_patterns
+from .patterns import counts_as_evidence, evidence_from, explain, score_patterns
+from .review import ACTIONS, EntityReview, correction_record
 from .safety import check_entry
 from .vault import BadPassphrase, Locked, Vault
 
@@ -47,11 +48,17 @@ class EntryIn(BaseModel):
 
 
 class EntityPatch(BaseModel):
-    status: str | None = None
+    review: str | None = None
+    status: str | None = None  # legacy alias of `review`: confirmed | rejected | suggested (= auto)
     canonical: str | None = None
     hpo_id: str | None = None
     severity: int | None = None
     negated: bool | None = None
+
+
+class ReviewAction(BaseModel):
+    action: str
+    value: str | None = None
 
 
 class DemoIn(BaseModel):
@@ -167,6 +174,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 # ====================================================================== patient
 def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm, spawn) -> None:
     pattern_cache: dict[str, Any] = {}
+    opts = ExtractOpts.from_settings(s)
 
     def load(eid: str) -> Entry:
         doc = vault.get(eid)
@@ -188,7 +196,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         except Locked:
             return None
         try:
-            ents, _st = await extract(llm, e.id, e.text, onto)
+            ents, _st = await extract(llm, e.id, e.text, onto, opts)
         except Exception as err:  # noqa: BLE001 - recorded as failed, retried on demand
             log.warning("extraction failed for %s: %s", eid, err)
             ents, status = [], "failed"
@@ -196,7 +204,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             status = "done"
         with contextlib.suppress(Locked):
             cur = load(eid)  # entities confirmed meanwhile are kept
-            keep = [x for x in cur.entities if x.status != "suggested"]
+            keep = [x for x in cur.entities if x.review not in ("auto", "needs_review")]  # decided by a person
             cur.entities = keep + [x for x in ents if (x.hpo_id, x.quote.lower()) not in
                                    {(k.hpo_id, k.quote.lower()) for k in keep}]
             cur.extraction = status
@@ -273,8 +281,13 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
                 if x.id != ent_id:
                     continue
                 upd = body.model_dump(exclude_none=True)
-                if "status" in upd and upd["status"] not in ("suggested", "confirmed", "rejected"):
-                    raise HTTPException(422, "status must be suggested, confirmed or rejected")
+                legacy = upd.pop("status", None)
+                if legacy is not None:
+                    upd.setdefault("review", "auto" if legacy == "suggested" else legacy)
+                if "review" in upd and upd["review"] not in ("auto", "confirmed", "rejected"):
+                    raise HTTPException(422, "review must be auto, confirmed or rejected")
+                if "hpo_id" in upd and "review" not in upd:
+                    upd["review"] = "corrected"
                 if "hpo_id" in upd:
                     if not onto.exists(upd["hpo_id"]):
                         raise HTTPException(422, "Unknown HPO term")
@@ -286,6 +299,32 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
                 save(e)
                 return e.entities[i]
         raise HTTPException(404, "entity not found")
+
+    # ---- human review queue; other modules add kinds via app.state.review_kinds[kind] = handler
+    app.state.vault = vault
+    app.state.review_kinds = {"entity": EntityReview(all_entries, save, onto)}
+
+    @app.get("/api/review")
+    def review_queue():
+        items = [i for k in app.state.review_kinds.values() for i in k.items()]
+        return {"items": items, "count": len(items)}
+
+    @app.post("/api/review/{kind}/{item_id}")
+    def review_act(kind: str, item_id: str, body: ReviewAction):
+        handler = app.state.review_kinds.get(kind)
+        if handler is None:
+            raise HTTPException(404, "unknown review kind")
+        if body.action not in ACTIONS:
+            raise HTTPException(422, "action must be confirm, correct or reject")
+        try:
+            detail = handler.apply(item_id, body.action, body.value)
+        except LookupError:
+            raise HTTPException(404, "item not found")
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        rid, rec = correction_record(kind, item_id, body.action, detail)
+        vault.put("correction_log", rid, rec)
+        return {"ok": True, "count": sum(len(k.items()) for k in app.state.review_kinds.values())}
 
     @app.get("/api/terms/search")
     def term_search(q: str = ""):
@@ -299,7 +338,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             d = days.setdefault(e.occurred_on, {"date": e.occurred_on, "entries": [], "terms": []})
             d["entries"].append(e.id)
             for x in e.entities:
-                if x.status == "confirmed" and x.hpo_id and not x.negated:
+                if counts_as_evidence(x):
                     d["terms"].append({"hpo_id": x.hpo_id, "label": x.hpo_label or x.canonical})
         terms = sorted(evidence_from(entries, onto).values(), key=lambda v: -v.count)
         return {"days": sorted(days.values(), key=lambda d: d["date"]), "terms": terms}

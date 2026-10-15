@@ -37,6 +37,15 @@ class Stats:
                 "tokens": self.tokens, "tokens_per_s": self.tokens_per_s}
 
 
+def merge_stats(a: Stats | None, b: Stats) -> Stats:
+    """Sum latency and tokens of sequential calls."""
+    if a is None:
+        return b
+    toks = (a.tokens or 0) + (b.tokens or 0) or None
+    lat = a.latency_ms + b.latency_ms
+    return Stats(a.backend, a.model, round(lat, 1), toks, round(toks / (lat / 1000), 1) if toks and lat else None)
+
+
 def extract_json(text: str | None) -> Any:
     """First JSON object or array in `text`; tolerates code fences and chatter."""
     if not text:
@@ -81,6 +90,17 @@ class LLM:
         yield text, None
         yield "", st
 
+    async def samples(self, task: str, messages: list[dict], n: int, *, temperature: float = 0.7,
+                      schema: dict | None = None, payload: dict | None = None) -> tuple[list[str], Stats]:
+        """n independent JSON completions of the same prompt (self-consistency). Base: n sequential calls."""
+        outs: list[str] = []
+        total: Stats | None = None
+        for _ in range(max(1, n)):
+            text, st = await self.complete(task, messages, json_mode=True, payload=payload)
+            outs.append(text)
+            total = merge_stats(total, st)
+        return outs, total  # type: ignore[return-value]
+
     async def json(self, task: str, messages: list[dict], cls: type[T], *, max_tokens: int | None = None,
                    payload: dict | None = None) -> tuple[T, Stats]:
         msgs = list(messages)
@@ -104,6 +124,7 @@ class OpenAICompat(LLM):
         self.client = AsyncOpenAI(base_url=s.llm_base_url, api_key=s.llm_api_key, timeout=300, max_retries=1)
         self.backend, self.model, self.is_amd = s.llm_backend, s.llm_model, s.llm_is_amd
         self._json_ok = True
+        self._schema_mode: str | None = "json_schema"  # json_schema -> guided_json -> None (plain parsing)
 
     def _json_refused(self, e, kw: dict) -> bool:
         """Some servers (e.g. Ollama with Gemma 4) reject JSON mode with 400/422/501. Drop it and rely on parsing."""
@@ -140,6 +161,65 @@ class OpenAICompat(LLM):
         toks = resp.usage.completion_tokens if resp.usage else None
         return (resp.choices[0].message.content or ""), Stats(
             self.backend, self.model, round(dt * 1000, 1), toks, round(toks / dt, 1) if toks and dt else None)
+
+    def _schema_kw(self, kw: dict, schema: dict | None) -> None:
+        """Put the JSON schema on the request using the best mode this server has accepted so far."""
+        kw.pop("response_format", None)
+        kw.pop("extra_body", None)
+        if schema and self._schema_mode == "json_schema":
+            kw["response_format"] = {"type": "json_schema", "json_schema": {"name": "out", "schema": schema}}
+        elif schema and self._schema_mode == "guided_json":
+            kw["extra_body"] = {"guided_json": schema}
+        elif self._json_ok:
+            kw["response_format"] = {"type": "json_object"}
+
+    def _schema_refused(self, e, schema: dict | None) -> bool:
+        """400/422/501 on a schema request: step down json_schema -> guided_json -> plain JSON mode -> plain parsing."""
+        if getattr(e, "status_code", None) not in (400, 422, 501):
+            return False
+        if schema and self._schema_mode == "json_schema":
+            self._schema_mode = "guided_json"
+        elif schema and self._schema_mode == "guided_json":
+            self._schema_mode = None
+        elif self._json_ok:
+            self._json_ok = False
+        else:
+            return False
+        return True
+
+    async def _create(self, kw: dict, schema: dict | None):
+        import openai
+
+        for _ in range(4):
+            self._schema_kw(kw, schema)
+            try:
+                return await self.client.chat.completions.create(**kw)
+            except openai.APIStatusError as e:
+                if not self._schema_refused(e, schema):
+                    raise
+        raise LLMError(f"{self.backend}: server refused every JSON mode")
+
+    async def samples(self, task, messages, n, *, temperature=0.7, schema=None, payload=None):
+        import openai
+
+        n = max(1, n)
+        kw = self._kw(messages, True, None) | {"temperature": temperature}
+        t0 = time.perf_counter()
+        try:
+            async with self._sem:
+                resp = await self._create(dict(kw) | ({"n": n} if n > 1 else {}), schema)
+                texts = [c.message.content or "" for c in resp.choices[:n]]
+                toks = resp.usage.completion_tokens if resp.usage else None
+                if len(texts) < n:  # server ignored `n`: fill up with concurrent single calls
+                    more = await asyncio.gather(*[self._create(dict(kw), schema) for _ in range(n - len(texts))])
+                    for r in more:
+                        texts.append(r.choices[0].message.content or "")
+                        toks = (toks or 0) + (r.usage.completion_tokens if r.usage else 0) or None
+        except openai.OpenAIError as e:
+            raise LLMError(f"{self.backend} call failed: {e}") from e
+        dt = time.perf_counter() - t0
+        return texts, Stats(self.backend, self.model, round(dt * 1000, 1), toks,
+                            round(toks / dt, 1) if toks and dt else None)
 
     async def stream(self, task, messages, *, max_tokens=None, payload=None):
         import openai

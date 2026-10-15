@@ -1,7 +1,7 @@
 // Mirror of backend/clario/models.py and docs/API.md
 export type EntityType = "symptom" | "finding" | "lab" | "medication" | "trigger" | "body_site";
 export type Signal = "weak" | "moderate" | "strong";
-export type EntityStatus = "suggested" | "confirmed" | "rejected";
+export type EntityReview = "auto" | "needs_review" | "confirmed" | "corrected" | "rejected";
 export type Extraction = "pending" | "done" | "failed";
 
 export interface Term { hpo_id: string; label: string }
@@ -9,8 +9,17 @@ export interface Term { hpo_id: string; label: string }
 export interface Entity {
   id: string; entry_id: string; type: EntityType; quote: string; canonical: string;
   hpo_id: string | null; hpo_label: string | null; negated: boolean; severity: number | null;
-  status: EntityStatus; flags: string[]; model: string | null;
+  family_history: boolean; onset_hint: string | null; confidence: number | null; review: EntityReview;
+  flags: string[]; model: string | null;
 }
+
+export interface ReviewItem {
+  kind: "entity" | "lab"; id: string; entry_id: string | null; display: string; value: string | null;
+  confidence: number | null; source_excerpt: string;
+  quote?: string; hpo_label?: string | null; occurred_on?: string; negated?: boolean; family_history?: boolean;
+}
+export interface ReviewQueue { items: ReviewItem[]; count: number }
+export type ReviewAction = "confirm" | "correct" | "reject";
 
 export interface Entry {
   id: string; created_at: string; occurred_on: string; text: string; mood: number | null;
@@ -33,7 +42,7 @@ export interface ShareRequest {
 
 export interface SharedEntity {
   entry_id: string; occurred_on: string; type: EntityType; quote: string; canonical: string;
-  hpo_id: string | null; negated: boolean; severity: number | null;
+  hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; reviewed: boolean;
 }
 
 export interface SharePackage {
