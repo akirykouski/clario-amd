@@ -17,6 +17,20 @@ def _flag(v: str | None, default: bool | None = None) -> bool | None:
 
 
 @dataclass(frozen=True)
+class ExtractOpts:
+    """Extraction knobs. The one place their defaults live: Settings and the extractor both read them from here."""
+
+    sc_n: int = 5  # self-consistency samples; 1 disables
+    trust_model_confidence: bool = False
+    hpo_pick: bool = True  # second call: model picks the HPO id from ontology candidates
+    review_threshold: float = 0.7  # below this confidence an entity or lab row waits for a person
+
+    @classmethod
+    def from_settings(cls, s: "Settings") -> "ExtractOpts":
+        return cls(s.sc_n, s.trust_model_confidence, s.hpo_pick, s.review_threshold)
+
+
+@dataclass(frozen=True)
 class Settings:
     mode: str = "patient"  # "patient" | "clinic"
     llm_base_url: str = DEFAULT_LOCAL_BASE
@@ -33,11 +47,11 @@ class Settings:
     llm_vision_model: str | None = None
     doc_concurrency: int | None = None  # None = 4 local, 32 remote (so vLLM can batch)
     doc_samples: int = 3  # self-consistency samples per page when the client supports them
-    review_threshold: float = 0.7
+    review_threshold: float = ExtractOpts.review_threshold
 
-    sc_n: int = 5  # self-consistency samples; 1 disables
-    trust_model_confidence: bool = False
-    hpo_pick: bool = True  # second call: model picks the HPO id from ontology candidates
+    sc_n: int = ExtractOpts.sc_n
+    trust_model_confidence: bool = ExtractOpts.trust_model_confidence
+    hpo_pick: bool = ExtractOpts.hpo_pick
     demo_instance: bool = False
     gpu_metrics_url: str | None = None
 
@@ -73,6 +87,7 @@ class Settings:
         here = Path(__file__).resolve().parent.parent
         default_dir = Path.home() / (".clario" if mode == "patient" else ".clario-clinic")
         dist = e.get("FRONTEND_DIST")
+        d = ExtractOpts()
         s = cls(
             mode=mode,
             llm_base_url=(e.get("LLM_BASE_URL") or DEFAULT_LOCAL_BASE).strip(),
@@ -89,10 +104,10 @@ class Settings:
             llm_vision_model=(e.get("LLM_VISION_MODEL") or "").strip() or None,
             doc_concurrency=max(1, int(e["CLARIO_DOC_CONCURRENCY"])) if e.get("CLARIO_DOC_CONCURRENCY") else None,
             doc_samples=max(1, int(e.get("CLARIO_DOC_SAMPLES") or 3)),
-            sc_n=max(1, int(e.get("CLARIO_SC_N") or 5)),
-            trust_model_confidence=bool(_flag(e.get("CLARIO_TRUST_MODEL_CONFIDENCE"))),
-            hpo_pick=bool(_flag(e.get("CLARIO_HPO_PICK"), True)),
-            review_threshold=float(e.get("CLARIO_REVIEW_THRESHOLD") or 0.7),
+            sc_n=max(1, int(e.get("CLARIO_SC_N") or d.sc_n)),
+            trust_model_confidence=bool(_flag(e.get("CLARIO_TRUST_MODEL_CONFIDENCE"), d.trust_model_confidence)),
+            hpo_pick=bool(_flag(e.get("CLARIO_HPO_PICK"), d.hpo_pick)),
+            review_threshold=float(e.get("CLARIO_REVIEW_THRESHOLD") or d.review_threshold),
             demo_instance=bool(_flag(e.get("CLARIO_DEMO_INSTANCE"))),
             gpu_metrics_url=(e.get("CLARIO_GPU_METRICS_URL") or "").strip() or None,
         )

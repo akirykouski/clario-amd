@@ -19,6 +19,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .config import ExtractOpts
 from .knowledge import fold
 from .llm import LLM, LLMError, extract_json
 from .models import LabResult, route_review
@@ -252,7 +253,7 @@ def _parse_samples(raw: list) -> list[RawDoc]:
 
 
 async def extract_page(llm: LLM, page: Page, page_no: int, *, vision_model: str | None = None,
-                       threshold: float = 0.7, n_samples: int = 3) -> PageResult:
+                       threshold: float = ExtractOpts.review_threshold, n_samples: int = 3) -> PageResult:
     """One page -> rows with confidence and review state. `page_no` is the number within the batch."""
     payload: dict[str, Any] = {"page": page.index}
     if vision_model:

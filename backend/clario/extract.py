@@ -18,12 +18,11 @@ import asyncio
 import json
 import re
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .config import Settings
+from .config import ExtractOpts  # noqa: F401 - defined in config, importable from here too
 from .knowledge import Ontology, fold
 from .llm import LLM, LLMError, Stats, extract_json, merge_stats
 from .models import Entity
@@ -98,18 +97,6 @@ class RawOut(BaseModel):
     entities: list[RawEntity] = Field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class ExtractOpts:
-    sc_n: int = 5
-    trust_model_confidence: bool = False
-    hpo_pick: bool = True
-    review_threshold: float = 0.7
-
-    @classmethod
-    def from_settings(cls, s: Settings) -> "ExtractOpts":
-        return cls(s.sc_n, s.trust_model_confidence, s.hpo_pick, s.review_threshold)
-
-
 def messages_for(text: str, confidence: bool = False) -> list[dict]:
     """The exact messages the LoRA saw in training (clario/prompt.py is a verbatim copy of train/prompt.py): one system
     prompt, the diary as the only user turn, no few-shot. `confidence` selects the variant that asks for a probability."""
@@ -165,7 +152,7 @@ def self_consistency(primary: list[RawEntity], samples: list[RawOut], text: str)
 # ---------------------------------------------------------------- grounding
 def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | None, *,
            picks: dict[int, str | None] | None = None, confidences: list[float | None] | None = None,
-           review_threshold: float = 0.7, trust_model_confidence: bool = False) -> list[Entity]:
+           opts: ExtractOpts = ExtractOpts()) -> list[Entity]:
     """`picks[i]`: id the model chose from the ontology candidates for raw entity i (None = NONE).
     Entities with a pick skip the free-form HPO proposal entirely."""
     out: list[Entity] = []
@@ -190,7 +177,7 @@ def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | N
             flags.append("family_history_from_text")
         sev = r.severity
         sev = int(round(sev)) if isinstance(sev, (int, float)) and 0 <= sev <= 10 else None
-        conf = r.confidence if trust_model_confidence and r.confidence is not None else (
+        conf = r.confidence if opts.trust_model_confidence and r.confidence is not None else (
             confidences[i] if confidences and i < len(confidences) else None)
         key = (hpo_id or r.canonical.lower(), quote.lower())
         if key in seen:
@@ -199,7 +186,7 @@ def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | N
         out.append(Entity(id=f"ent_{uuid.uuid4().hex[:10]}", entry_id=entry_id, type=etype, quote=quote,
                           canonical=r.canonical.strip()[:120], hpo_id=hpo_id, hpo_label=hpo_label,
                           negated=negated, family_history=family, onset_hint=r.onset_hint, severity=sev,
-                          confidence=conf, review=route_review(conf, review_threshold),
+                          confidence=conf, review=route_review(conf, opts.review_threshold),
                           flags=flags, model=model))
     return out
 
@@ -307,5 +294,5 @@ async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
             picks[i] = hid
             st = merge_stats(st, st3)
     ents = ground(entry_id, text, raw, onto, st.model, picks=picks, confidences=confidences,
-                  review_threshold=opts.review_threshold, trust_model_confidence=opts.trust_model_confidence)
+                  opts=opts)
     return ents, st

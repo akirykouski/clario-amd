@@ -36,7 +36,7 @@ from .llm import extract_json, make_llm
 from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage, Term
 from .next_question import as_ranked_patterns, next_question, rank_diseases, template_question
 from .patterns import counts_as_evidence, evidence_from, explain, negated_ids, score_patterns
-from .review import ACTIONS, EntityReview, correction_record, register_review_kind
+from .review import ACTIONS, EntityReview, apply_entity_action, correction_record, register_review_kind
 from .safety import check_entry
 from .vault import BadPassphrase, Locked, Vault
 
@@ -57,7 +57,6 @@ class EntryIn(BaseModel):
 
 class EntityPatch(BaseModel):
     review: str | None = None
-    status: str | None = None  # legacy alias of `review`: confirmed | rejected | suggested (= auto)
     canonical: str | None = None
     hpo_id: str | None = None
     severity: int | None = None
@@ -305,20 +304,15 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
                 if x.id != ent_id:
                     continue
                 upd = body.model_dump(exclude_none=True)
-                legacy = upd.pop("status", None)
-                if legacy is not None:
-                    upd.setdefault("review", "auto" if legacy == "suggested" else legacy)
                 if "review" in upd and upd["review"] not in ("auto", "confirmed", "rejected"):
                     raise HTTPException(422, "review must be auto, confirmed or rejected")
-                if "hpo_id" in upd and "review" not in upd:
-                    upd["review"] = "corrected"
-                if "hpo_id" in upd:
-                    if not onto.exists(upd["hpo_id"]):
+                base = x
+                if "hpo_id" in upd:  # same correction as the review queue; fields sent in the same body win over it
+                    try:
+                        base = apply_entity_action(x, "correct", upd.pop("hpo_id"), onto)
+                    except ValueError:
                         raise HTTPException(422, "Unknown HPO term")
-                    upd["hpo_label"] = onto.label(upd["hpo_id"])
-                    upd.setdefault("canonical", upd["hpo_label"])
-                    upd["flags"] = [f for f in x.flags if not f.startswith(("hpo_", "no_hpo"))] + ["fixed_by_patient"]
-                new = x.model_copy(update=upd)
+                new = base.model_copy(update=upd)
                 e.entities[i] = Entity.model_validate(new.model_dump())
                 save(e)
                 return e.entities[i]

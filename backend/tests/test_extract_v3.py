@@ -142,9 +142,6 @@ def test_old_format_outputs_still_parse():
     older = {"entities": [{"name": "Fatigue", "quote": "so tired", "type": "symptom"}]}
     e = go(FakeLLM(older), "I am so tired")[0]
     assert e.canonical == "Fatigue" and e.quote == "so tired"
-    legacy = Entity.model_validate({"id": "x", "entry_id": "e", "type": "symptom", "quote": "q", "canonical": "c", "status": "confirmed"})
-    assert legacy.review == "confirmed"
-    assert Entity.model_validate({"id": "x", "entry_id": "e", "type": "symptom", "quote": "q", "canonical": "c", "status": "suggested"}).review == "auto"
 
 
 def test_onset_hint_and_severity_pass_through():
@@ -159,7 +156,7 @@ def test_threshold_routing():
     assert route_review(None, 0.7) == "auto"
     assert route_review(0.6, 0.5) == "auto"
     raw = RawOut.model_validate({"entities": [KNEES]})
-    e = ground("e1", "Knees ache", raw, ONTO, "m", confidences=[0.6], review_threshold=0.7)[0]
+    e = ground("e1", "Knees ache", raw, ONTO, "m", confidences=[0.6], opts=ExtractOpts(review_threshold=0.7))[0]
     assert e.review == "needs_review"
 
 

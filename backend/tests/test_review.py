@@ -96,10 +96,10 @@ def test_review_kinds_are_pluggable(unlocked):
     assert unlocked.app.state.vault.all("correction_log")[0]["kind"] == "lab"
 
 
-def test_legacy_status_patch_still_works(unlocked):
+def test_patch_review_values(unlocked):
     unlocked.post("/api/entries", json={"text": "So tired"})
     x = wait_extracted(unlocked)[0]["entities"][0]
-    assert unlocked.patch(f"/api/entities/{x['id']}", json={"status": "confirmed"}).json()["review"] == "confirmed"
+    assert unlocked.patch(f"/api/entities/{x['id']}", json={"review": "confirmed"}).json()["review"] == "confirmed"
     assert unlocked.patch(f"/api/entities/{x['id']}", json={"review": "needs_review"}).status_code == 422
 
 

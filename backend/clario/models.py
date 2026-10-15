@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 EntityType = Literal["symptom", "finding", "lab", "medication", "trigger", "body_site"]
 Signal = Literal["weak", "moderate", "strong"]
@@ -46,16 +46,6 @@ class Entity(BaseModel):
                                                "confirmed, corrected, rejected: decided by the patient")
     flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, quote_not_found")
     model: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _legacy_status(cls, d):
-        """Records saved before `review` existed carried status suggested|confirmed|rejected."""
-        if isinstance(d, dict) and "status" in d:
-            d = dict(d)
-            st = d.pop("status")
-            d.setdefault("review", st if st in ("confirmed", "rejected") else "auto")
-        return d
 
 
 class Entry(BaseModel):
