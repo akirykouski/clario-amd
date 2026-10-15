@@ -28,11 +28,11 @@ from . import share as sharing
 from .config import Settings
 from . import documents as docs
 from .demo import PERSONA_LANG, PERSONAS, demo_referti, persona_entries
-from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, norm_lang
+from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
 from .knowledge import Ontology
 from .llm import extract_json, make_llm
-from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage
+from .models import AnswerResult, Brief, Entity, Entry, NextQuestion, ShareRequest, SharePackage, Term
 from .next_question import as_ranked_patterns, next_question, rank_diseases, template_question
 from .patterns import counts_as_evidence, evidence_from, explain, negated_ids, score_patterns
 from .review import ACTIONS, EntityReview, correction_record
@@ -362,8 +362,17 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return {"ok": True, "count": sum(len(k.items()) for k in app.state.review_kinds.values())}
 
     @app.get("/api/terms/search")
-    def term_search(q: str = ""):
-        return onto.search(q, 10) if q.strip() else []
+    def term_search(q: str = "", lang: str = "en"):
+        """Ontology lookup. In Italian the plain Italian names we ship are searched first (labels in Italian)."""
+        if not q.strip():
+            return []
+        out = onto.search(q, 10)
+        if norm_lang(lang) == "it":
+            low = q.strip().lower()
+            mine = [Term(hpo_id=h, label=lab) for h, lab in hpo_it().items() if low in lab.lower() and onto.exists(h)]
+            out = mine + [Term(hpo_id=x.hpo_id, label=term_label(x.hpo_id, x.label, "it")) for x in out
+                          if x.hpo_id not in {m.hpo_id for m in mine}]
+        return out[:10]
 
     @app.get("/api/timeline")
     def timeline():

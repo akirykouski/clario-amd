@@ -66,6 +66,31 @@ def test_queue_mixes_entities_and_labs(unlocked):
     assert kinds == {"entity", "lab"}
 
 
+def test_vault_survives_concurrent_threads(tmp_path):
+    """The API serves sync routes from a thread pool over one sqlite connection (extraction writes while the UI reads)."""
+    import threading
+
+    from clario.vault import Vault
+
+    v = Vault(tmp_path / "v")
+    v.setup(PASS)
+    errors: list[Exception] = []
+
+    def work(n: int) -> None:
+        try:
+            for i in range(150):
+                v.put("entry", f"e{n}_{i}", {"n": n, "i": i})
+                assert len(v.all("entry")) >= 1
+                assert v.get(f"e{n}_{i}")["i"] == i
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    ts = [threading.Thread(target=work, args=(n,)) for n in range(8)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert errors == [] and len(v.all("entry")) == 8 * 150
+
+
 # ------------------------------------------------------------ one prompt for app and training
 def test_app_prompt_is_the_training_prompt():
     sys.path.insert(0, str(ROOT / "train"))

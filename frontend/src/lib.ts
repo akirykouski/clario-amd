@@ -1,8 +1,5 @@
-import type { BriefItem, Evidence, Signal } from "./types";
-
-export const signalWord: Record<Signal, string> = {
-  weak: "Weak signal", moderate: "Moderate signal", strong: "Strong signal",
-};
+import { getLang, t, type Key } from "./i18n";
+import type { BriefItem, Evidence } from "./types";
 
 export function canFinalize(items: BriefItem[]): boolean {
   return items.length > 0 && !items.some((i) => i.review === "pending");
@@ -79,7 +76,7 @@ export function splitQuotes(text: string, quotes: string[]): Seg[] {
 
 export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }): string {
   const d = new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
-  return isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-GB", opts);
+  return isNaN(d.getTime()) ? iso : d.toLocaleDateString(getLang() === "it" ? "it-IT" : "en-GB", opts);
 }
 export function today(): string {
   const d = new Date();
@@ -89,12 +86,11 @@ export function daysAgo(n: number): string {
   const d = new Date(); d.setDate(d.getDate() - n);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
-export const flagNote: Record<string, string> = {
-  hpo_dropped: "Ontology code removed: it did not match your words.",
-  negation_from_text: "Marked as absent because your words say you do not have it.",
-  family_history_from_text: "Marked as a relative's, not yours.",
-  quote_not_found: "We could not find these exact words in your note.",
-};
+/** Plain-words note for a flag the extractor set on an entity; unknown flags are shown as words. */
+export function flagNote(flag: string): string {
+  const key = `flag.${flag}` as Key;
+  return ["hpo_dropped", "negation_from_text", "family_history_from_text", "quote_not_found"].includes(flag) ? t(key) : flag.replace(/_/g, " ");
+}
 
 /** Confidence as a whole-number percent for the bar; null when it was not measured. */
 export function confidencePct(c: number | null): number | null {

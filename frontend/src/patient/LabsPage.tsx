@@ -5,14 +5,15 @@ import { api } from "../api";
 import { fmtDate } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
+import { getLang, t, useT } from "../i18n";
 import type { LabPatch, LabTest, LabValue } from "../types";
 
-const num = (n: number) => String(Math.round(n * 1000) / 1000);
+const num = (n: number) => (Math.round(n * 1000) / 1000).toLocaleString(getLang() === "it" ? "it-IT" : "en-GB", { useGrouping: false, maximumFractionDigits: 3 });
 export const valueText = (v: LabValue) => (v.value_numeric !== null ? num(v.value_numeric) : v.value_text ?? "");
-export function refText(t: Pick<LabTest, "ref_low" | "ref_high">): string {
-  if (t.ref_low !== null && t.ref_high !== null) return `${num(t.ref_low)} to ${num(t.ref_high)}`;
-  if (t.ref_high !== null) return `up to ${num(t.ref_high)}`;
-  if (t.ref_low !== null) return `from ${num(t.ref_low)}`;
+export function refText(r: Pick<LabTest, "ref_low" | "ref_high">): string {
+  if (r.ref_low !== null && r.ref_high !== null) return t("labs.rangeBoth", { lo: num(r.ref_low), hi: num(r.ref_high) });
+  if (r.ref_high !== null) return t("labs.rangeUpTo", { hi: num(r.ref_high) });
+  if (r.ref_low !== null) return t("labs.rangeFrom", { lo: num(r.ref_low) });
   return "";
 }
 
@@ -20,7 +21,7 @@ function FlagPill({ flag }: { flag: LabValue["flag"] }) {
   if (flag !== "low" && flag !== "high") return null;
   return (
     <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold"
-      style={{ color: "var(--strong)", borderColor: "var(--strong)" }}>{flag === "high" ? "High" : "Low"}</span>
+      style={{ color: "var(--strong)", borderColor: "var(--strong)" }}>{flag === "high" ? t("labs.high") : t("labs.low")}</span>
   );
 }
 
@@ -31,7 +32,7 @@ function Spark({ values }: { values: LabValue[] }) {
   const xy = pts.map((p, i) => `${(i / (pts.length - 1)) * 96 + 2},${26 - ((p - lo) / span) * 22}`);
   const last = xy[xy.length - 1].split(",");
   return (
-    <svg width="100" height="30" viewBox="0 0 100 30" role="img" aria-label={`Trend over ${pts.length} results`} className="shrink-0">
+    <svg width="100" height="30" viewBox="0 0 100 30" role="img" aria-label={t("labs.trend", { n: pts.length })} className="shrink-0">
       <polyline points={xy.join(" ")} fill="none" stroke="var(--muted)" strokeWidth="1.5" />
       <circle cx={last[0]} cy={last[1]} r="3" fill="var(--accent)" />
     </svg>
@@ -39,6 +40,7 @@ function Spark({ values }: { values: LabValue[] }) {
 }
 
 export function LabRow({ v, unit, onAct }: { v: LabValue; unit: string; onAct: (id: string, b: LabPatch) => Promise<void> }) {
+  const { t: tt } = useT();
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(valueText(v));
   const [u, setU] = useState(unit);
@@ -57,23 +59,23 @@ export function LabRow({ v, unit, onAct }: { v: LabValue; unit: string; onAct: (
         <span className="text-sm text-muted w-16">{fmtDate(v.date, { day: "numeric", month: "short", year: "2-digit" })}</span>
         <span className="font-bold tabular-nums">{valueText(v)} <span className="font-normal text-muted text-sm">{unit}</span></span>
         <FlagPill flag={v.flag} />
-        {review && <span className="text-sm font-bold" style={{ color: "var(--moderate)" }}>Needs a look{v.confidence !== null ? `, ${Math.round(v.confidence * 100)}% sure` : ""}</span>}
-        {v.review === "confirmed" && <span className="text-sm text-muted">Confirmed</span>}
-        {v.review === "corrected" && <span className="text-sm text-muted">Corrected by you</span>}
+        {review && <span className="text-sm font-bold" style={{ color: "var(--moderate)" }}>{v.confidence !== null ? tt("labs.needsLookSure", { pct: Math.round(v.confidence * 100) }) : tt("labs.needsLook")}</span>}
+        {v.review === "confirmed" && <span className="text-sm text-muted">{tt("common.confirmed")}</span>}
+        {v.review === "corrected" && <span className="text-sm text-muted">{tt("labs.corrected")}</span>}
       </div>
       {review && !editing && (
         <div className="flex flex-wrap gap-2 mt-2">
-          <button className="btn" disabled={busy} onClick={() => act({ action: "confirm" })}>Confirm</button>
-          <button className="btn" disabled={busy} onClick={() => setEditing(true)}>Correct</button>
-          <button className="btn" disabled={busy} onClick={() => act({ action: "reject" })}>Reject</button>
+          <button className="btn" disabled={busy} onClick={() => act({ action: "confirm" })}>{tt("common.confirm")}</button>
+          <button className="btn" disabled={busy} onClick={() => setEditing(true)}>{tt("common.correct")}</button>
+          <button className="btn" disabled={busy} onClick={() => act({ action: "reject" })}>{tt("common.reject")}</button>
         </div>
       )}
       {review && editing && (
         <form className="flex flex-wrap items-end gap-2 mt-2" onSubmit={(e) => { e.preventDefault(); save(); }}>
-          <label className="flex-1 min-w-[7rem]"><span className="label">Value</span><input className="input" value={val} onChange={(e) => setVal(e.target.value)} inputMode="decimal" /></label>
-          <label className="w-28"><span className="label">Unit</span><input className="input" value={u} onChange={(e) => setU(e.target.value)} /></label>
-          <button className="btn btn-primary" type="submit" disabled={busy || !val.trim()}>Save</button>
-          <button className="btn" type="button" onClick={() => setEditing(false)}>Cancel</button>
+          <label className="flex-1 min-w-[7rem]"><span className="label">{tt("labs.value")}</span><input className="input" value={val} onChange={(e) => setVal(e.target.value)} inputMode="decimal" /></label>
+          <label className="w-28"><span className="label">{tt("labs.unit")}</span><input className="input" value={u} onChange={(e) => setU(e.target.value)} /></label>
+          <button className="btn btn-primary" type="submit" disabled={busy || !val.trim()}>{tt("common.save")}</button>
+          <button className="btn" type="button" onClick={() => setEditing(false)}>{tt("common.cancel")}</button>
         </form>
       )}
     </li>
@@ -81,10 +83,11 @@ export function LabRow({ v, unit, onAct }: { v: LabValue; unit: string; onAct: (
 }
 
 export default function LabsPage() {
+  const { t } = useT();
   const { data, error, loading, reload, setData } = useAsync(() => api.labs(), []);
   const [err, setErr] = useState<string | null>(null);
   if (loading && !data) return <Loading />;
-  if (error || !data) return <ErrorBox error={error ?? "No data"} retry={reload} />;
+  if (error || !data) return <ErrorBox error={error ?? t("common.noData")} retry={reload} />;
 
   const act = async (id: string, b: LabPatch) => {
     setErr(null);
@@ -95,30 +98,30 @@ export default function LabsPage() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl">Lab history</h1>
-          <p className="text-muted mt-1">Every test across your documents, in time order. Values flagged high or low are compared with the range printed on the report.</p>
+          <h1 className="text-3xl">{t("labs.title")}</h1>
+          <p className="text-muted mt-1">{t("labs.intro")}</p>
         </div>
-        <Link to="/import" className="btn btn-primary"><FileUp size={16} aria-hidden /> Import documents</Link>
+        <Link to="/import" className="btn btn-primary"><FileUp size={16} aria-hidden /> {t("labs.import")}</Link>
       </header>
       {err && <ErrorBox error={err} />}
       {data.tests.length === 0 ? (
-        <Empty title="No lab results yet">Import a PDF or photos of your reports and the results will appear here.</Empty>
+        <Empty title={t("labs.emptyTitle")}>{t("labs.emptyText")}</Empty>
       ) : (
         <>
           <p className="text-sm text-muted" data-testid="lab-summary">
-            {data.n_results} results, {data.tests.length} tests, {data.out_of_range} outside the printed range, {data.needs_review} waiting for your check.
+            {t("labs.summary", { n: data.n_results, tests: data.tests.length, out: data.out_of_range, review: data.needs_review })}
           </p>
-          {data.tests.map((t) => (
-            <article key={t.test_key} className="card space-y-2" aria-label={t.test_name}>
+          {data.tests.map((x) => (
+            <article key={x.test_key} className="card space-y-2" aria-label={x.test_name}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="text-xl">{t.test_name}</h2>
-                  <p className="text-sm text-muted">{t.unit}{t.unit && refText(t) ? ", " : ""}{refText(t) && `printed range ${refText(t)}`}</p>
+                  <h2 className="text-xl">{x.test_name}</h2>
+                  <p className="text-sm text-muted">{x.unit}{x.unit && refText(x) ? ", " : ""}{refText(x) && t("labs.printedRange", { range: refText(x) })}</p>
                 </div>
-                <Spark values={t.values} />
+                <Spark values={x.values} />
               </div>
               <ul className="divide-y divide-line">
-                {t.values.map((v) => <LabRow key={v.id} v={v} unit={t.unit} onAct={act} />)}
+                {x.values.map((v) => <LabRow key={v.id} v={v} unit={x.unit} onAct={act} />)}
               </ul>
             </article>
           ))}

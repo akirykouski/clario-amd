@@ -1,5 +1,5 @@
 import type {
-  AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
+  AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
   ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState,
 } from "./types";
 
@@ -48,7 +48,7 @@ export const api = {
   unlock: (passphrase: string) => request<{ ok: boolean }>("POST", "/vault/unlock", { body: { passphrase } }),
   lock: () => request<{ ok: boolean }>("POST", "/vault/lock"),
   entries: (since?: string, until?: string) => request<Entry[]>("GET", "/entries", { params: { since, until } }),
-  addEntry: (b: { text: string; occurred_on?: string; mood?: number | null }) =>
+  addEntry: (b: { text: string; occurred_on?: string; mood?: number | null; lang?: string }) =>
     request<{ entry: Entry; safety: SafetyNotice | null }>("POST", "/entries", { body: b }),
   entry: (id: string) => request<Entry>("GET", `/entries/${encodeURIComponent(id)}`),
   deleteEntry: (id: string) => request<{ ok: boolean }>("DELETE", `/entries/${encodeURIComponent(id)}`),
@@ -58,23 +58,24 @@ export const api = {
   review: () => request<ReviewQueue>("GET", "/review"),
   reviewAct: (kind: string, id: string, action: ReviewAction, value?: string) =>
     request<{ ok: boolean; count: number }>("POST", `/review/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { body: { action, value } }),
-  searchTerms: (q: string) => request<Term[]>("GET", "/terms/search", { params: { q } }),
+  searchTerms: (q: string, lang?: string) => request<Term[]>("GET", "/terms/search", { params: { q, lang } }),
   timeline: () => request<Timeline>("GET", "/timeline"),
-  patterns: () => request<PatternsResponse>("GET", "/patterns"),
+  patterns: (lang?: string) => request<PatternsResponse>("GET", "/patterns", { params: { lang } }),
   nextQuestion: (lang: string) => request<NextQuestion | null>("GET", "/patterns/next-question", { params: { lang } }),
   answerQuestion: (b: { feature_id: string; answer: Answer; question?: string; lang?: string }) =>
     request<AnswerResult>("POST", "/patterns/answer", { body: b }),
-  demo: () => request<unknown>("POST", "/demo", { body: { persona: "giulia" } }),
+  demo: (persona: Persona = "giulia") => request<{ ok: boolean; entries: number; persona: Persona; lang: string }>("POST", "/demo", { body: { persona } }),
+  demoDocuments: () => request<BatchStarted>("POST", "/demo/documents"),
   share: (b: ShareRequest) => request<ShareResult>("POST", "/share", { body: b }),
   clinicKey: (url?: string) => request<ClinicKey>("GET", "/clinic/key", { params: { url } }),
   inbox: () => request<InboxRow[]>("GET", "/inbox"),
   package: (id: string) => request<SharePackage>("GET", `/inbox/${encodeURIComponent(id)}`),
-  startBrief: (id: string) => request<{ run_id: string }>("POST", `/inbox/${encodeURIComponent(id)}/brief`),
-  brief: (id: string) => request<Brief>("GET", `/inbox/${encodeURIComponent(id)}/brief`),
+  startBrief: (id: string, lang?: string) => request<{ run_id: string }>("POST", `/inbox/${encodeURIComponent(id)}/brief${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
+  brief: (id: string, v?: BriefView) => request<Brief>("GET", `/inbox/${encodeURIComponent(id)}/brief`, { params: v }),
   reviewItem: (pkg: string, item: string, b: { review: BriefItem["review"]; text?: string }) =>
     request<BriefItem>("PATCH", `/brief-items/${encodeURIComponent(pkg)}/${encodeURIComponent(item)}`, { body: b }),
   finalize: (id: string) => request<Brief>("POST", `/inbox/${encodeURIComponent(id)}/brief/finalize`),
-  briefMdUrl: (id: string) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.md`),
+  briefMdUrl: (id: string, v?: BriefView) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.md`, v),
   privacyPreview: (entryId: string) => request<PrivacyPreview>("GET", "/privacy/preview", { params: { entry_id: entryId } }),
   privacyCalls: (limit = 50) => request<AiCall[]>("GET", "/privacy/calls", { params: { limit: String(limit) } }),
   privacyVerify: () => request<PrivacyVerify>("GET", "/privacy/verify"),

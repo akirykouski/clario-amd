@@ -43,3 +43,11 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 - `eval/results/extraction_*.json` must carry n, dataset, model, backend, date. Dry-run and offline files are labelled (`dry_run: true`) and rendered apart by `eval/make_results_md.py`.
 - PsyTAR is only available through a store page that returns 403 to scripts: download in a browser, then run `train/psytar_hpo.py`.
 - Run train tests from `train/` with `../backend/.venv/bin/python -m pytest -q`.
+## Integration and i18n (T9/INT)
+- ONE extraction prompt: `backend/clario/prompt.py` is a verbatim copy of `train/prompt.py`; edit train/prompt.py, then `cp train/prompt.py backend/clario/prompt.py` (a backend test compares the bytes and the messages). The app sends system + the diary as the only user turn (no few-shot, as in training). The HPO pick call (`PICK_SYSTEM`) is app-only and not part of the LoRA training.
+- Labs are review kind `lab` (registered in `doc_routes.py`). Dosing and medicine-change questions are intercepted in `safety.check_entry` (level `advice`, entry saved with `extraction=done`, no model call).
+- Clinic mode never writes diary text in clear: inbox is sealed, briefs and call-log previews are AES-GCM under a key derived from `clinic.key`.
+- i18n: frontend `src/i18n/{en,it}.ts` (typed, `it` must have every `en` key), `useT()`; `hpo.it.ts` equals `backend/clario/data/hpo_it.json` (test). Patient-facing server text takes `lang=en|it` (`clario/i18n.py`). Italian next questions need an entry in `data/lay_terms_it.json`; add HPO ids there and in both hpo_it tables together.
+- Personas: `giulia`, `giulia_it` (`demo.py`); `POST /api/demo/documents` imports the 3 shipped referti.
+- Tooling quirks (worktree shells): use `/usr/bin/git -C <worktree>`, no heredocs with git, no word "eval" in a command line; write scripts to the scratchpad and run them.
+- One sqlite connection serves the thread pool: every Vault read and write takes `_lock` (a race gave HTTP 500 on GET /api/entries).

@@ -2,7 +2,7 @@
 
 Status: data factory, prep, scorer, prompt, gold drafter and reward functions are tested offline (`python -m pytest -q`, no model, no GPU). `train_rocm.py`, `train_grpo.py` and `export.py` are **written but not yet run**. Every TODO cell below is filled from a real run on the droplet, and every number in the repo comes from `eval/results/*.json`.
 
-Contract: `backend/clario/schemas/extraction_v3.json` (frozen). `prompt.py` is the single source for the system prompt, parsing and targets.
+Contract: `backend/clario/schemas/extraction_v3.json` (frozen). `prompt.py` is the single source for the system prompt, parsing and targets. The app uses a verbatim copy at `backend/clario/prompt.py` (same system prompt, the diary as the only user turn, no few-shot), so the LoRA sees in the app what it saw in training. After editing, run `cp train/prompt.py backend/clario/prompt.py`; `backend/tests/test_integration.py` fails if they differ. `train/` itself stays stdlib-only and standalone on the droplet.
 
 ## Files
 | file | role |

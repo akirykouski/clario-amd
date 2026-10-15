@@ -4,13 +4,11 @@ import { api } from "../api";
 import type { Brief, BriefItem, BriefSection, SharePackage } from "../types";
 import { canFinalize } from "../lib";
 import { ErrorBox, Spinner } from "../components/ui";
+import { tn, useT, type Key } from "../i18n";
 import { useRun } from "./useRun";
 
-const SECTIONS: { key: BriefSection; title: string }[] = [
-  { key: "summary", title: "Summary" }, { key: "timeline", title: "Timeline" }, { key: "symptoms", title: "Symptoms" },
-  { key: "labs", title: "Labs" }, { key: "medications", title: "Medications" }, { key: "patterns", title: "Patterns worth discussing" },
-  { key: "questions", title: "Patient questions" },
-];
+const SECTIONS: BriefSection[] = ["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"];
+const sectionTitle = (s: BriefSection) => `brief.section.${s}` as Key;
 
 export function jumpTo(entryId: string) {
   const el = document.getElementById(`entry-${entryId}`);
@@ -18,21 +16,32 @@ export function jumpTo(entryId: string) {
 }
 
 export function FinalizeButton({ items, onClick, busy }: { items: BriefItem[]; onClick: () => void; busy?: boolean }) {
+  const { t } = useT();
   const pending = items.filter((i) => i.review === "pending").length;
   return (
     <div>
-      <button className="btn btn-primary" onClick={onClick} disabled={!canFinalize(items) || busy}>Finalize brief</button>
-      {pending > 0 && <p className="text-sm text-muted mt-1" aria-live="polite">{pending} {pending === 1 ? "item" : "items"} still need review.</p>}
+      <button className="btn btn-primary" onClick={onClick} disabled={!canFinalize(items) || busy}>{t("brief.finalize")}</button>
+      {pending > 0 && <p className="text-sm text-muted mt-1" aria-live="polite">{tn("brief.pending", pending)}</p>}
     </div>
   );
 }
 
 export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief: Brief | null; setBrief: (b: Brief) => void }) {
+  const { t, lang } = useT();
   const { state, start } = useRun();
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copy, setCopy] = useState<"clinician" | "patient">("clinician");
+  const [patientCopy, setPatientCopy] = useState<Brief | null>(null);
   const shown = brief ?? (state.status === "done" ? state.brief ?? null : null);
   useEffect(() => { if (state.status === "done" && state.brief) setBrief(state.brief); }, [state.status, state.brief]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const finalized = !!shown?.finalized;
+  useEffect(() => {
+    if (!finalized || copy !== "patient") return;
+    setPatientCopy(null);
+    api.brief(pkg.package_id, { audience: "patient", lang }).then(setPatientCopy).catch((x: Error) => setErr(x.message));
+  }, [finalized, copy, lang, pkg.package_id]);
 
   const update = (it: BriefItem) => shown && setBrief({ ...shown, items: shown.items.map((x) => (x.id === it.id ? it : x)) });
   const review = async (it: BriefItem, r: BriefItem["review"], text?: string) => {
@@ -47,60 +56,101 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
   };
 
   return (
-    <aside className="lg:sticky lg:top-4 space-y-4" aria-label="Brief">
+    <aside className="lg:sticky lg:top-4 space-y-4" aria-label={t("brief.title")}>
       <div className="no-print flex items-center justify-between gap-3">
-        <h2 className="text-2xl">Brief</h2>
-        <button className="btn btn-primary" onClick={() => start(pkg.package_id)} disabled={state.status === "running" || !!shown?.finalized}>
-          {shown ? "Draft again" : "Draft brief"}
+        <h2 className="text-2xl">{t("brief.title")}</h2>
+        <button className="btn btn-primary" onClick={() => start(pkg.package_id, lang)} disabled={state.status === "running" || finalized}>
+          {shown ? t("brief.draftAgain") : t("brief.draft")}
         </button>
       </div>
 
       <div aria-live="polite" className="no-print">
         {state.status === "running" && (
           <div className="card space-y-2">
-            <Spinner label={state.message || "Drafting"} />
+            <Spinner label={state.progress < 0.1 ? t("brief.reading") : t("brief.drafting")} />
             <div className="h-1.5 bg-line rounded"><div className="h-1.5 rounded bg-accent transition-all" style={{ width: `${Math.round(state.progress * 100)}%` }} /></div>
-            <p className="text-sm text-muted">{state.model ?? "model"}{state.tokensPerS ? ` · ${state.tokensPerS.toFixed(1)} tokens/s` : ""}</p>
+            <p className="text-sm text-muted">{state.model ?? t("brief.model")}{state.tokensPerS ? ` · ${t("brief.tokens", { n: state.tokensPerS.toFixed(1) })}` : ""}</p>
           </div>
         )}
-        {state.status === "error" && <ErrorBox error={state.error ?? "Drafting failed"} retry={() => start(pkg.package_id)} />}
-        {state.status === "done" && <p className="text-sm text-muted">Drafted by {state.model ?? "the clinic model"}{state.tokensPerS ? ` at ${state.tokensPerS.toFixed(1)} tokens/s` : ""}. Review every item.</p>}
+        {state.status === "error" && <ErrorBox error={state.error ?? t("brief.error")} retry={() => start(pkg.package_id, lang)} />}
+        {state.status === "done" && <p className="text-sm text-muted">{t("brief.draftedBy", { model: state.model ?? t("brief.clinicModel"), rate: state.tokensPerS ? t("brief.draftedRate", { n: state.tokensPerS.toFixed(1) }) : "" })}</p>}
       </div>
       {err && <ErrorBox error={err} />}
 
-      {!shown && state.status === "idle" && <p className="text-muted no-print">No brief yet. Drafting reads the shared entries and proposes items you accept, edit or reject.</p>}
+      {!shown && state.status === "idle" && <p className="text-muted no-print">{t("brief.none")}</p>}
 
       {shown && (
         <>
-          <div className="no-print space-y-4">
-            {SECTIONS.map((s) => {
-              const items = shown.items.filter((i) => i.section === s.key);
-              if (!items.length) return null;
-              return (
-                <section key={s.key} aria-label={s.title}>
-                  <h3 className="text-lg mb-1">{s.title}</h3>
-                  <ul className="space-y-2">{items.map((it) => <ItemRow key={it.id} it={it} locked={shown.finalized} onReview={review} />)}</ul>
-                </section>
-              );
-            })}
-            <div className="flex items-start gap-3 flex-wrap">
-              {!shown.finalized && <FinalizeButton items={shown.items} onClick={finalize} busy={busy} />}
-              {shown.finalized && (
-                <>
-                  <a className="btn" href={api.briefMdUrl(pkg.package_id)} target="_blank" rel="noreferrer">Open brief.md</a>
-                  <button className="btn" onClick={() => window.print()}><Printer size={16} aria-hidden /> Print view</button>
-                </>
-              )}
+          {finalized && (
+            <div role="tablist" aria-label={t("brief.title")} className="no-print flex gap-2">
+              {(["clinician", "patient"] as const).map((c) => (
+                <button key={c} role="tab" aria-selected={copy === c} className="btn flex-1" onClick={() => setCopy(c)}
+                  style={copy === c ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
+                  {c === "clinician" ? t("brief.copyClinician") : t("brief.copyPatient")}
+                </button>
+              ))}
             </div>
-          </div>
-          <PrintBrief pkg={pkg} brief={shown} />
+          )}
+          {copy === "patient" && finalized ? (
+            <PatientCopy pkg={pkg} view={patientCopy} />
+          ) : (
+            <>
+              <div className="no-print space-y-4">
+                {SECTIONS.map((s) => {
+                  const items = shown.items.filter((i) => i.section === s);
+                  if (!items.length) return null;
+                  return (
+                    <section key={s} aria-label={t(sectionTitle(s))}>
+                      <h3 className="text-lg mb-1">{t(sectionTitle(s))}</h3>
+                      <ul className="space-y-2">{items.map((it) => <ItemRow key={it.id} it={it} locked={shown.finalized} onReview={review} />)}</ul>
+                    </section>
+                  );
+                })}
+                <div className="flex items-start gap-3 flex-wrap">
+                  {!shown.finalized && <FinalizeButton items={shown.items} onClick={finalize} busy={busy} />}
+                  {shown.finalized && (
+                    <>
+                      <a className="btn" href={api.briefMdUrl(pkg.package_id)} target="_blank" rel="noreferrer">{t("brief.openMd")}</a>
+                      <button className="btn" onClick={() => window.print()}><Printer size={16} aria-hidden /> {t("brief.print")}</button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <PrintBrief pkg={pkg} brief={shown} />
+            </>
+          )}
         </>
       )}
     </aside>
   );
 }
 
+function PatientCopy({ pkg, view }: { pkg: SharePackage; view: Brief | null }) {
+  const { t, lang } = useT();
+  if (!view) return <Spinner label={t("common.loading")} />;
+  return (
+    <div className="space-y-4" data-testid="patient-copy">
+      <p className="text-sm text-muted no-print">{t("brief.copyPatientHint")}</p>
+      {view.items.length === 0 && <p className="text-muted">{t("brief.copyPatientEmpty")}</p>}
+      {SECTIONS.map((s) => {
+        const items = view.items.filter((i) => i.section === s);
+        if (!items.length) return null;
+        return (
+          <section key={s} aria-label={t(sectionTitle(s))}>
+            <h3 className="text-lg mb-1">{t(sectionTitle(s))}</h3>
+            <ul className="space-y-2">{items.map((it) => <li key={it.id} className="card text-[15px]">{it.text}</li>)}</ul>
+          </section>
+        );
+      })}
+      <div className="no-print flex gap-3 flex-wrap">
+        <a className="btn" href={api.briefMdUrl(pkg.package_id, { audience: "patient", lang })} target="_blank" rel="noreferrer">{t("brief.openPatientMd")}</a>
+      </div>
+    </div>
+  );
+}
+
 function ItemRow({ it, locked, onReview }: { it: BriefItem; locked: boolean; onReview: (it: BriefItem, r: BriefItem["review"], text?: string) => void }) {
+  const { t } = useT();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(it.text);
   const ai = it.origin === "ai";
@@ -109,26 +159,26 @@ function ItemRow({ it, locked, onReview }: { it: BriefItem; locked: boolean; onR
     <li className="card text-[15px]" style={{ borderLeft: `4px solid ${tone}`, opacity: it.review === "rejected" ? 0.6 : 1 }}>
       {editing ? (
         <div>
-          <label htmlFor={`t-${it.id}`} className="label">Edit item</label>
+          <label htmlFor={`t-${it.id}`} className="label">{t("brief.editItem")}</label>
           <textarea id={`t-${it.id}`} className="input min-h-[90px]" value={text} onChange={(e) => setText(e.target.value)} />
           <div className="flex gap-2 mt-2">
-            <button className="btn btn-primary" onClick={() => { onReview(it, "edited", text); setEditing(false); }} disabled={!text.trim()}>Save edit</button>
-            <button className="btn" onClick={() => { setText(it.text); setEditing(false); }}>Cancel</button>
+            <button className="btn btn-primary" onClick={() => { onReview(it, "edited", text); setEditing(false); }} disabled={!text.trim()}>{t("brief.saveEdit")}</button>
+            <button className="btn" onClick={() => { setText(it.text); setEditing(false); }}>{t("common.cancel")}</button>
           </div>
         </div>
       ) : (
         <>
           <p className={it.review === "rejected" ? "line-through" : ""}>{it.text}</p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="chip text-xs">{ai ? "AI draft" : "From patient"}</span>
-            <span className="chip text-xs">{it.review}</span>
-            {it.cites.map((c, i) => <button key={c} className="chip hover:border-accent" onClick={() => jumpTo(c)} aria-label={`Go to cited entry ${i + 1}`}>entry {i + 1}</button>)}
+            <span className="chip text-xs">{ai ? t("brief.aiDraft") : t("brief.fromPatient")}</span>
+            <span className="chip text-xs">{t(`brief.review.${it.review}`)}</span>
+            {it.cites.map((c, i) => <button key={c} className="chip hover:border-accent" onClick={() => jumpTo(c)} aria-label={t("brief.goTo", { n: i + 1 })}>{t("brief.entryN", { n: i + 1 })}</button>)}
           </div>
           {ai && !locked && (
             <div className="mt-2 flex gap-2 flex-wrap">
-              <button className="btn" onClick={() => onReview(it, "accepted")} aria-pressed={it.review === "accepted"}><Check size={16} aria-hidden /> Accept</button>
-              <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} aria-hidden /> Edit</button>
-              <button className="btn" onClick={() => onReview(it, "rejected")} aria-pressed={it.review === "rejected"}><X size={16} aria-hidden /> Reject</button>
+              <button className="btn" onClick={() => onReview(it, "accepted")} aria-pressed={it.review === "accepted"}><Check size={16} aria-hidden /> {t("brief.accept")}</button>
+              <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} aria-hidden /> {t("brief.edit")}</button>
+              <button className="btn" onClick={() => onReview(it, "rejected")} aria-pressed={it.review === "rejected"}><X size={16} aria-hidden /> {t("brief.reject")}</button>
             </div>
           )}
         </>
@@ -138,23 +188,24 @@ function ItemRow({ it, locked, onReview }: { it: BriefItem; locked: boolean; onR
 }
 
 function PrintBrief({ pkg, brief }: { pkg: SharePackage; brief: Brief }) {
+  const { t } = useT();
   const kept = brief.items.filter((i) => i.review === "accepted" || i.review === "edited" || i.origin === "patient");
   const label = (id: string) => { const e = pkg.entries.find((x) => x.id === id); return e ? e.occurred_on : id; };
   return (
     <div className="print-only">
-      <h1 style={{ fontSize: "20pt" }}>Clinical brief: {pkg.patient_alias}</h1>
-      <p>{pkg.period[0]} to {pkg.period[1]}</p>
+      <h1 style={{ fontSize: "20pt" }}>{t("brief.printTitle", { alias: pkg.patient_alias })}</h1>
+      <p>{t("brief.printTo", { a: pkg.period[0], b: pkg.period[1] })}</p>
       {SECTIONS.map((s) => {
-        const items = kept.filter((i) => i.section === s.key);
+        const items = kept.filter((i) => i.section === s);
         if (!items.length) return null;
         return (
-          <section key={s.key} style={{ marginTop: "10pt" }}>
-            <h2 style={{ fontSize: "14pt" }}>{s.title}</h2>
+          <section key={s} style={{ marginTop: "10pt" }}>
+            <h2 style={{ fontSize: "14pt" }}>{t(sectionTitle(s))}</h2>
             <ul>{items.map((i) => <li key={i.id}>{i.text}{i.cites.length > 0 && <em> ({i.cites.map(label).join(", ")})</em>}</li>)}</ul>
           </section>
         );
       })}
-      <p style={{ marginTop: "16pt", fontSize: "9pt" }}>Prepared with Clario. AI-drafted items reviewed by the clinician.</p>
+      <p style={{ marginTop: "16pt", fontSize: "9pt" }}>{t("brief.printFooter")}</p>
     </div>
   );
 }

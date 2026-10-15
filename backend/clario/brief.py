@@ -88,7 +88,7 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         mark = ""
         if any(not x.reviewed for x in xs):
             mark = f" ({'non verificato da una persona' if it else NOT_REVIEWED})"
-        rec = f"registrato {len(cites)} volte" if it else f"recorded {len(cites)}x"
+        rec = f"registrato {len(cites)} {'volta' if len(cites) == 1 else 'volte'}" if it else f"recorded {len(cites)}x"
         items.append(BriefItem(id=_id(), section=sec, text=f"{label}: {rec}, {_span(ds, lang)}{extra}{mark}",
                                cites=sorted(set(cites)), origin="patient", review="accepted"))
     return items
@@ -152,7 +152,7 @@ def patient_view_items(pkg: SharePackage, lang: str, onto) -> list[BriefItem]:
         ds = sorted(dates[c] for c in cites if c in dates)
         name = term_label(x.hpo_id, x.canonical, lang)
         words = f'"{x.quote}"' if not names_condition(x.quote, onto) else ""
-        times = f"{len(xs)} volte" if it else f"{len(xs)}x"
+        times = f"{len(xs)} {'volta' if len(xs) == 1 else 'volte'}" if it else f"{len(xs)}x"
         said = "hai scritto" if it else "you wrote"
         text = f"{name}: {said} {words + ' ' if words else ''}({times}, {_span(ds, lang)})"
         items.append(BriefItem(id=f"bi_p{n}", section="symptoms", text=text, cites=cites, origin="patient", review="accepted"))

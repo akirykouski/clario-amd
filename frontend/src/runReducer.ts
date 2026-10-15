@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import type { Brief, RunEvent } from "./types";
 
 export interface RunState {
@@ -14,7 +15,7 @@ export type RunAction = { type: "start" } | { type: "event"; event: RunEvent } |
 export function runReducer(state: RunState, action: RunAction): RunState {
   switch (action.type) {
     case "start":
-      return { ...initialRun, status: "running", message: "Starting" };
+      return { ...initialRun, status: "running", message: "" };
     case "fail":
       return { ...state, status: "error", error: action.error };
     case "event": {
@@ -33,7 +34,7 @@ export function runReducer(state: RunState, action: RunAction): RunState {
         return { ...base, status: "done", progress: 1, brief: (e.payload as Brief) ?? state.brief };
       }
       if (e.stage === "error") {
-        return { ...base, status: "error", error: e.message ?? "Drafting failed" };
+        return { ...base, status: "error", error: e.message ?? t("brief.error") };
       }
       return { ...base, status: "running" };
     }

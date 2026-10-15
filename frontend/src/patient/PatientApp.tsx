@@ -4,6 +4,8 @@ import { BookOpen, CalendarDays, FlaskConical, Lock, Send, ShieldCheck, Waypoint
 import { api, onLocked } from "../api";
 import type { VaultState } from "../types";
 import { ErrorBox, Loading } from "../components/ui";
+import { LangSwitch } from "../components/LangSwitch";
+import { useT } from "../i18n";
 import { Vault } from "./Vault";
 import Today from "./Today";
 import EntryPage from "./EntryPage";
@@ -17,6 +19,7 @@ import ReviewPage, { REVIEW_EVENT } from "./ReviewPage";
 
 export default function PatientApp() {
   const nav = useNavigate();
+  const { t } = useT();
   const loc = useLocation();
   const [vault, setVault] = useState<VaultState | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -55,18 +58,19 @@ export default function PatientApp() {
     <div className="min-h-screen pb-24 md:pb-8">
       <header className="sticky top-[var(--demo-h,0px)] z-20 bg-paper/95 backdrop-blur border-b border-line">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="font-display text-2xl">Clario</span>
-          <nav className="hidden md:flex gap-5 text-[15px] font-bold" aria-label="Main">
-            {[["/", "Today"], ["/timeline", "Timeline"], ["/patterns", "Patterns"], ["/labs", "Labs"], ["/share", "Share"]].map(([to, l]) => (
+          <span className="font-display text-xl sm:text-2xl">Clario</span>
+          <nav className="hidden md:flex gap-5 text-[15px] font-bold" aria-label={t("nav.main")}>
+            {([["/", t("nav.today")], ["/timeline", t("nav.timeline")], ["/patterns", t("nav.patterns")], ["/labs", t("nav.labs")], ["/share", t("nav.share")]] as const).map(([to, l]) => (
               <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => (isActive ? "text-accent" : "text-muted")}>{l}</NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {toReview > 0 && (
-              <Link to="/review" className="chip chip-review font-bold min-h-[44px] px-3" aria-label={`${toReview} to review`}>{toReview} to review</Link>
+              <Link to="/review" className="chip chip-review font-bold min-h-[44px] px-2.5 text-[13px] sm:text-sm" aria-label={t("nav.toReview", { n: toReview })}>{t("nav.toReview", { n: toReview })}</Link>
             )}
-            <NavLink to="/privacy" className="btn" aria-label="What left this device" title="What left this device"><ShieldCheck size={18} aria-hidden /></NavLink>
-            <button className="btn" onClick={lock} aria-label="Lock diary"><Lock size={16} aria-hidden /> Lock</button>
+            <LangSwitch />
+            <NavLink to="/privacy" className="btn !px-0 w-11" aria-label={t("nav.privacy")} title={t("nav.privacy")}><ShieldCheck size={18} aria-hidden /></NavLink>
+            <button className="btn !px-0 w-11 sm:!px-4 sm:w-auto" onClick={lock} aria-label={t("nav.lockAria")} title={t("nav.lockAria")}><Lock size={16} aria-hidden /><span className="hidden sm:inline">{t("nav.lock")}</span></button>
           </div>
         </div>
       </header>
@@ -84,12 +88,12 @@ export default function PatientApp() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <nav aria-label="Main" className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-panel border-t border-line flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <NavLink to="/" end className={tab}><BookOpen size={20} aria-hidden />Today</NavLink>
-        <NavLink to="/timeline" className={tab}><CalendarDays size={20} aria-hidden />Timeline</NavLink>
-        <NavLink to="/patterns" className={tab}><Waypoints size={20} aria-hidden />Patterns</NavLink>
-        <NavLink to="/labs" className={tab}><FlaskConical size={20} aria-hidden />Labs</NavLink>
-        <NavLink to="/share" className={tab}><Send size={20} aria-hidden />Share</NavLink>
+      <nav aria-label={t("nav.main")} className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-panel border-t border-line flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <NavLink to="/" end className={tab}><BookOpen size={20} aria-hidden />{t("nav.today")}</NavLink>
+        <NavLink to="/timeline" className={tab}><CalendarDays size={20} aria-hidden />{t("nav.timeline")}</NavLink>
+        <NavLink to="/patterns" className={tab}><Waypoints size={20} aria-hidden />{t("nav.patterns")}</NavLink>
+        <NavLink to="/labs" className={tab}><FlaskConical size={20} aria-hidden />{t("nav.labs")}</NavLink>
+        <NavLink to="/share" className={tab}><Send size={20} aria-hidden />{t("nav.share")}</NavLink>
       </nav>
     </div>
   );

@@ -23,7 +23,7 @@ Shapes: `backend/clario/models.py`. One codebase, two modes: `CLARIO_MODE=patien
 | PATCH | `/api/entities/{id}` | `{review?, canonical?, hpo_id?, severity?, negated?}` (`review`: `auto\|confirmed\|rejected`; legacy `status` is accepted as an alias; setting `hpo_id` alone marks it `corrected`) | `Entity` |
 | GET | `/api/review` | | `{items: ReviewItem[], count}`: entities and lab rows in `needs_review` (confidence below `CLARIO_REVIEW_THRESHOLD`). `count` feeds the nav badge |
 | POST | `/api/review/{kind}/{id}` | `{action: confirm\|correct\|reject, value?}` | `{ok, count}`; `correct` needs `value` = an HPO id from the term list. Writes a `correction_log` record to the vault (kind, item_id, action, before, after, source_excerpt, ts) |
-| GET | `/api/terms/search` | `?q=` | `Term[]` (ontology lookup for manual fixes) |
+| GET | `/api/terms/search` | `?q=&lang=en\|it` | `Term[]` (ontology lookup for manual fixes; with `lang=it` the shipped plain Italian names are searched first and labels come back in Italian) |
 | GET | `/api/timeline` | | `{days: [{date, entries, terms: [{hpo_id,label}]}], terms: Evidence[]}` |
 | GET | `/api/patterns` | `?lang=en\|it` | `{patterns: Pattern[], confirmed_terms: int, note: string}` (computed from confirmed or corrected entities only; negated, family-history, `needs_review` and rejected entities never count) |
 | GET | `/api/patterns/next-question` | `?lang=en\|it` | `NextQuestion \| null`: the one yes/no question with the highest expected information gain over the top patterns (null while fewer than 3 confirmed terms or nothing askable). Never names a condition or medicine; red-flag, medicine and lab-only terms are never asked |
