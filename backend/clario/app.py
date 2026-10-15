@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import time
 import uuid
 from datetime import date, datetime, timezone
@@ -540,7 +541,8 @@ def main() -> None:
     import uvicorn
 
     s = Settings.from_env()
-    uvicorn.run(create_app(s), host="127.0.0.1", port=8765 if s.mode == "patient" else 8800)
+    port = int(os.environ.get("CLARIO_PORT") or (8765 if s.mode == "patient" else 8800))
+    uvicorn.run(create_app(s), host=os.environ.get("CLARIO_HOST", "127.0.0.1"), port=port)
 
 
 if __name__ == "__main__":
