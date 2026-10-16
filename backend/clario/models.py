@@ -141,6 +141,7 @@ class SharedLab(BaseModel):
     """One lab row in the shared period. Every row except rejected ones; low-confidence rows carry `needs_review` so the
     clinician checks them."""
 
+    id: str | None = Field(None, description="Lab row id on the patient's device; the clinic keys its decisions on it")
     test_name: str
     value_numeric: float | None = None
     value_text: str | None = None

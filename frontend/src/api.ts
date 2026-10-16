@@ -96,6 +96,8 @@ export const api = {
     request<{ before: Condition[]; differential: Differential }>("POST", `/inbox/${encodeURIComponent(id)}/ddx/answer`, { body: b }),
   ddxReset: (id: string, lang?: string) => request<Differential>("DELETE", `/inbox/${encodeURIComponent(id)}/ddx/answers`, { params: { lang } }),
   decisions: (id: string) => request<Decisions>("GET", `/inbox/${encodeURIComponent(id)}/decisions`),
+  decideLab: (id: string, labId: string, decision: TermDecision) =>
+    request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/labs/${encodeURIComponent(labId)}`, { body: { decision } }),
   decideTerm: (id: string, entId: string, decision: TermDecision) =>
     request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/terms/${encodeURIComponent(entId)}`, { body: { decision } }),
 };

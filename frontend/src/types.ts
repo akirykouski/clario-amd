@@ -61,7 +61,7 @@ export interface SharedEntity {
 export interface SharedLab {
   test_name: string; value_numeric: number | null; value_text: string | null; unit: string; ref_low: number | null;
   ref_high: number | null; flag: LabFlag | null; date: string; page: number; entry_id: string | null; reviewed: boolean;
-  confidence?: number | null; needs_review?: boolean;
+  confidence?: number | null; needs_review?: boolean; id?: string | null;
 }
 
 export interface SharePackage {
@@ -166,4 +166,4 @@ export interface ClinicQuestion { feature_id: string; label: string; question: s
 export interface ClinicAnswer { feature_id: string; label: string; answer: Answer; at: string }
 export interface Differential { conditions: Condition[]; question: ClinicQuestion | null; answers: ClinicAnswer[]; n_terms: number; note: string }
 export type TermDecision = "confirmed" | "rejected" | "pending";
-export interface Decisions { terms: Record<string, TermDecision>; answers: ClinicAnswer[] }
+export interface Decisions { terms: Record<string, TermDecision>; labs?: Record<string, TermDecision>; answers: ClinicAnswer[] }

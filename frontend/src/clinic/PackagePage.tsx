@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, Check, MessageSquareQuote, X } from "lucide-react";
 import { api } from "../api";
-import type { Brief, Decisions, Entry, SharedEntity, SharedLab, SharePackage, TermDecision } from "../types";
+import type { Brief, Decisions, Entry, SharedLab, SharePackage, TermDecision } from "../types";
 import { buildHeat, fmtDate, splitQuotes, weeklyMood } from "../lib";
 import { ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
@@ -31,6 +31,9 @@ export default function PackagePage() {
   const decide = async (entId: string, d: TermDecision) => {
     try { setDecisions(await api.decideTerm(id, entId, d)); setVersion((v) => v + 1); } catch { /* keep state */ }
   };
+  const decideLab = async (labId: string, d: TermDecision) => {
+    try { setDecisions(await api.decideLab(id, labId, d)); } catch { /* keep state */ }
+  };
   return (
     <div>
       <div className="no-print mb-3"><Link to="/" className="text-accent underline underline-offset-4 text-sm">{t("pkg.inbox")}</Link></div>
@@ -38,9 +41,9 @@ export default function PackagePage() {
         <div className="no-print min-w-0 space-y-5">
           <Header pkg={data} brief={brief} />
           <Differential pid={id} version={version} />
-          <NeedsCheck pkg={data} decisions={decisions} onDecide={decide} />
+          <NeedsCheck pkg={data} decisions={decisions} onDecide={decide} onDecideLab={decideLab} />
           <Heat pkg={data} />
-          {data.labs.length > 0 && <LabsBlock labs={data.labs} />}
+          {data.labs.length > 0 && <LabsBlock labs={data.labs} decisions={decisions} />}
           <Details pkg={data} />
         </div>
         <div className="min-w-0"><BriefPanel pkg={data} brief={brief} setBrief={setBrief} /></div>
@@ -79,41 +82,55 @@ function Header({ pkg, brief }: { pkg: SharePackage; brief: Brief | null }) {
   );
 }
 
-function NeedsCheck({ pkg, decisions, onDecide }: { pkg: SharePackage; decisions: Decisions; onDecide: (id: string, d: TermDecision) => void }) {
+function NeedsCheck({ pkg, decisions, onDecide, onDecideLab }: {
+  pkg: SharePackage; decisions: Decisions; onDecide: (id: string, d: TermDecision) => void; onDecideLab: (id: string, d: TermDecision) => void;
+}) {
   const { t } = useT();
   const items = pkg.entities.filter((e) => e.needs_review && e.id);
-  if (!items.length) return null;
-  const open = items.filter((e) => !decisions.terms[e.id as string]).length;
+  const labs = pkg.labs.filter((l) => l.needs_review && l.id);
+  if (!items.length && !labs.length) return null;
+  const labDec = decisions.labs ?? {};
+  const open = items.filter((e) => !decisions.terms[e.id as string]).length + labs.filter((l) => !labDec[l.id as string]).length;
   return (
     <section aria-labelledby="chk" className="card space-y-2" style={{ borderLeft: "5px solid var(--moderate)" }} data-testid="needs-check">
       <h2 id="chk" className="text-xl flex items-center gap-2"><AlertTriangle size={20} aria-hidden style={{ color: "var(--moderate)" }} />{tn("check.title", open)}</h2>
       <p className="text-sm text-muted">{t("check.sub")}</p>
       <ul className="divide-y divide-line">
-        {items.map((e) => <CheckRow key={e.id} e={e} decision={decisions.terms[e.id as string]} onDecide={onDecide} />)}
+        {items.map((e) => (
+          <CheckRow key={e.id} decision={decisions.terms[e.id as string]} onDecide={(d) => onDecide(e.id as string, d)}
+            title={`${e.negated ? "No " : ""}${e.canonical}`} confidence={e.confidence}
+            sub={<>{t("check.wrote")}: <span className="clinic-quote">{e.quote}</span> · {fmtDate(e.occurred_on)}</>} />
+        ))}
+        {labs.map((l) => (
+          <CheckRow key={l.id} decision={labDec[l.id as string]} onDecide={(d) => onDecideLab(l.id as string, d)}
+            title={`${l.test_name}: ${labValue(l)}`} confidence={l.confidence}
+            sub={<>{t("check.lab")} · {fmtDate(l.date)}, {t("pkg.lab.page", { n: l.page })}{labRange(l) && ` · ${labRange(l)}`}</>} />
+        ))}
       </ul>
     </section>
   );
 }
 
-function CheckRow({ e, decision, onDecide }: { e: SharedEntity; decision?: TermDecision; onDecide: (id: string, d: TermDecision) => void }) {
+function CheckRow({ title, sub, confidence, decision, onDecide }: {
+  title: string; sub: React.ReactNode; confidence?: number | null; decision?: TermDecision; onDecide: (d: TermDecision) => void;
+}) {
   const { t } = useT();
-  const id = e.id as string;
   return (
     <li className="py-2 flex flex-wrap items-center justify-between gap-2">
       <div className="min-w-0">
-        <p className={`font-bold ${decision === "rejected" ? "line-through text-muted" : ""}`}>{e.negated ? "No " : ""}{e.canonical}
-          {e.confidence !== null && e.confidence !== undefined && <span className="text-xs text-muted font-normal"> · {Math.round(e.confidence * 100)}%</span>}</p>
-        <p className="text-sm text-muted">{t("check.wrote")}: <span className="clinic-quote">{e.quote}</span> · {fmtDate(e.occurred_on)}</p>
+        <p className={`font-bold ${decision === "rejected" ? "line-through text-muted" : ""}`}>{title}
+          {confidence !== null && confidence !== undefined && <span className="text-xs text-muted font-normal"> · {Math.round(confidence * 100)}%</span>}</p>
+        <p className="text-sm text-muted">{sub}</p>
       </div>
       {decision ? (
         <div className="flex items-center gap-2 text-sm">
           <span style={{ color: decision === "confirmed" ? "var(--accent)" : "var(--muted)" }}>{decision === "confirmed" ? t("check.confirmed") : t("check.rejected")}</span>
-          <button className="btn-quiet btn px-1 min-h-[32px] text-sm" onClick={() => onDecide(id, "pending")}>{t("check.undo")}</button>
+          <button className="btn-quiet btn px-1 min-h-[32px] text-sm" onClick={() => onDecide("pending")}>{t("check.undo")}</button>
         </div>
       ) : (
         <div className="flex gap-2">
-          <button className="btn btn-sm" onClick={() => onDecide(id, "confirmed")}><Check size={14} aria-hidden />{t("common.confirm")}</button>
-          <button className="btn btn-sm" onClick={() => onDecide(id, "rejected")}><X size={14} aria-hidden />{t("common.reject")}</button>
+          <button className="btn btn-sm" onClick={() => onDecide("confirmed")}><Check size={14} aria-hidden />{t("common.confirm")}</button>
+          <button className="btn btn-sm" onClick={() => onDecide("rejected")}><X size={14} aria-hidden />{t("common.reject")}</button>
         </div>
       )}
     </li>
@@ -160,8 +177,10 @@ function Heat({ pkg }: { pkg: SharePackage }) {
 const labValue = (l: SharedLab) => `${l.value_text ?? (l.value_numeric ?? "?")}${l.unit ? " " + l.unit : ""}`;
 const labRange = (l: SharedLab) => (l.ref_low === null && l.ref_high === null ? "" : `${l.ref_low ?? ""} - ${l.ref_high ?? ""}`);
 
-function LabsBlock({ labs }: { labs: SharedLab[] }) {
+function LabsBlock({ labs: all, decisions }: { labs: SharedLab[]; decisions: Decisions }) {
   const { t } = useT();
+  const rejected = decisions.labs ?? {};
+  const labs = all.filter((l) => !l.id || rejected[l.id] !== "rejected");  // a value the clinician rejected leaves the tables
   const off = labs.filter((l) => l.flag === "low" || l.flag === "high");
   return (
     <section aria-labelledby="pl" data-testid="pkg-labs" className="card space-y-2">

@@ -558,8 +558,8 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         """The clinician's decisions on one package: term checks and answers. Encrypted at rest like the briefs."""
         f = decisions_dir / f"{safe_id(pid)}.json"
         if not f.exists():
-            return {"terms": {}, "answers": []}
-        return json.loads(keys.open_data(f.read_bytes()))
+            return {"terms": {}, "labs": {}, "answers": []}
+        return {"labs": {}} | json.loads(keys.open_data(f.read_bytes()))
 
     def save_decisions(pid: str, d: dict) -> None:
         (decisions_dir / f"{safe_id(pid)}.json").write_bytes(keys.seal_data(json.dumps(d).encode()))
@@ -658,6 +658,22 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             d["terms"].pop(ent_id, None)
         else:
             d["terms"][ent_id] = body.decision
+        save_decisions(pid, d)
+        return d
+
+    @app.patch("/api/inbox/{pid}/labs/{lab_id}")
+    def decide_lab(pid: str, lab_id: str, body: TermDecisionIn) -> dict:
+        """The clinician confirms or rejects a lab value read with low confidence."""
+        pkg = open_pkg(pid)
+        if body.decision not in ("confirmed", "rejected", "pending"):
+            raise HTTPException(422, "decision must be confirmed, rejected or pending")
+        if not any(l.id == lab_id for l in pkg.labs):
+            raise HTTPException(404, "lab row not found")
+        d = load_decisions(pid)
+        if body.decision == "pending":
+            d["labs"].pop(lab_id, None)
+        else:
+            d["labs"][lab_id] = body.decision
         save_decisions(pid, d)
         return d
 

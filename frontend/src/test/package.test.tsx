@@ -101,7 +101,7 @@ describe("clinic package page", () => {
     const decide = vi.spyOn(api, "decideTerm").mockResolvedValue({ terms: { x9: "rejected" }, answers: [] });
     render(<MemoryRouter initialEntries={["/p/pkg_1"]}><Routes><Route path="/p/:id" element={<PackagePage />} /></Routes></MemoryRouter>);
     const box = await screen.findByTestId("needs-check");
-    expect(box).toHaveTextContent("1 term needs your check");
+    expect(box).toHaveTextContent("1 item needs your check");
     expect(box).toHaveTextContent("60%");
     await userEvent.click(within(box).getByRole("button", { name: /reject/i }));
     expect(decide).toHaveBeenCalledWith("pkg_1", "x9", "rejected");

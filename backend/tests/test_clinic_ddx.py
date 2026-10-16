@@ -1,3 +1,5 @@
+import time
+
 from fastapi.testclient import TestClient
 
 from conftest import settings, wait_extracted
@@ -78,3 +80,22 @@ def test_system_keys_group_terms_by_organ_system(unlocked):
     assert r == {"HP:0025300": "skin", "HP:0002829": "joints"}
     assert disease_url("ORPHA:536") == "https://www.orpha.net/en/disease/detail/536"
     assert disease_url("OMIM:152700") == "https://omim.org/entry/152700"
+
+
+def test_clinician_checks_low_confidence_lab_values(unlocked, clinic_server, tmp_path):
+    unlocked.post("/api/demo", json={"persona": "giulia"})
+    wait_extracted(unlocked)
+    bid = unlocked.post("/api/demo/documents").json()["batch_id"]
+    deadline = time.time() + 10
+    while time.time() < deadline and not unlocked.get("/api/labs").json()["n_results"]:
+        time.sleep(0.2)
+    pid = unlocked.post("/api/share", json=share_body(clinic_server)).json()["package_id"]
+    with TestClient(create_app(settings(tmp_path, "clinic"))) as clinic:
+        labs = clinic.get(f"/api/inbox/{pid}").json()["labs"]
+        unsure = [l for l in labs if l["needs_review"]]
+        assert labs and all(l["id"] for l in labs) and unsure, bid
+        lid = unsure[0]["id"]
+        d = clinic.patch(f"/api/inbox/{pid}/labs/{lid}", json={"decision": "rejected"}).json()
+        assert d["labs"][lid] == "rejected"
+        assert clinic.patch(f"/api/inbox/{pid}/labs/{lid}", json={"decision": "pending"}).json()["labs"] == {}
+        assert clinic.patch(f"/api/inbox/{pid}/labs/nope", json={"decision": "rejected"}).status_code == 404

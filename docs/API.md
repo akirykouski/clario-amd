@@ -51,7 +51,7 @@ Extraction env (patient mode): `CLARIO_SC_N` (self-consistency samples, default 
 
 `SharedEntity` carries `id` (the entity id, which the clinic keys its decisions on), `family_history`, `onset_hint`, `reviewed`, `confidence` and `needs_review`; the clinician brief marks items with `needs_review=true` as "low-confidence reading, please check", and the clinic screen lists them for a confirm or reject. A relative's condition leaves the device only as family history: `family_history=true` and no `hpo_id`, so it is never a patient term and never counted. Negated entities keep `negated=true` and are not counted either.
 
-`SharePackage.labs: SharedLab[]` holds every lab row dated inside the shared period except rejected ones. Rows nobody looked at carry `reviewed=false`; low-confidence rows carry `needs_review=true` (the brief and the clinic screen say "low-confidence reading"). `SharedLab = {test_name, value_numeric, value_text, unit, ref_low, ref_high, flag, date, page, entry_id, reviewed, confidence, needs_review}`; `entry_id` is the diary entry of the import, which the brief's labs items cite. `POST /api/demo/documents` moves the newest synthetic report to 28 days ago so the demo labs fall inside a normal share period.
+`SharePackage.labs: SharedLab[]` holds every lab row dated inside the shared period except rejected ones. Rows nobody looked at carry `reviewed=false`; low-confidence rows carry `needs_review=true` (the brief and the clinic screen say "low-confidence reading"). `SharedLab = {id, test_name, value_numeric, value_text, unit, ref_low, ref_high, flag, date, page, entry_id, reviewed, confidence, needs_review}`; `entry_id` is the diary entry of the import, which the brief's labs items cite. `POST /api/demo/documents` moves the newest synthetic report to 28 days ago so the demo labs fall inside a normal share period.
 
 ## Clinic mode
 | Method | Path | Body | Returns |
@@ -70,6 +70,7 @@ Extraction env (patient mode): `CLARIO_SC_N` (self-consistency samples, default 
 | POST | `/api/inbox/{id}/ddx/answer` | `{feature_id, answer: yes\|no\|unsure, lang?}` | `{before: Condition[], differential: Differential}`; yes/no are applied as present/absent terms, unsure is recorded and not asked again |
 | DELETE | `/api/inbox/{id}/ddx/answers` | `?lang` | `Differential` with the answers cleared |
 | GET | `/api/inbox/{id}/decisions` | | `{terms: {entity_id: confirmed\|rejected}, answers: ClinicAnswer[]}` (encrypted at rest with the clinic data key) |
+| PATCH | `/api/inbox/{id}/labs/{lab_id}` | `{decision: confirmed\|rejected\|pending}` | decisions (`labs: {lab_id: decision}`); low-confidence lab values are checked by the clinician, never by the patient. A rejected value leaves the clinic lab tables |
 | PATCH | `/api/inbox/{id}/terms/{entity_id}` | `{decision: confirmed\|rejected\|pending}` | decisions; rejected terms leave the differential, pending clears the decision |
 | GET | `/api/bench` | | latest `bench/results/*.json` |
 

@@ -119,22 +119,20 @@ describe("lab rows", () => {
     expect(refText({ ref_low: 10, ref_high: 40 })).toBe("10 to 40");
     expect(refText({ ref_low: null, ref_high: 5 })).toBe("up to 5");
   });
-  it("needs_review rows show confirm, correct and reject; others do not", async () => {
+  it("uncertain rows ask nothing of the patient: the clinician checks them; fixing the value is optional", async () => {
     const onAct = vi.fn().mockResolvedValue(undefined);
     const { unmount } = render(<ul><LabRow v={lab()} unit="mg/dL" onAct={onAct} /></ul>);
-    expect(screen.getByText("Uncertain reading")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    expect(onAct).toHaveBeenCalledWith("l1", { action: "confirm" });
-    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
-    expect(onAct).toHaveBeenCalledWith("l1", { action: "reject" });
-    await userEvent.click(screen.getByRole("button", { name: "Correct" }));
+    expect(screen.getByText("Uncertain reading, your clinician will check it")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Fix value" }));
     const input = screen.getByLabelText("Value");
     await userEvent.clear(input); await userEvent.type(input, "5,5");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(onAct).toHaveBeenLastCalledWith("l1", { action: "correct", unit: "mg/dL", value_numeric: 5.5 });
     unmount();
     render(<ul><LabRow v={lab({ review: "confirmed" })} unit="mg/dL" onAct={onAct} /></ul>);
-    expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Fix value" })).toBeNull();
     expect(screen.getByText("Confirmed")).toBeInTheDocument();
   });
   it("reads GPU load only when the backend reports it", () => {

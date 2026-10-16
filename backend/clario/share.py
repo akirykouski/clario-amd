@@ -63,7 +63,7 @@ def shared_labs(labs: list[LabResult], since: str, until: str, batch_entry: dict
     batch_entry = batch_entry or {}
     rows = [l for l in labs if since <= l.date <= until and l.review in COUNTED]
     rows.sort(key=lambda l: (l.date, l.test_key, l.page))
-    return [SharedLab(test_name=l.test_name, value_numeric=l.value_numeric, value_text=l.value_text, unit=l.unit,
+    return [SharedLab(id=l.id, test_name=l.test_name, value_numeric=l.value_numeric, value_text=l.value_text, unit=l.unit,
                       ref_low=l.ref_low, ref_high=l.ref_high, flag=l.flag, date=l.date, page=l.page,
                       entry_id=batch_entry.get(l.batch_id), reviewed=l.review in REVIEWED, confidence=l.confidence,
                       needs_review=l.review == "needs_review") for l in rows]
