@@ -45,7 +45,7 @@ Full run: `deploy/amd/bootstrap.sh --synth 3000 --train --eval --bench --app`. R
 
 ## 4. Collect results (copy to your laptop before destroying)
 ```bash
-scp -r root@<ip>:clario/train/results   ./results-train   # eval: base-e4b.json, ft-e4b-r16.json (+ .md tables)
+scp -r root@<ip>:clario/eval/results    ./results-eval    # extraction_base-e4b.json, extraction_ft-e4b-r16.json, train_e4b-r16.json
 scp -r root@<ip>:clario/bench/results   ./results-bench
 scp -r root@<ip>:clario/train/out/e4b-r16 ./e4b-r16        # adapter + metrics.json (wall time, tokens/s, peak memory)
 scp -r root@<ip>:clario/deploy/amd/logs ./bootstrap-logs

@@ -166,14 +166,15 @@ if [ "$DO_TRAIN" = 1 ]; then
   if [ "$FORCE" != 1 ] && [ -f "$ADAPTER_DEFAULT/adapter_config.json" ]; then
     echo "skip: adapter exists at $ADAPTER_DEFAULT (FORCE=1 to retrain)"
   else
-    [ -f "$REPO/train/data/train_sft.jsonl" ] || pyrun train/prep.py || die "no training data: run with --synth N first"
+    [ -f "$REPO/train/data/v3/train_sft.jsonl" ] || pyrun train/prep.py || die "no training data: run with --synth N first"
+    [ -f "$REPO/train/data/v3/train_sft.jsonl" ] || die "prep.py wrote no train/data/v3/train_sft.jsonl: run with --synth N first"
     "${DC[@]}" stop vllm-small >/dev/null 2>&1 || true   # free its GPU share for training
     docker build -f train/Dockerfile.rocm -t clario-train train
     mkdir -p "$REPO/train/out" "${HF_CACHE:-$HOME/.cache/huggingface}"
     docker run --rm --device=/dev/kfd --device=/dev/dri --group-add video --ipc=host --shm-size 64G \
       --security-opt seccomp=unconfined -e HF_TOKEN \
       -v "$REPO/train:/workspace/train" -v "${HF_CACHE:-$HOME/.cache/huggingface}:/workspace/hf-cache" clario-train \
-      bash -c "python train_rocm.py --model $SMALL_MODEL --data data/train_sft.jsonl --out out/$RUN --epochs 3 --bf16 && chown -R $(id -u):$(id -g) out data || true"
+      bash -c "python train_rocm.py --model $SMALL_MODEL --data data/v3/train_sft.jsonl --out out/$RUN --epochs 3 --bf16; rc=\$?; chown -R $(id -u):$(id -g) out data || true; exit \$rc"       || die "training failed: see the log above (train/out/$RUN may be incomplete)"
   fi
   lora_env
 fi
@@ -181,16 +182,16 @@ fi
 # ---------------------------------------------------------------- --eval
 if [ "$DO_EVAL" = 1 ]; then
   say "eval: base vs LoRA on $SMALL_MODEL"
-  [ -f "$REPO/train/data/val_gold.jsonl" ] || pyrun train/prep.py || die "no val split: run with --synth N first"
+  [ -f "$REPO/train/data/v3/test.jsonl" ] || pyrun train/prep.py || die "no test split: run with --synth N first"
   lora_env
   "${DC[@]}" up -d vllm-small
   wait_http "http://127.0.0.1:8001/health" "vllm-small" "$WAIT_SECS" vllm-small
-  RES="$REPO/train/results"
-  if [ "$FORCE" = 1 ] || [ ! -f "$RES/base-e4b.json" ]; then
+  RES="$REPO/eval/results"   # eval.py writes extraction_<label>.json here
+  if [ "$FORCE" = 1 ] || [ ! -f "$RES/extraction_base-e4b.json" ]; then
     pyrun train/eval.py --base-url "$SMALL_URL" --model "$SMALL_MODEL" --label base-e4b --api-key-env VLLM_API_KEY --concurrency 8
   else echo "skip base-e4b (results exist)"; fi
   if [ -n "${LORA_PATH:-}" ]; then
-    if [ "$FORCE" = 1 ] || [ ! -f "$RES/ft-e4b-r16.json" ]; then
+    if [ "$FORCE" = 1 ] || [ ! -f "$RES/extraction_ft-e4b-r16.json" ]; then
       pyrun train/eval.py --base-url "$SMALL_URL" --model clario-extract --label ft-e4b-r16 --api-key-env VLLM_API_KEY --concurrency 8
     else echo "skip ft-e4b-r16 (results exist)"; fi
   else
