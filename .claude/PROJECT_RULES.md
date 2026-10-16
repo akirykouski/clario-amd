@@ -56,3 +56,9 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 - `deploy/amd/bootstrap.sh --all` runs preflight, serve, health, smoke, synth, prep, train, eval, bench and results; stamps in `deploy/amd/logs/stamps/`, `--step NAME` reruns one, `FORCE=1` redoes all. `--fallback` runs against any OpenAI-compatible BASE_URL/API_KEY/MODEL (anthropic.com refused).
 - Real results in eval/results need a `hardware` field; `eval/make_results_md.py --check` enforces it.
 - Pseudonymisation eval: `cd backend && uv run python ../eval/pii_leak.py` writes eval/results/pii_leak.json (dev half tuned on, test half reported; disjoint vocab). `privacy.py` stays rule/regex/lexicon only; medical eponyms must never be redacted (`_EPONYMS`, tests in `tests/test_pii_detectors.py`). Tessera sanitaria and record numbers report the existing `codice_fiscale` kind (placeholders `[HEALTH_ID]`, `[RECORD_NO]`); add real kinds in models.py + frontend types + i18n together if wanted.
+## Demo and judge loop (round 3, 2026-10-16)
+- Stage walk = DEMO_SCRIPT.md literally, no API shortcuts: scratchpad walk script pattern `walk-r3e.cjs <out> <patientPort> <clinicPort> en|it`, fresh data dirs per run (a reused vault breaks setup). Run EN and IT sequentially against one clinic.
+- Patient card tier and clinic card tier must match: share scores the whole diary, the shared window only trims evidence (shared `card_id`). PATIENT_CARDS = 1.
+- Patient screens never show a condition name, an HPO code or (in IT) an English clinical label; a relative's condition shows as the patient's own words.
+- Numbers in IT use the decimal comma everywhere, server text included (`brief._num(n, lang)`, frontend `fmtNumText`).
+- PII headline is the strictly held-out 10.8%; 5.8% only with its caveat.
