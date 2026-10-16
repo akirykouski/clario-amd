@@ -128,9 +128,9 @@ export const it: Record<Key, string> = {
 
   "signal.weak": "Segnale debole",
   "signal.moderate": "Segnale moderato",
-  "signal.explain.weak": "Alcune cose che hai annotato coincidono, ma altre descrizioni calzano quasi altrettanto bene. Non è una diagnosi.",
-  "signal.explain.moderate": "Diverse cose che hai annotato coincidono e calzano con questa descrizione meglio che con la maggior parte delle altre. Non è una diagnosi.",
-  "signal.explain.strong": "Molte cose che hai annotato coincidono e calzano con questa descrizione molto meglio che con qualsiasi altra. Non è una diagnosi.",
+  "signal.explain.weak": "Alcune cose che hai annotato somigliano a questa descrizione, ma altre descrizioni somigliano quasi altrettanto. Non è una diagnosi.",
+  "signal.explain.moderate": "Diverse cose che hai annotato compaiono insieme e somigliano a questa descrizione più che alla maggior parte delle altre. Non è una diagnosi.",
+  "signal.explain.strong": "Molte cose che hai annotato compaiono insieme e somigliano a questa descrizione molto più che a qualsiasi altra. Non è una diagnosi.",
   "entry.allCorrect": "Tutto corretto",
   "patterns.toCheck_one": "{n} termine nelle tue note aspetta il tuo OK.",
   "patterns.toCheck_other": "{n} termini nelle tue note aspettano il tuo OK.",
