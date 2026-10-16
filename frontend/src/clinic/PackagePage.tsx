@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, Check, MessageSquareQuote, X } from "lucide-react";
 import { api } from "../api";
-import type { Brief, Decisions, Entry, SharedLab, SharePackage, TermDecision } from "../types";
+import type { Brief, Decisions, Entry, Overview, OverviewTerm, SharedLab, SharePackage, TermDecision } from "../types";
 import { buildHeat, fmtDate, splitQuotes, weeklyMood } from "../lib";
 import { ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { HeatStrip, type HeatPick } from "../components/HeatStrip";
 import { BriefPanel, jumpTo } from "./BriefPanel";
 import { Differential } from "./Differential";
-import { tn, useT } from "../i18n";
+import { tn, useT, type Key } from "../i18n";
 
 const own = (pkg: SharePackage) => pkg.entities.filter((e) => !e.negated && !e.family_history);
 
@@ -53,31 +53,54 @@ export default function PackagePage() {
 }
 
 function Header({ pkg, brief }: { pkg: SharePackage; brief: Brief | null }) {
-  const { t } = useT();
+  const { t, tn, lang } = useT();
+  const [ov, setOv] = useState<Overview | null>(null);
+  useEffect(() => { api.overview(pkg.package_id, lang).then(setOv).catch(() => setOv(null)); }, [pkg.package_id, lang]);
   const mine = own(pkg);
   const terms = new Set(mine.filter((e) => e.type !== "lab").map((e) => e.hpo_id ?? e.canonical.toLowerCase())).size;
-  const dates = pkg.entries.map((e) => e.occurred_on).sort();
-  const weeks = dates.length ? Math.max(1, Math.round((Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / (7 * 864e5)) + 1) : 0;
   const abnormal = new Set(pkg.labs.filter((l) => l.flag === "low" || l.flag === "high").map((l) => l.test_name)).size;
   const summary = brief?.items.find((i) => i.section === "summary" && i.origin === "ai" && i.review !== "rejected");
+  const p = ov?.profile ?? pkg.profile;
+  const who = [p?.sex ? t(`ov.${p.sex}` as Key) : null, p?.age ? t("ov.age", { age: p.age }) : null].filter(Boolean).join(", ");
+  const term = (x: OverviewTerm, n: number) =>
+    `${x.label} (${tn("ov.notes", n)}${x.max_severity !== null && x.max_severity >= 5 ? `, ${t("ov.upTo", { n: x.max_severity })}` : ""})`;
   return (
     <header className="space-y-3">
       <div>
-        <h1 className="text-3xl">{pkg.patient_alias}</h1>
+        <h1 className="text-3xl">{pkg.patient_alias}{who && <span className="text-xl text-muted font-sans ml-3" data-testid="pkg-who">{who}</span>}</h1>
         <p className="text-muted text-sm">{t("share.range", { a: fmtDate(pkg.period[0]), b: fmtDate(pkg.period[1]) })} · {t("pkg.expiresShort", { date: fmtDate(pkg.expires_at) })}</p>
-        <p className="text-sm font-bold mt-1" data-testid="pkg-glance">{t("pkg.glance", { notes: pkg.entries.length, weeks, terms, labs: abnormal })}</p>
+        <p className="text-sm font-bold mt-1" data-testid="pkg-glance">{t("pkg.glance", { notes: pkg.entries.length, weeks: ov?.weeks ?? "?", terms, labs: abnormal })}</p>
         <p className="sr-only" data-testid="pkg-counts">{t("pkg.mentions", { m: mine.length, t: terms })}</p>
       </div>
-      <div className="card space-y-2" data-testid="pkg-why">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-muted flex items-center gap-1.5"><MessageSquareQuote size={16} aria-hidden />{t("pkg.why")}</h2>
-        <p className="text-lg">{pkg.note ? `“${pkg.note}”` : <span className="text-muted text-base">{t("pkg.noNote")}</span>}</p>
+      <section className="card space-y-3" data-testid="pkg-why" aria-labelledby="ov-title">
+        <h2 id="ov-title" className="text-xl">{t("ov.title")}</h2>
+        <div className="rounded-lg p-3" style={{ background: "color-mix(in srgb, var(--accent) 7%, transparent)" }}>
+          <p className="text-xs font-bold uppercase tracking-wide text-muted flex items-center gap-1.5"><MessageSquareQuote size={14} aria-hidden />{t("ov.asks")}</p>
+          {pkg.note ? <p className="text-lg mt-0.5">“{pkg.note}”</p>
+            : ov?.asks.length ? ov.asks.slice(0, 2).map((a) => (
+              <p key={a.entry_id} className="text-lg mt-0.5">“{a.text}” <button className="text-sm text-muted underline underline-offset-2" onClick={() => jumpTo(a.entry_id)}>{t("ov.asksFromNotes", { date: fmtDate(a.date) })}</button></p>
+            )) : <p className="text-muted mt-0.5">{t("ov.noAsk")}</p>}
+        </div>
+        {ov && (
+          <dl className="grid sm:grid-cols-[11rem_1fr] gap-x-4 gap-y-1.5 text-[15px]" data-testid="pkg-overview">
+            {ov.frequent.length > 0 && <><dt className="text-muted">{t("ov.frequent")}</dt><dd>{ov.frequent.map((x) => term(x, x.count)).join(", ")}</dd></>}
+            {ov.recent.length > 0 && <><dt className="text-muted">{t("ov.recent")}</dt>
+              <dd>{ov.recent.map((x) => term(x, x.recent_count)).join(", ")}{ov.new.length > 0 && <span className="font-bold">{"; "}{t("ov.new", { list: ov.new.join(", ") })}</span>}</dd></>}
+            {ov.first && <><dt className="text-muted">{t("ov.first")}</dt><dd>{ov.first.label}, {fmtDate(ov.first.first)}</dd></>}
+            {ov.labs_off.length > 0 && <><dt className="text-muted">{t("ov.labs")}</dt>
+              <dd>{ov.labs_off.map((l) => `${l.name} ${t(l.flag === "low" ? "ov.low" : "ov.high")} (${l.value}${l.unit ? " " + l.unit : ""})`).join(", ")}</dd></>}
+            {ov.family.length > 0 && <><dt className="text-muted">{t("ov.family")}</dt><dd>{t("ov.familyRelative", { list: ov.family.join(", ") })}</dd></>}
+            {ov.denied.length > 0 && <><dt className="text-muted">{t("ov.denied")}</dt><dd>{ov.denied.join(", ")}</dd></>}
+            {ov.mood && <><dt className="text-muted">{t("ov.mood")}</dt><dd>{t("ov.moodLine", { avg: ov.mood.avg, trend: t(`ov.trend.${ov.mood.trend}` as Key) })}</dd></>}
+          </dl>
+        )}
         {summary && (
           <div className="border-t border-line pt-2">
             <p className="text-xs font-bold uppercase tracking-wide text-muted">{t("pkg.aiSummary")}</p>
             <p className="text-[15px] mt-0.5">{summary.text}</p>
           </div>
         )}
-      </div>
+      </section>
     </header>
   );
 }

@@ -49,8 +49,9 @@ export interface PatientPattern {
 
 export interface ShareRequest {
   clinic_url: string; since: string; until: string; include_patterns: boolean;
-  note?: string | null; expires_hours: number;
+  note?: string | null; expires_hours: number; include_profile?: boolean;
 }
+export interface Profile { age?: number | null; sex?: "female" | "male" | "other" | null }
 
 export interface SharedEntity {
   id?: string | null; confidence?: number | null; needs_review?: boolean;
@@ -66,7 +67,7 @@ export interface SharedLab {
 
 export interface SharePackage {
   package_id: string; patient_alias: string; created_at: string; expires_at: string;
-  period: [string, string]; note: string | null; entries: Entry[]; entities: SharedEntity[]; labs: SharedLab[]; patterns: Pattern[];
+  period: [string, string]; note: string | null; profile?: Profile | null; entries: Entry[]; entities: SharedEntity[]; labs: SharedLab[]; patterns: Pattern[];
 }
 
 export type BriefSection = "summary" | "timeline" | "symptoms" | "labs" | "medications" | "patterns" | "questions";
@@ -167,3 +168,11 @@ export interface ClinicAnswer { feature_id: string; label: string; answer: Answe
 export interface Differential { conditions: Condition[]; question: ClinicQuestion | null; answers: ClinicAnswer[]; n_terms: number; note: string }
 export type TermDecision = "confirmed" | "rejected" | "pending";
 export interface Decisions { terms: Record<string, TermDecision>; labs?: Record<string, TermDecision>; answers: ClinicAnswer[] }
+
+export interface OverviewTerm { label: string; count: number; recent_count: number; first: string; last: string; max_severity: number | null }
+export interface Overview {
+  profile: Profile | null; notes: number; weeks: number; frequent: OverviewTerm[]; recent: OverviewTerm[]; new: string[];
+  first: OverviewTerm | null; severe: OverviewTerm[]; labs_off: { name: string; value: string; unit: string; flag: "low" | "high"; date: string }[];
+  family: string[]; denied: string[]; mood: { avg: number; trend: "down" | "up" | "flat" } | null;
+  asks: { text: string; entry_id: string; date: string }[];
+}

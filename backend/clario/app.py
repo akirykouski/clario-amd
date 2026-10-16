@@ -22,6 +22,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from . import brief as briefing
 from . import clinic_ddx
+from . import overview as overview_mod
 from . import privacy
 from . import doc_routes
 from . import gpu as gpumetrics
@@ -79,6 +80,11 @@ class AnswerIn(BaseModel):
 
 class DemoIn(BaseModel):
     persona: str = "giulia"
+
+
+class ProfileIn(BaseModel):
+    age: int | None = None
+    sex: str | None = None  # female | male | other
 
 
 class InboxIn(BaseModel):
@@ -460,10 +466,29 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         after = as_ranked_patterns(onto, all_entries(), norm_lang(body.lang))
         return AnswerResult(before=before, after=after, entry_id=entry_id)
 
+    def load_profile() -> dict:
+        d = vault.get("profile") or {}
+        return {k: d[k] for k in ("age", "sex") if d.get(k) is not None}
+
+    @app.get("/api/profile")
+    def get_profile() -> dict:
+        return load_profile()
+
+    @app.put("/api/profile")
+    def put_profile(body: ProfileIn) -> dict:
+        """Age and sex, optional, kept in the vault. Sent to a clinic only when the patient leaves include_profile on."""
+        if body.age is not None and not 0 <= body.age <= 120:
+            raise HTTPException(422, "Age must be between 0 and 120")
+        if body.sex not in (None, "", "female", "male", "other"):
+            raise HTTPException(422, "sex must be female, male or other")
+        vault.put("profile", "profile", {"age": body.age, "sex": body.sex or None})
+        return load_profile()
+
     @app.post("/api/demo")
     async def demo(body: DemoIn):
         if body.persona not in PERSONAS:
             raise HTTPException(404, "unknown persona")
+        vault.put("profile", "profile", {"age": 29, "sex": "female"})  # Giulia, 29 (synthetic)
         n = 0
         for day, text, mood in persona_entries(body.persona):
             e = save(Entry(id=f"e_{uuid.uuid4().hex[:10]}", created_at=now_iso(), occurred_on=day, text=text, mood=mood))
@@ -510,7 +535,8 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         labs = [LabResult.model_validate(d) for d in vault.all("lab")]
         batch_entry = {d["batch_id"]: d["entry_id"] for d in vault.all("docbatch")}
         pkg = sharing.build_package(entries, body.since, body.until, sharing.alias(str(s.data_dir.resolve())),
-                                    body.note, pats, body.expires_hours, labs, batch_entry)
+                                    body.note, pats, body.expires_hours, labs, batch_entry,
+                                    load_profile() if body.include_profile else None)
         if not pkg.entries:
             raise HTTPException(422, "No entries in that period")
         sealed = sharing.seal(pkg, key["public_key"])
@@ -639,6 +665,11 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     @app.get("/api/inbox/{pid}")
     def get_pkg(pid: str) -> SharePackage:
         return open_pkg(pid)
+
+    @app.get("/api/inbox/{pid}/overview")
+    def get_overview(pid: str, lang: str = "en") -> dict:
+        """Plain-words summary of the package for the first look: no model call, no codes."""
+        return overview_mod.overview(open_pkg(pid), onto, norm_lang(lang))
 
     @app.get("/api/inbox/{pid}/decisions")
     def get_decisions(pid: str) -> dict:

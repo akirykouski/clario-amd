@@ -43,12 +43,23 @@ const ddx = {
   answers: [], n_terms: 3, note: "",
 };
 
+const overview = {
+  profile: { age: 29, sex: "female" as const }, notes: 1, weeks: 1,
+  frequent: [{ label: "joint pain", count: 2, recent_count: 2, first: "2026-10-01", last: "2026-10-01", max_severity: 6 }],
+  recent: [{ label: "joint pain", count: 2, recent_count: 2, first: "2026-10-01", last: "2026-10-01", max_severity: 6 }],
+  new: ["joint pain"], first: { label: "joint pain", count: 2, recent_count: 2, first: "2026-10-01", last: "2026-10-01", max_severity: 6 },
+  severe: [], labs_off: [{ name: "Cholesterol", value: "264", unit: "mg/dL", flag: "high" as const, date: "2026-09-15" }],
+  family: ["Systemic lupus erythematosus"], denied: ["fever"], mood: { avg: 4, trend: "down" as const },
+  asks: [{ text: "I want to ask about the joint pain.", entry_id: "e1", date: "2026-10-01" }],
+};
+
 function mount() {
   vi.spyOn(api, "package").mockResolvedValue(pkg);
   vi.spyOn(api, "inbox").mockResolvedValue([{ package_id: "pkg_1", patient_alias: "Ash-001", period: pkg.period, received_at: "x", expires_at: "x", entities: 2, brief_state: "none" }]);
   vi.spyOn(api, "decisions").mockResolvedValue({ terms: {}, answers: [] });
   vi.spyOn(api, "termSystems").mockResolvedValue({ "HP:0002829": "joints" });
   vi.spyOn(api, "ddx").mockResolvedValue(ddx);
+  vi.spyOn(api, "overview").mockResolvedValue(overview);
   render(<MemoryRouter initialEntries={["/p/pkg_1"]}><Routes><Route path="/p/:id" element={<PackagePage />} /></Routes></MemoryRouter>);
 }
 
@@ -56,7 +67,16 @@ describe("clinic package page", () => {
   it("leads with the visit goal, named conditions and the next question; technical detail is collapsed", async () => {
     mount();
     expect(await screen.findByTestId("pkg-counts")).toHaveTextContent("2 mentions of 1 terms");
+    expect(await screen.findByTestId("pkg-overview")).toBeInTheDocument();
     expect(screen.getByTestId("pkg-glance")).toHaveTextContent("1 notes over 1 weeks · 1 symptoms · 1 out-of-range labs");
+    expect(screen.getByTestId("pkg-who")).toHaveTextContent("Woman, 29");
+    const ov = screen.getByTestId("pkg-why");
+    expect(ov).toHaveTextContent("“I want to ask about the joint pain.”");  // no note: the question comes from the notes
+    expect(ov).toHaveTextContent("joint pain (2 notes, up to 6/10)");
+    expect(ov).toHaveTextContent("Cholesterol high (264 mg/dL)");
+    expect(ov).toHaveTextContent("Systemic lupus erythematosus in a relative");
+    expect(ov).toHaveTextContent("about 4/10, lower lately");
+    expect(ov).not.toHaveTextContent("HP:");
     const box = await screen.findByTestId("ddx");
     expect(within(box).getAllByTestId("ddx-condition")[0]).toHaveTextContent("1.Systemic lupus erythematosus");
     expect(within(box).getByText("weaker match")).toBeInTheDocument();
@@ -98,6 +118,7 @@ describe("clinic package page", () => {
     vi.spyOn(api, "decisions").mockResolvedValue({ terms: {}, answers: [] });
     vi.spyOn(api, "termSystems").mockResolvedValue({});
     const getDdx = vi.spyOn(api, "ddx").mockResolvedValue(ddx);
+    vi.spyOn(api, "overview").mockResolvedValue(overview);
     const decide = vi.spyOn(api, "decideTerm").mockResolvedValue({ terms: { x9: "rejected" }, answers: [] });
     render(<MemoryRouter initialEntries={["/p/pkg_1"]}><Routes><Route path="/p/:id" element={<PackagePage />} /></Routes></MemoryRouter>);
     const box = await screen.findByTestId("needs-check");

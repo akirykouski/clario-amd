@@ -1,6 +1,6 @@
 import type {
   AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
-  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition,
+  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition, Overview, Profile,
 } from "./types";
 
 export class ApiError extends Error {
@@ -89,6 +89,9 @@ export const api = {
   },
   batchEventsUrl: (id: string) => buildUrl(`/documents/batch/${encodeURIComponent(id)}/events`),
   runEventsUrl: (runId: string) => buildUrl(`/runs/${encodeURIComponent(runId)}/events`),
+  overview: (id: string, lang?: string) => request<Overview>("GET", `/inbox/${encodeURIComponent(id)}/overview`, { params: { lang } }),
+  profile: () => request<Profile>("GET", "/profile"),
+  saveProfile: (p: Profile) => request<Profile>("PUT", "/profile", { body: p }),
   privacyCounts: () => request<Record<string, number>>("GET", "/privacy/counts"),
   termSystems: (ids: string[]) => request<Record<string, string>>("GET", "/terms/systems", { params: { ids: ids.join(",") } }),
   ddx: (id: string, lang?: string) => request<Differential>("GET", `/inbox/${encodeURIComponent(id)}/ddx`, { params: { lang } }),

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { api } from "../api";
-import type { ClinicKey, ShareResult } from "../types";
+import type { ClinicKey, Profile, ShareResult } from "../types";
 import { daysAgo, fmtDate, today } from "../lib";
 import { ErrorBox } from "../components/ui";
 import { useT } from "../i18n";
@@ -22,6 +22,12 @@ export default function SharePage() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<ShareResult | null>(null);
+  const [age, setAge] = useState("");
+  const [sex, setSex] = useState<NonNullable<Profile["sex"]> | "">("");
+  const [withProfile, setWithProfile] = useState(true);
+  useEffect(() => {
+    api.profile().then((p) => { setAge(p.age ? String(p.age) : ""); setSex(p.sex ?? ""); }).catch(() => {});
+  }, []);
 
   const checkKey = async () => {
     setKeyBusy(true); setErr(null); setKey(null);
@@ -31,7 +37,10 @@ export default function SharePage() {
   const send = async () => {
     setBusy(true); setErr(null);
     try {
-      setRes(await api.share({ clinic_url: url.trim(), since: daysAgo(weeks * 7), until: today(), include_patterns: patterns, note: note.trim() || null, expires_hours: hours }));
+      const n = Number(age);
+      await api.saveProfile({ age: age.trim() && Number.isFinite(n) ? Math.round(n) : null, sex: sex || null });
+      setRes(await api.share({ clinic_url: url.trim(), since: daysAgo(weeks * 7), until: today(), include_patterns: patterns, note: note.trim() || null,
+                               expires_hours: hours, include_profile: withProfile }));
     } catch (x) { setErr((x as Error).message); }
     setBusy(false);
   };
@@ -69,6 +78,20 @@ export default function SharePage() {
       <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" className="w-5 h-5 accent-[var(--accent)]" checked={patterns} onChange={(e) => setPatterns(e.target.checked)} />{t("share.includePatterns")}</label>
       <div><label className="label" htmlFor="nt">{t("share.noteLabel")}</label>
         <textarea id="nt" className="input min-h-[90px]" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("share.notePlaceholder")} /></div>
+      <fieldset className="card space-y-2" data-testid="share-about">
+        <legend className="label px-1">{t("share.about")}</legend>
+        <p className="text-sm text-muted">{t("share.aboutHint")}</p>
+        <div className="flex flex-wrap gap-3">
+          <label className="w-28"><span className="label">{t("share.age")}</span>
+            <input className="input" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))} /></label>
+          <label className="flex-1 min-w-[10rem]"><span className="label">{t("share.sex")}</span>
+            <select className="input" value={sex} onChange={(e) => setSex(e.target.value as typeof sex)}>
+              <option value="">{t("share.sexNone")}</option><option value="female">{t("share.sexFemale")}</option>
+              <option value="male">{t("share.sexMale")}</option><option value="other">{t("share.sexOther")}</option>
+            </select></label>
+        </div>
+        <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" className="w-5 h-5 accent-[var(--accent)]" checked={withProfile} onChange={(e) => setWithProfile(e.target.checked)} />{t("share.includeProfile")}</label>
+      </fieldset>
       <div><label className="label" htmlFor="ex">{t("share.expires")}</label>
         <select id="ex" className="input" value={hours} onChange={(e) => setHours(+e.target.value)}>
           <option value={24}>{t("share.day1")}</option><option value={72}>{t("share.day3")}</option><option value={168}>{t("share.day7")}</option><option value={720}>{t("share.day30")}</option>

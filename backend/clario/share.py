@@ -71,7 +71,7 @@ def shared_labs(labs: list[LabResult], since: str, until: str, batch_entry: dict
 
 def build_package(entries: list[Entry], since: str, until: str, patient_alias: str, note: str | None,
                   patterns: list[Pattern], expires_hours: int, labs: list[LabResult] | None = None,
-                  batch_entry: dict[str, str] | None = None) -> SharePackage:
+                  batch_entry: dict[str, str] | None = None, profile: dict | None = None) -> SharePackage:
     chosen = sorted((e for e in entries if since <= e.occurred_on <= until), key=lambda e: e.occurred_on)
     shared_entities, slim = [], []
     for e in chosen:
@@ -86,7 +86,7 @@ def build_package(entries: list[Entry], since: str, until: str, patient_alias: s
     return SharePackage(package_id=f"pkg_{uuid.uuid4().hex[:12]}", patient_alias=patient_alias,
                         created_at=created.isoformat(timespec="seconds"),
                         expires_at=(created + timedelta(hours=expires_hours)).isoformat(timespec="seconds"),
-                        period=(since, until), note=note, entries=slim, entities=shared_entities,
+                        period=(since, until), note=note, profile=profile or None, entries=slim, entities=shared_entities,
                         labs=shared_labs(labs or [], since, until, batch_entry), patterns=patterns)
 
 

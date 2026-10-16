@@ -118,6 +118,7 @@ class ShareRequest(BaseModel):
     include_patterns: bool = True
     note: str | None = Field(None, description="What the patient wants to ask at the visit")
     expires_hours: int = Field(72, ge=1, le=720)
+    include_profile: bool = Field(True, description="Send the age and sex the patient entered, if any")
 
 
 class SharedEntity(BaseModel):
@@ -169,6 +170,7 @@ class SharePackage(BaseModel):
     expires_at: str
     period: tuple[str, str]
     note: str | None = None
+    profile: dict | None = Field(None, description="{age, sex} when the patient chose to share them")
     entries: list[Entry]
     entities: list[SharedEntity]
     labs: list[SharedLab] = Field(default_factory=list)
