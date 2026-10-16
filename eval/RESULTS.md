@@ -26,7 +26,6 @@ No certified threshold recorded yet (`eval/conformal.py` on a `--sc-n` run).
 
 | file | model | backend | dataset | n | date |
 |---|---|---|---|---|---|
-| documents.offline-fixture.json | offline-fixture-v1 | offline-fixtures | synthetic-referti/evalset | 5 | 2026-10-15 |
 | pattern_calibration.json | clario-patterns 3a5a1c9 | cpu | simulated patients from the shipped HPO/Orphanet annotations (knowledge.json.gz, 12820 diseases), k=3..8 terms frequency weighted, 30% moved to an ancestor, 1-2 noise terms, 30% with one negated term; synthetic, no real patients | 1200 | 2026-10-16 |
 | pii_leak.json | clario-privacy d38ab8e | cpu | synthetic templates v1, seed 20261016 | 1700 | 2026-10-16 |
 
@@ -36,3 +35,4 @@ No certified threshold recorded yet (`eval/conformal.py` on a `--sc-n` run).
 |---|---|---|---|---|---|
 | extraction_dryrun-gold-vs-gold.json | offline-synth-v3-test | 140 | 2026-10-15 | 1.000 | gold scored against itself, no model; checks the scorer only, not a model result |
 | conformal_threshold.json | synthetic-dry-run-fixture | 2400 | 2026-10-16 | n/a | synthetic fixture, no model; checks the code path only. The app ignores this file. |
+| documents.offline-fixture.json | synthetic-referti/evalset | 5 | 2026-10-15 | n/a | offline fixture, no model |

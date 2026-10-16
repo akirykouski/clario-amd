@@ -237,7 +237,7 @@
     "tessera_sanitaria": 0.0,
     "record_number": 0.033
   },
-  "held_out_caveat": "The corpus is written by the redactor's author, so it measures the formats and phrasings we thought of; real diaries will leak more. The first round of tuning used the dev half only (rates above); a second round of generic fixes was chosen after reading test failures, so the headline test numbers are slightly optimistic.",
+  "held_out_caveat": "Headline: 10.8% held out; 5.8% after fixes chosen by reading test failures. The corpus is written by the redactor's author, so it measures the formats and phrasings we thought of; real diaries will leak more. The first round of tuning used the dev half only (rates above); a second round of generic fixes was chosen after reading test failures, so the 5.8% is optimistic and the strictly held-out 10.8% is the figure to quote.",
   "baseline_before_this_work": {
     "ref": "606ffb7",
     "note": "privacy.py as of that commit, same corpus",

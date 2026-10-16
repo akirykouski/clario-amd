@@ -581,10 +581,10 @@ def run(redactor: str | None = None, baseline: str | None = None) -> dict:
                        "overlap any replacement. Scanned images are not part of this corpus and are not redacted."),
         "metrics": {"test": score(test, pseudonymize), "dev": score(dev, pseudonymize)},
         "test_leak_rates_before_reading_test_failures": TEST_BEFORE_FAILURE_READING,
-        "held_out_caveat": ("The corpus is written by the redactor's author, so it measures the formats and phrasings "
+        "held_out_caveat": ("Headline: 10.8% held out; 5.8% after fixes chosen by reading test failures. The corpus is written by the redactor's author, so it measures the formats and phrasings "
                             "we thought of; real diaries will leak more. The first round of tuning used the dev half "
                             "only (rates above); a second round of generic fixes was chosen after reading test "
-                            "failures, so the headline test numbers are slightly optimistic."),
+                            "failures, so the 5.8% is optimistic and the strictly held-out 10.8% is the figure to quote."),
     }
     if baseline:
         base = importlib.import_module(f"clario.{baseline}").pseudonymize
