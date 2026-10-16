@@ -152,7 +152,7 @@ def patient_rationale(labels: list[str], lang: str = "en") -> str:
         return (f"Alcune cose che hai annotato ({feats}) compaiono spesso insieme. "
                 f"Potrebbe valere la pena parlarne con il medico, che può dire se è rilevante per te.")
     return (f"Some of what you recorded ({feats}) often shows up together. "
-            f"This may be worth discussing with your doctor, who can tell whether it is relevant to you.")
+            f"This may be worth discussing with your clinician, who can tell whether it is relevant to you.")
 
 
 def close(onto: Ontology, p: str, d: str) -> bool:

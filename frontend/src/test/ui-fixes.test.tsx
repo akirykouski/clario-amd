@@ -23,7 +23,7 @@ describe("offline demo model", () => {
   it("shows a word instead of a percent for reading quality", async () => {
     vi.spyOn(api, "health").mockResolvedValue(offlineHealth);
     const { container } = render(<ConfidenceBar value={0.55} />);
-    expect(await screen.findByText("Needs a check")).toBeInTheDocument();
+    expect(await screen.findByText("To review")).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/%/);
   });
 

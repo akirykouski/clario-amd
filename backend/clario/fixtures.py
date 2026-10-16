@@ -73,7 +73,7 @@ class OfflineLLM(LLM):
                 return json.dumps({"rationale": f"Quello che hai annotato ({feats}) somiglia ad alcune caratteristiche tipiche di "
                                                 f"{payload.get('condition')}. Potrebbe valere la pena parlarne con il medico."}), _stats()
             return json.dumps({"rationale": f"What you recorded ({feats}) resembles some typical features of "
-                                            f"{payload.get('condition')}. It may be worth discussing with your doctor."}), _stats()
+                                            f"{payload.get('condition')}. It may be worth discussing with your clinician."}), _stats()
         if task == "document":
             return json.dumps(self._document(payload)), _stats(200)
         if task == "next_question":
