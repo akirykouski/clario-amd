@@ -90,6 +90,16 @@ class LabDecisionIn(BaseModel):
     decision: str
 
 
+class LabBulkIn(BaseModel):
+    """Decide many unchecked lab rows in one call. No filter means every unchecked row; `test_key` narrows to one test,
+    `page` (with `entry_id`, the import) to one page of one report."""
+
+    decision: str
+    test_key: str | None = None
+    page: int | None = None
+    entry_id: str | None = None
+
+
 class ReviewIn(BaseModel):
     review: str
     text: str | None = None
@@ -582,6 +592,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     inbox_dir.mkdir(parents=True, exist_ok=True)
     briefs_dir.mkdir(parents=True, exist_ok=True)
     decisions_file = s.data_dir / "decisions.jsonl"  # counts and timing only, no diary text
+    labdec_log = s.data_dir / "lab_decisions.jsonl"  # one row per lab decision: ids and timing only
 
     def safe_id(pid: str) -> str:
         if not pid.startswith("pkg_") or not pid[4:].isalnum():
@@ -691,18 +702,38 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             raise HTTPException(404, "lab row not found")
         if row.reviewed:
             raise HTTPException(409, "The patient already checked this row")
+        write_lab_decisions(pid, pkg, [row], body.decision, "row")
+        return decided(pkg, drop_rejected=False)
+
+    @app.post("/api/inbox/{pid}/labs/decide")
+    def decide_labs(pid: str, body: LabBulkIn) -> SharePackage:
+        """Accept or reject many unchecked lab rows at once: all of them, one test, or one page of one report."""
+        pkg = open_pkg(pid)
+        rows = [l for l in pkg.labs if not l.reviewed
+                and (body.test_key is None or (l.test_key or l.test_name) == body.test_key)
+                and (body.page is None or (l.page == body.page and (body.entry_id is None or l.entry_id == body.entry_id)))]
+        scope = "test" if body.test_key else "page" if body.page is not None else "all"
+        write_lab_decisions(pid, pkg, rows, body.decision, scope)
+        return decided(pkg, drop_rejected=False)
+
+    def write_lab_decisions(pid: str, pkg: SharePackage, rows: list, decision: str, scope: str) -> None:
         b = load_brief(pid)
         if b and b.finalized:
             raise HTTPException(409, "Brief is final")
-        if body.decision not in ("pending", "accepted", "rejected"):
+        if decision not in ("pending", "accepted", "rejected"):
             raise HTTPException(422, "decision must be pending, accepted or rejected")
+        if any(r.reviewed for r in rows):
+            raise HTTPException(409, "The patient already checked this row")
         dec = load_decisions(pid)
-        if body.decision == "pending":
-            dec.pop(lab_id, None)
-        else:
-            dec[lab_id] = body.decision
+        at = now_iso()
+        with labdec_log.open("a") as fh:  # one row per lab, ids and timing only: no values, no diary text
+            for r in rows:
+                if decision == "pending":
+                    dec.pop(r.id, None)
+                else:
+                    dec[r.id] = decision
+                fh.write(json.dumps({"package_id": pid, "lab_id": r.id, "decision": decision, "scope": scope, "at": at}) + "\n")
         (labdec_dir / f"{pid}.json").write_bytes(keys.seal_data(json.dumps(dec).encode()))
-        return decided(pkg, drop_rejected=False)
 
     async def draft(rid: str, pkg: SharePackage, lang: str = "en") -> None:
         try:
@@ -727,7 +758,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
                     await runs.emit(rid, "draft", "Drafting brief", min(0.9, 0.1 + n / 600), backend=llm.backend,
                                     model=llm.model, tokens=n, tokens_per_s=round(n / el, 1) if el else None)
             parsed = briefing.DraftOut.model_validate(extract_json(text))
-            items = briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed)
+            items = briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed, lang)
             b = save_brief(Brief(package_id=pkg.package_id, items=items, model=llm.model, backend=llm.backend,
                                  stats=stats.as_dict() if stats else {}, lang=lang))  # type: ignore[arg-type]
             await runs.emit(rid, "done", "Brief drafted. Review each AI item.", 1.0, backend=llm.backend,
@@ -739,7 +770,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
 
     @app.post("/api/inbox/{pid}/brief")
     async def start_brief(pid: str, lang: str = "en"):
-        pkg = open_pkg(pid)
+        pkg = decided(open_pkg(pid), drop_rejected=True)
         rid = runs.new()
         spawn(draft(rid, pkg, norm_lang(lang)))
         return {"run_id": rid}
@@ -789,15 +820,14 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         b = load_brief(pid)
         if not b:
             raise HTTPException(404, "No brief yet")
-        pending = [i for i in b.items if i.review == "pending"]
-        if pending:
-            raise HTTPException(409, f"{len(pending)} AI item(s) still need review")
-        dpkg = decided(open_pkg(pid), drop_rejected=False)
-        unchecked = [l for l in dpkg.labs if not l.reviewed and l.decision is None]
+        dpkg = decided(open_pkg(pid), drop_rejected=True)
+        unchecked = [l for l in dpkg.labs if not l.reviewed]
         if unchecked:
             raise HTTPException(409, f"{len(unchecked)} lab row(s) from documents still need a decision")
-        b.items = [i for i in b.items if not (i.section == "labs" and i.origin == "patient")] + \
-            briefing.lab_items(dpkg.model_copy(update={"labs": [l for l in dpkg.labs if l.decision != "rejected"]}), b.lang)
+        pending = [i for i in b.items if i.review == "pending" and i.section != "labs"]
+        if pending:
+            raise HTTPException(409, f"{len(pending)} AI item(s) still need review")
+        b = briefing.with_labs(b, dpkg, b.lang)
         b.finalized = True
         b.finalized_at = now_iso()
         secs = body.seconds if body else None

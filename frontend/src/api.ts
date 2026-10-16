@@ -75,6 +75,9 @@ export const api = {
   package: (id: string) => request<SharePackage>("GET", `/inbox/${encodeURIComponent(id)}`),
   decideLab: (pkg: string, labId: string, decision: "accepted" | "rejected" | "pending") =>
     request<SharePackage>("PUT", `/inbox/${encodeURIComponent(pkg)}/labs/${encodeURIComponent(labId)}`, { body: { decision } }),
+  /** Decide many unchecked lab rows in one call: no filter is every row, `test_key` one test, `page` + `entry_id` one report page. */
+  decideLabs: (pkg: string, b: { decision: "accepted" | "rejected" | "pending"; test_key?: string; page?: number; entry_id?: string | null }) =>
+    request<SharePackage>("POST", `/inbox/${encodeURIComponent(pkg)}/labs/decide`, { body: b }),
   startBrief: (id: string, lang?: string) => request<{ run_id: string }>("POST", `/inbox/${encodeURIComponent(id)}/brief${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
   brief: (id: string, v?: BriefView) => request<Brief>("GET", `/inbox/${encodeURIComponent(id)}/brief`, { params: v }),
   reviewItem: (pkg: string, item: string, b: { review: BriefItem["review"]; text?: string }) =>

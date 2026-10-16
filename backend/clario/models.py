@@ -131,6 +131,7 @@ class SharedEntity(BaseModel):
     severity: int | None = None
     onset_hint: str | None = Field(None, description="Time phrase the patient wrote ('since Tuesday'); shown to the clinician")
     reviewed: bool = Field(True, description="False: no person has checked it; the brief says so")
+    from_question: bool = Field(False, description="The patient answered a question the app asked; `quote` is the app's question, not the patient's words")
 
 
 class SharedLab(BaseModel):
@@ -179,10 +180,16 @@ class BriefItem(BaseModel):
     section: Literal["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"]
     text: str
     cites: list[str] = Field(default_factory=list, description="entry ids")
-    origin: Literal["patient", "ai"] = "ai"
+    origin: Literal["patient", "ai", "document"] = Field(
+        "ai", description="patient: straight from the diary; document: a lab line read from an imported report (pending until every row is checked); ai: drafted by the model")
     review: Literal["pending", "accepted", "rejected", "edited"] = "pending"
     flag: Literal["citation_mismatch"] | None = Field(
         None, description="Set by code when the item names a term that none of its cited entries confirms; the clinician sees it")
+    flag_term: str | None = Field(None, description="With `flag`: the term the line names that its citations do not record")
+    flag_entries: list[str] = Field(default_factory=list, description="With `flag`: entry ids that do record that term")
+    kind: Literal["patient_note"] | None = Field(None, description="patient_note: `text` is the patient's own question, the UI adds the label")
+    pages: list[int] = Field(default_factory=list, description="Lab lines: report pages the values were read from")
+    from_question: bool = Field(False, description="Symptom line the patient confirmed by answering a question the app asked")
 
 
 class Brief(BaseModel):

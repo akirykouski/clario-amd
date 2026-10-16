@@ -164,7 +164,7 @@ def test_brief_for_two_audiences_and_two_languages(unlocked, clinic_server, tmp_
         ptext = " ".join(i["text"] for i in p["items"])
         assert p["audience"] == "patient" and p["lang"] == "it" and p["items"]
         assert "HP:" not in ptext and "lupus" not in ptext.lower() and "Systemic" not in ptext
-        assert "hai scritto" in ptext and "La tua domanda per questa visita" in ptext
+        assert "hai scritto" in ptext and any(i["kind"] == "patient_note" for i in p["items"])
         assert "Hai scritto di una condizione che ha un tuo parente" in ptext
         assert "Stanchezza" in ptext and "Arrossamento a farfalla" in ptext
         assert not any(i["origin"] == "ai" and i["section"] == "patterns" for i in p["items"])
