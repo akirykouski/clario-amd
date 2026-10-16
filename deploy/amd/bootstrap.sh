@@ -12,6 +12,8 @@
 #   serve      pull images, start vllm-big (Gemma 4 31B)
 #   health     wait for vllm-big (retries once with TRITON_ATTN if the attention backend is what failed)
 #   smoke      structured-JSON check (smoke.sh)
+#   lay        train/lay_expand.py: verified everyday English phrasings per HPO term (train/lay_lexicon.json, LAY_TERMS
+#              most frequent terms, default 800); the synth step uses them to word the symptoms
 #   synth      train/synth.py against vllm-big (SYNTH_N rows, default 3000), generator is never anthropic.com
 #   prep       train/prep.py (disease-held-out train/val/test)
 #   train      LoRA r16 on Gemma 4 E4B (train_rocm.py), eval/results/train_e4b-r16.json
@@ -21,9 +23,9 @@
 #   bench      bench/bench.py on vllm-big: tokens/s, p50/p95, concurrency 1/8/32, self-consistency n=5 cost, GPU util
 #   results    eval/make_results_md.py --check (every result file has n, dataset, model, backend, date, hardware)
 #   app        (not in --all) compose up clinic + patient-demo + gpu-metrics + caddy, prints the public URLs
-# Back-compat flags: --synth N (synth+prep), --train, --eval, --bench, --app, --skip-smoke.
+# Back-compat flags: --lay, --synth N (synth+prep), --train, --eval, --bench, --app, --skip-smoke.
 #
-# FALLBACK (droplet late): --fallback runs synth, prep, eval, bench, results against any OpenAI-compatible endpoint.
+# FALLBACK (droplet late): --fallback runs lay, synth, prep, eval, bench, results against any OpenAI-compatible endpoint.
 #   BASE_URL=https://host/v1 API_KEY=... MODEL=name [TUNED_MODEL=name] [BACKEND_LABEL=amd-hosted] [HARDWARE_LABEL="AMD Instinct MI300X"]
 #   deploy/amd/bootstrap.sh --fallback --all
 #   Results are labelled with BACKEND_LABEL (default hosted-openai-compatible) and the hardware you state (default
@@ -31,7 +33,7 @@
 #
 # Failure: the script stops, names the step, and prints the exact rerun command. Logs: deploy/amd/logs/bootstrap-<time>.log.
 # Optional env: PUBLIC_HOST, LORA_PATH, HF_CACHE, VLLM_IMAGE, BIG_MODEL, SMALL_MODEL, WAIT_SECS, FORCE=1 (redo stamped
-#   steps), SYNTH_N, BENCH_CONC (default 1,8,32), BENCH_N (64), DISK_MIN_GB (200), EVAL_BIG=1 (also score the 31B).
+#   steps), SYNTH_N, LAY_TERMS (800), BENCH_CONC (default 1,8,32), BENCH_N (64), DISK_MIN_GB (200), EVAL_BIG=1 (also score the 31B).
 set -euo pipefail
 set +x  # never trace: the environment holds secrets
 
@@ -39,8 +41,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 cd "$REPO"
 
-ALL_STEPS="preflight serve health smoke synth prep train eval bench results"
-FALLBACK_STEPS="synth prep eval bench results"
+ALL_STEPS="preflight serve health smoke lay synth prep train eval bench results"
+FALLBACK_STEPS="lay synth prep eval bench results"
 STAMPS="$HERE/logs/stamps"
 
 WANT=""          # space separated steps requested
@@ -56,13 +58,14 @@ while [ $# -gt 0 ]; do
             ONLY="$ONLY $2"; shift 2 ;;
     --fallback) FALLBACK=1; shift ;;
     --list) LIST=1; shift ;;
+    --lay) want lay; shift ;;
     --synth) SYNTH_N="${2:?--synth needs a number}"; want synth; want prep; shift 2 ;;
     --train) want train; shift ;;
     --eval) want eval; shift ;;
     --bench) want bench; shift ;;
     --app) DO_APP=1; shift ;;
     --skip-smoke) SKIP_SMOKE=1; shift ;;
-    -h|--help) sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown flag: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -306,6 +309,15 @@ step_health() {
 step_smoke() {
   need_big
   BASE_URL="$BIG_URL" MODEL="$BIG_MODEL" bash "$HERE/smoke.sh"
+}
+
+step_lay() {
+  need_big
+  local lex="$REPO/train/lay_lexicon.json"
+  pyrun train/lay_expand.py --base-url "$BIG_URL" --model "$BIG_MODEL" --api-key-env VLLM_API_KEY \
+    --terms "${LAY_TERMS:-800}" --concurrency 32 || die "lay_expand failed: see the log above"
+  [ -s "$lex" ] || die "lay_expand wrote no $lex"
+  echo "lay lexicon: $lex"
 }
 
 step_synth() {

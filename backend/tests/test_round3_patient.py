@@ -1,4 +1,4 @@
-"""Round 3, lane P: demo diary arrives reviewed, "all correct", clinic and patient cards agree, deterministic scoring."""
+"""Round 3, lane P: terms count unless rejected, clinic and patient cards agree, deterministic scoring."""
 import json
 import subprocess
 import sys
@@ -22,45 +22,21 @@ def entries_of(client):
 
 
 @pytest.mark.parametrize("persona,lang", [("giulia", "en"), ("giulia_it", "it")])
-def test_demo_arrives_reviewed_and_keeps_hedged_items_queued(unlocked, persona, lang):
+def test_demo_terms_count_without_any_review(unlocked, persona, lang):
+    """Every extracted term counts unless a person rejects it: no patient confirmation step, hedged ones are flagged for the clinician."""
     assert unlocked.post("/api/demo", json={"persona": persona}).json()["entries"] == 19
     wait_extracted(unlocked)
     ents = [x for e in entries_of(unlocked) for x in e.entities]
-    assert not any(x.review == "auto" for x in ents)
-    assert any(x.review == "confirmed" for x in ents)
+    assert not any(x.review == "confirmed" for x in ents)
     body = unlocked.get("/api/patterns", params={"lang": lang}).json()
-    assert body["confirmed_terms"] >= 8 and body["patterns"] and body["to_check"] == 0
-    log = unlocked.app.state.vault.all("correction_log")
-    assert log and all(r["actor"] == "demo_seed" and r["action"] == "confirm" for r in log)
-    # both personas share the teaching structure: hedged sentences wait in the queue, a negation, a relative's condition
+    assert body["confirmed_terms"] >= 8 and body["patterns"] and "to_check" not in body
+    assert not unlocked.app.state.vault.all("correction_log")
+    # both personas share the teaching structure: hedged sentences are flagged, a negation, a relative's condition
     assert any(x.review == "needs_review" for x in ents)
     assert unlocked.get("/api/review").json()["count"] >= 1
     assert any(x.negated for x in ents)
     assert any(x.family_history for x in ents)
     assert body["patterns"][0]["signal"] == "strong"
-
-
-def test_demo_unreviewed_keeps_auto_and_counts_them(unlocked):
-    unlocked.post("/api/demo", json={"persona": "giulia", "reviewed": False})
-    wait_extracted(unlocked)
-    body = unlocked.get("/api/patterns").json()
-    assert body["confirmed_terms"] == 0 and body["to_check"] >= 5
-    assert unlocked.get("/api/review").json()["auto"] == body["to_check"]
-
-
-def test_all_correct_confirms_auto_terms_of_one_entry_and_logs_it(unlocked):
-    unlocked.post("/api/entries", json={"text": "Knees ache in the morning. Mouth sore again. So tired."})
-    e = wait_extracted(unlocked)[0]
-    assert any(x["review"] == "auto" for x in e["entities"])
-    r = unlocked.post(f"/api/entries/{e['id']}/confirm-all").json()
-    assert r["confirmed"] >= 1
-    assert not any(x["review"] == "auto" for x in unlocked.get(f"/api/entries/{e['id']}").json()["entities"])
-    assert any(rec["actor"] == "patient" for rec in unlocked.app.state.vault.all("correction_log"))
-    assert unlocked.post(f"/api/entries/{e['id']}/confirm-all").json()["confirmed"] == 0
-    unlocked.post("/api/entries", json={"text": "Red rash on my cheeks after the sun. Wrists swollen, knees ache."})
-    wait_extracted(unlocked)
-    assert unlocked.post("/api/confirm-auto").json()["confirmed"] >= 1
-    assert unlocked.get("/api/patterns").json()["to_check"] == 0
 
 
 def test_shared_card_signal_equals_the_patient_signal(unlocked, clinic_server, tmp_path):

@@ -21,7 +21,7 @@ export interface ReviewItem {
   // lab rows only
   flag?: LabFlag | null; page?: number; batch_id?: string; unit?: string; ref_low?: number | null; ref_high?: number | null;
 }
-export interface ReviewQueue { items: ReviewItem[]; count: number; auto?: number }
+export interface ReviewQueue { items: ReviewItem[]; count: number }
 export type ReviewAction = "confirm" | "correct" | "reject";
 
 export interface Entry {
@@ -49,10 +49,12 @@ export interface PatientPattern {
 
 export interface ShareRequest {
   clinic_url: string; since: string; until: string; include_patterns: boolean;
-  note?: string | null; expires_hours: number;
+  note?: string | null; expires_hours: number; include_profile?: boolean;
 }
+export interface Profile { age?: number | null; sex?: "female" | "male" | "other" | null }
 
 export interface SharedEntity {
+  id?: string | null; confidence?: number | null; needs_review?: boolean;
   entry_id: string; occurred_on: string; type: EntityType; quote: string; canonical: string;
   hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; onset_hint?: string | null; reviewed: boolean; from_question?: boolean;
 }
@@ -60,12 +62,13 @@ export interface SharedEntity {
 export interface SharedLab {
   test_name: string; value_numeric: number | null; value_text: string | null; unit: string; ref_low: number | null;
   ref_high: number | null; flag: LabFlag | null; date: string; page: number; entry_id: string | null; reviewed: boolean;
-  id: string; test_key: string; name_en: string | null; abnormal: boolean; decision: "accepted" | "rejected" | null;
+  confidence?: number | null; needs_review?: boolean; id: string | null; test_key: string; name_en: string | null; abnormal: boolean;
+  decision: "confirmed" | "rejected" | null;
 }
 
 export interface SharePackage {
   package_id: string; patient_alias: string; created_at: string; expires_at: string;
-  period: [string, string]; note: string | null; entries: Entry[]; entities: SharedEntity[]; labs: SharedLab[]; patterns: Pattern[];
+  period: [string, string]; note: string | null; profile?: Profile | null; entries: Entry[]; entities: SharedEntity[]; labs: SharedLab[]; patterns: Pattern[];
 }
 
 export type BriefSection = "summary" | "timeline" | "symptoms" | "labs" | "medications" | "patterns" | "questions";
@@ -107,8 +110,8 @@ export interface PrivacyVerify { ok: boolean; broken_at: string | null; count: n
 export interface SafetyNotice { level: "emergency" | "advice"; message: string; matched: string }
 export interface VaultState { initialized: boolean; locked: boolean }
 export interface TimelineDay { date: string; entries: Entry[]; terms: Term[] }
-export interface Timeline { days: TimelineDay[]; terms: Evidence[] }
-export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms: number; to_check?: number; note: string }
+export interface Timeline { days: TimelineDay[]; terms: (Evidence & { clinical?: string })[]; systems?: Record<string, string> }
+export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms: number; note: string }
 export interface ShareResult {
   package_id: string; clinic_url: string; expires_at: string; qr_payload: string; entities: number; entries: number;
   mentions?: number; terms?: number; labs?: number;  // entities = mentions: patient terms only, no negated, no family history
@@ -161,4 +164,24 @@ export interface DecisionCounts { accepted: number; edited: number; rejected: nu
 export interface BriefDecisions extends DecisionCounts { package_id: string; finalized_at: string; review_seconds: number | null }
 export interface ClinicMetrics {
   briefs: BriefDecisions[]; totals: DecisionCounts; finalized: number; timed: number; mean_review_seconds: number | null;
+}
+
+// Clinic differential (clinician only)
+export interface ConditionFeature { hpo_id: string; label: string; count: number; freq: number | null }
+export interface Condition {
+  disease_id: string; name: string; full_name: string; signal: Signal | null; score: number; rank: number; url: string | null;
+  matched: ConditionFeature[]; missing: ConditionFeature[];
+}
+export interface ClinicQuestion { feature_id: string; label: string; question: string; ig: number; freq_by: { name: string; freq: number | null }[] }
+export interface ClinicAnswer { feature_id: string; label: string; answer: Answer; at: string }
+export interface Differential { conditions: Condition[]; question: ClinicQuestion | null; answers: ClinicAnswer[]; n_terms: number; note: string }
+export type TermDecision = "confirmed" | "rejected" | "pending";
+export interface Decisions { terms: Record<string, TermDecision>; labs?: Record<string, TermDecision>; answers: ClinicAnswer[] }
+
+export interface OverviewTerm { label: string; count: number; recent_count: number; first: string; last: string; max_severity: number | null }
+export interface Overview {
+  profile: Profile | null; notes: number; weeks: number; frequent: OverviewTerm[]; recent: OverviewTerm[]; new: string[];
+  first: OverviewTerm | null; severe: OverviewTerm[]; labs_off: { name: string; value: string; unit: string; flag: "low" | "high"; date: string }[];
+  family: string[]; denied: string[]; mood: { avg: number; trend: "down" | "up" | "flat" } | null;
+  asks: { text: string; entry_id: string; date: string }[];
 }

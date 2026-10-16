@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BookOpen, CalendarDays, FlaskConical, Lock, Send, ShieldCheck, Waypoints } from "lucide-react";
 import { api, onLocked } from "../api";
 import type { VaultState } from "../types";
@@ -16,7 +16,6 @@ import PrivacyPage from "./PrivacyPage";
 import LabsPage from "./LabsPage";
 import ImportPage from "./ImportPage";
 import ReviewPage from "./ReviewPage";
-import { REVIEW_EVENT } from "../lib";
 
 export default function PatientApp() {
   const nav = useNavigate();
@@ -24,20 +23,10 @@ export default function PatientApp() {
   const loc = useLocation();
   const [vault, setVault] = useState<VaultState | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [toReview, setToReview] = useState(0);
 
   const refresh = () => api.vault().then(setVault).catch((e: Error) => setErr(e.message));
   useEffect(() => { refresh(); }, []);
   useEffect(() => onLocked(() => { setVault((v) => (v ? { ...v, locked: true } : v)); nav("/unlock", { replace: true }); }), [nav]);
-
-  const open0 = !!vault && vault.initialized && !vault.locked;
-  useEffect(() => {
-    if (!open0) return;
-    const load = () => api.review().then((r) => setToReview(r.count + (r.auto ?? 0))).catch(() => {});
-    load();  // on mount; after that only when something says the queue changed (extraction done, a decision, an import)
-    window.addEventListener(REVIEW_EVENT, load);
-    return () => window.removeEventListener(REVIEW_EVENT, load);
-  }, [open0]);
 
   if (err) return <div className="max-w-md mx-auto p-6"><ErrorBox error={err} retry={refresh} /></div>;
   if (!vault) return <Loading />;
@@ -65,9 +54,6 @@ export default function PatientApp() {
             ))}
           </nav>
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
-            {toReview > 0 && (
-              <Link to="/review" className="chip chip-review font-bold min-h-[44px] px-2.5 text-[13px] sm:text-sm whitespace-nowrap" aria-label={t("nav.toReview", { n: toReview })}>{t("nav.toReview", { n: toReview })}</Link>
-            )}
             <LangSwitch />
             <NavLink to="/privacy" className="btn !px-0 w-11" aria-label={t("nav.privacy")} title={t("nav.privacy")}><ShieldCheck size={18} aria-hidden /></NavLink>
             <button className="btn !px-0 w-11 sm:!px-4 sm:w-auto" onClick={lock} aria-label={t("nav.lockAria")} title={t("nav.lockAria")}><Lock size={16} aria-hidden /><span className="hidden sm:inline">{t("nav.lock")}</span></button>

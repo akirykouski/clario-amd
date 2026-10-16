@@ -39,10 +39,11 @@ deploy/amd/bootstrap.sh --app     # core + public app
 ```
 Core always runs: preflight (`amd-smi`/`rocm-smi`, `/dev/kfd`, docker), pull images, start `vllm-big`, wait healthy (first start downloads about 62 GB of weights), `smoke.sh`. `VLLM_API_KEY` is generated into `deploy/amd/.env` (chmod 600, git-ignored) unless you export one. `PUBLIC_HOST` defaults to `<public ip>.sslip.io`.
 
-Older per-stage flags still work (order is fixed: synth, train, eval, bench, app):
+Older per-stage flags still work (order is fixed: lay, synth, train, eval, bench, app):
 
 | flag | what it does | needs |
 |---|---|---|
+| `--lay` | `train/lay_expand.py` against `vllm-big`: verified everyday English phrasings per HPO term into `train/lay_lexicon.json` (`LAY_TERMS`, default 800 most frequent terms); `--synth` words symptoms with them | core |
 | `--synth N` | `train/synth.py` against `vllm-big`, N accepted rows, then `train/prep.py` (split by disease) | core |
 | `--train` | builds `train/Dockerfile.rocm`, `train_rocm.py` LoRA r16 on E4B, adapter in `train/out/e4b-r16/adapter` | `--synth` done once |
 | `--eval` | starts `vllm-small` with the adapter, `train/eval.py` for `base-e4b` and `ft-e4b-r16` | `--train` done once |
@@ -58,6 +59,7 @@ Full run: `deploy/amd/bootstrap.sh --all --app`. Logs: `deploy/amd/logs/bootstra
 | `serve` | pull images, start `vllm-big` | |
 | `health` | wait for `vllm-big`; if it exits on an attention error, retries once with `VLLM_ATTENTION_BACKEND=TRITON_ATTN` and remembers that in `deploy/amd/.env` | |
 | `smoke` | structured-JSON check via `smoke.sh` | |
+| `lay` | `train/lay_expand.py` against `vllm-big`: everyday phrasings per HPO term (`LAY_TERMS`, default 800), used by `synth` | `train/lay_lexicon.json` |
 | `synth` | `train/synth.py` against `vllm-big` (refuses anthropic.com) | `train/data/synth/synth.jsonl` |
 | `prep` | `train/prep.py`, split held out by disease | `train/data/v3/*` |
 | `train` | LoRA r16 on Gemma 4 E4B (`train_rocm.py`) | `train/out/e4b-r16/`, `eval/results/train_e4b-r16.json` |

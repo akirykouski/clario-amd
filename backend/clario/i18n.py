@@ -45,11 +45,11 @@ def disease_name(name: str, lang: str) -> str:
 
 PATTERNS_NOTE = {
     "en": ("Patterns worth discussing with your clinician. Not a diagnosis.",
-           "Confirm at least 3 terms in your entries to look for patterns.",
-           "No pattern stands out from your confirmed terms yet. Keep writing and confirming."),
+           "Patterns appear once your notes mention at least 3 specific symptoms.",
+           "No pattern stands out from your notes yet. Keep writing."),
     "it": ("Schemi da discutere con il medico. Non è una diagnosi.",
-           "Conferma almeno 3 termini nelle tue note per cercare degli schemi.",
-           "Per ora nessuno schema emerge dai termini confermati. Continua a scrivere e a confermare."),
+           "Gli schemi compaiono quando le note citano almeno 3 sintomi specifici.",
+           "Per ora nessuno schema emerge dalle tue note. Continua a scrivere."),
 }
 
 ANSWER_ENTRY = {"en": ("Answer to a question:", "Yes", "No"), "it": ("Risposta a una domanda:", "Sì", "No")}

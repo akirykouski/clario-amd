@@ -8,6 +8,7 @@ Contract: `backend/clario/schemas/extraction_v3.json` (frozen). `prompt.py` is t
 | file | role |
 |---|---|
 | `prompt.py` | v3 system prompt (+ a variant that asks for `confidence`), `build_messages`, lenient `parse`, `strict_valid`, `from_dataset_entities`. Stdlib only. Old outputs still parse |
+| `lay_expand.py` | lay lexicon: Gemma writes ~10 everyday English phrasings per HPO term in several voices, code filters clinical wording, a blind round trip (target among ontology siblings) keeps only phrases that map back. Writes `lay_lexicon.json`; `synth.py` words English symptoms from it; copied to `backend/clario/data/lay_lexicon_en.json` it also feeds the app's HPO search. `bootstrap.sh --lay` |
 | `synth.py` | M1 data factory: labels by construction from HPO + phenotype.hpoa, EN and IT, with family-history, onset, severity, life-event distractors and hard negatives. Code validates every row and reports reject reasons. Refuses Anthropic endpoints |
 | `prep.py` | disease-held-out and language-stratified train/val/test, writes `data/v3/{train,val,test}.jsonl` and `*_sft.jsonl`, `check_sft` |
 | `gold_draft.py` | Haiku drafts 50 EN + 30 IT entries with proposed labels into `eval/gold/drafts.jsonl` for human review (never training data) |

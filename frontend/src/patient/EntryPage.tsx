@@ -37,6 +37,7 @@ function Review({ initial }: { initial: Entry }) {
     <div className="space-y-5">
       <Link to="/" className="btn-quiet btn px-0">{t("entryPage.back")}</Link>
       <h1 className="text-3xl">{t("entryPage.title")}</h1>
+      <p className="text-muted -mt-3">{t("entryPage.intro")}</p>
       <p className="card whitespace-pre-wrap" aria-label={t("entryPage.noteAria")}>
         {segs.map((s, i) => s.quoted ? <mark key={i} className="quote text-ink">{s.text}</mark> : <span key={i}>{s.text}</span>)}
       </p>
@@ -60,17 +61,13 @@ function Review({ initial }: { initial: Entry }) {
 function EntityRow({ e, onPatch }: { e: Entity; onPatch: (b: Parameters<typeof api.patchEntity>[1]) => void }) {
   const { t } = useT();
   const [fixing, setFixing] = useState(false);
-  const decided = e.review === "confirmed" || e.review === "corrected";
+  const unsure = e.review === "needs_review";
+  const removed = e.review === "rejected";
   const line = patientTermLine(e.hpo_id, e.hpo_label ?? "", entityName(e));
   return (
-    <li className="card" style={e.review === "rejected" ? { opacity: 0.6 } : undefined}>
+    <li className="card" style={removed ? { opacity: 0.6 } : unsure ? { borderStyle: "dashed", borderColor: "var(--moderate)" } : undefined}>
       <p className="text-sm text-muted">{t("entryPage.youWrote")} <mark className="quote text-ink">{e.quote}</mark></p>
-      <p className="mt-1 font-bold">{e.negated && t("term.absent")}{e.family_history && t("term.relative")}{e.type === "trigger" && t("term.contextChip")}{entityName(e)}</p>
-      {e.review === "needs_review" && (
-        <p className="text-sm mt-1 rounded-lg border px-2 py-1 chip-review">
-          {t("entryPage.unsure")}<Link className="underline" to="/review">{t("entryPage.openReview")}</Link>
-        </p>
-      )}
+      <p className={`mt-1 font-bold ${removed ? "line-through" : ""}`}>{e.negated && t("term.absent")}{e.family_history && t("term.relative")}{e.type === "trigger" && t("term.contextChip")}{entityName(e)}</p>
       {(line || !e.hpo_id) && <p className="text-sm text-muted">{line ?? t("entryPage.noCode")}</p>}
       {(e.onset_hint || e.severity !== null) && (
         <p className="text-sm text-muted">
@@ -78,12 +75,19 @@ function EntityRow({ e, onPatch }: { e: Entity; onPatch: (b: Parameters<typeof a
         </p>
       )}
       {e.flags.map((f) => <p key={f} className="text-sm mt-1" style={{ color: "var(--moderate)" }}>{flagNote(f)}</p>)}
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button className="btn" aria-pressed={decided} onClick={() => onPatch({ review: "confirmed" })}
-          style={decided ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}><Check size={16} aria-hidden /> {decided ? t("common.confirmed") : t("common.confirm")}</button>
-        <button className="btn" aria-pressed={e.review === "rejected"} onClick={() => onPatch({ review: "rejected" })}><X size={16} aria-hidden /> {t("entryPage.notRight")}</button>
-        <button className="btn-quiet btn" onClick={() => setFixing(!fixing)} aria-expanded={fixing}>{t("entryPage.fix")}</button>
-      </div>
+      {unsure && <p className="text-sm mt-2" style={{ color: "var(--moderate)" }}>{t("entryPage.unsure")}</p>}
+      {removed ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-muted">{t("entryPage.removed")}</span>
+          <button className="btn-quiet btn px-0" onClick={() => onPatch({ review: "auto" })}>{t("entryPage.undo")}</button>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {unsure && <button className="btn" onClick={() => onPatch({ review: "confirmed" })}><Check size={16} aria-hidden /> {t("entryPage.yesRight")}</button>}
+          <button className="btn" onClick={() => onPatch({ review: "rejected" })}><X size={16} aria-hidden /> {t("entryPage.notRight")}</button>
+          <button className="btn-quiet btn" onClick={() => setFixing(!fixing)} aria-expanded={fixing}>{t("entryPage.fix")}</button>
+        </div>
+      )}
       {fixing && <TermFix onPick={(term) => { onPatch({ hpo_id: term.hpo_id }); setFixing(false); }} />}
     </li>
   );
@@ -106,7 +110,7 @@ export function TermFix({ onPick }: { onPick: (t: Term) => void }) {
       {err && <p className="text-sm text-strong">{err}</p>}
       <ul className="mt-2 divide-y divide-line">
         {res.map((term) => (
-          <li key={term.hpo_id}><button className="w-full text-left min-h-[44px] py-2 hover:text-accent" onClick={() => onPick(term)}>{term.label} <span className="text-muted text-sm">{term.hpo_id}</span></button></li>
+          <li key={term.hpo_id}><button className="w-full text-left min-h-[44px] py-2 hover:text-accent" onClick={() => onPick(term)}>{term.label}</button></li>
         ))}
       </ul>
     </div>

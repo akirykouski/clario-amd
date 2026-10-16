@@ -60,16 +60,19 @@ describe("review", () => {
     expect(act).toHaveBeenCalledWith("entity", "ent_1", "reject", undefined);
   });
 
-  it("entry cards mark needs_review terms amber and link to the queue", () => {
+  it("entry cards show unsure terms dashed, linking to the note, with no confirm step and a personal-details badge", () => {
     const entry: Entry = {
       id: "e1", created_at: "x", occurred_on: "2026-09-01", text: "Maybe my knees ache", mood: null, extraction: "done",
-      entities: [ent({ id: "a", canonical: "Arthralgia", review: "needs_review" }), ent({ id: "b", canonical: "Fatigue", review: "confirmed" })],
+      entities: [ent({ id: "a", canonical: "Arthralgia", review: "needs_review" }), ent({ id: "b", canonical: "Fatigue", review: "auto" })],
     };
-    render(<MemoryRouter><EntryCard initial={entry} /></MemoryRouter>);
+    render(<MemoryRouter><EntryCard initial={entry} pii={2} /></MemoryRouter>);
     const link = screen.getByRole("link", { name: /Arthralgia/ });
-    expect(link).toHaveAttribute("href", "/review");
-    expect(link.className).toContain("chip-review");
+    expect(link).toHaveAttribute("href", "/entry/e1");
+    expect(link.style.borderStyle).toBe("dashed");
     expect(screen.getByText("Fatigue").closest("a")).toBeNull();
+    expect(screen.queryByText(/to check/)).toBeNull();
+    expect(screen.queryByText(/Review terms/)).toBeNull();
+    expect(screen.getByTestId("pii-badge")).toHaveTextContent("2 personal details hidden from AI");
   });
 
   it("pending entry cards share one poll and tell the nav badge when extraction finishes", async () => {

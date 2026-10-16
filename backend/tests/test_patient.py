@@ -62,12 +62,10 @@ def test_grounding_drops_invented_quotes_and_wrong_codes():
 
 
 def test_demo_to_patterns(unlocked):
-    assert unlocked.post("/api/demo", json={"persona": "giulia", "reviewed": False}).json()["entries"] == 19
+    assert unlocked.post("/api/demo", json={"persona": "giulia"}).json()["entries"] == 19
     entries = wait_extracted(unlocked)
     assert all(e["extraction"] == "done" for e in entries)
-    assert unlocked.get("/api/patterns").json()["patterns"] == []  # nothing confirmed yet
-    confirm_all(unlocked)
-    body = unlocked.get("/api/patterns").json()
+    body = unlocked.get("/api/patterns").json()  # extracted terms count without the patient confirming anything
     pats = body["patterns"]
     assert pats and body["confirmed_terms"] >= 8 and len(pats) <= 1
     assert "Not a diagnosis" in body["note"]
@@ -98,7 +96,7 @@ def test_rejected_and_negated_terms_do_not_count(unlocked):
     e = wait_extracted(unlocked)[0]
     for x in e["entities"]:
         unlocked.patch(f"/api/entities/{x['id']}", json={"review": "confirmed" if x["canonical"] != "Oral ulcer" else "rejected"})
-    terms = {t["label"] for t in unlocked.get("/api/timeline").json()["terms"]}
+    terms = {t["clinical"] for t in unlocked.get("/api/timeline").json()["terms"]}
     assert "Fever" not in terms and "Oral ulcer" not in terms and "Arthralgia" in terms
 
 

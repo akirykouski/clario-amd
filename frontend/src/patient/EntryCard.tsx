@@ -5,7 +5,7 @@ import type { Entry } from "../types";
 import { fmtDate, notifyReview } from "../lib";
 import { entityName, entryText, useT } from "../i18n";
 import { Spinner } from "../components/ui";
-import { CloudSaw } from "./CloudSaw";
+import { ShieldCheck } from "lucide-react";
 
 // One poll for every pending entry on screen: a single GET /api/entries every 2s while anyone is watching.
 const watchers = new Map<string, Set<(e: Entry) => void>>();
@@ -43,14 +43,11 @@ export function useLiveEntry(initial: Entry, onChange?: (e: Entry) => void) {
   return entry;
 }
 
-export function EntryCard({ initial, onChange }: { initial: Entry; onChange?: (e: Entry) => void }) {
-  const { t } = useT();
+export function EntryCard({ initial, onChange, pii = 0 }: { initial: Entry; onChange?: (e: Entry) => void; pii?: number }) {
+  const { t, tn } = useT();
   const entry = useLiveEntry(initial, onChange);
-  const [fresh, setFresh] = useState<Entry | null>(null);
-  const shown = fresh && fresh.id === entry.id ? fresh : entry;
-  const allCorrect = async () => { try { const r = await api.confirmAllInEntry(entry.id); setFresh(r.entry); onChange?.(r.entry); notifyReview(); } catch { /* the entry page still offers each term */ } };
   const name = entityName;
-  const terms = shown.entities.filter((e) => e.review !== "rejected");
+  const terms = entry.entities.filter((e) => e.review !== "rejected");
   return (
     <article className="card">
       <div className="flex justify-between text-sm text-muted">
@@ -63,21 +60,24 @@ export function EntryCard({ initial, onChange }: { initial: Entry; onChange?: (e
         {entry.extraction === "failed" && <span className="text-sm text-muted">{t("entry.failedShort")}</span>}
         {entry.extraction === "done" && terms.length === 0 && <span className="text-sm text-muted">{t("entry.noTerms")}</span>}
         {terms.map((x) => x.review === "needs_review" ? (
-          <Link key={x.id} to="/review" className="chip chip-review" title={t("entry.toReviewTitle")}>
+          <Link key={x.id} to={`/entry/${entry.id}`} className="chip" style={{ borderStyle: "dashed", borderColor: "var(--moderate)" }}
+            title={t("entry.unsureTitle")} aria-label={`${name(x)}. ${t("entry.unsureTitle")}`}>
             {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{name(x)}
-            <span className="text-xs font-bold"> {t("entry.toReviewTag")}</span>
+            <span aria-hidden className="text-xs" style={{ color: "var(--moderate)" }}>?</span>
           </Link>
         ) : (
-          <span key={x.id} className="chip" style={x.review === "confirmed" || x.review === "corrected" ? { borderColor: "var(--accent)" } : undefined}>
+          <span key={x.id} className="chip">
             {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{name(x)}
-            {x.review === "auto" && <span className="text-muted text-xs"> {t("entry.toCheckTag")}</span>}
           </span>
         ))}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-5">
-        {shown.entities.some((x) => x.review === "auto") && <button className="btn" onClick={allCorrect}>{t("entry.allCorrect")}</button>}
-        <Link className="btn-quiet btn px-0" to={`/entry/${entry.id}`}>{t("entry.reviewTerms")}</Link>
-        <CloudSaw entryId={entry.id} compact />
+      <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
+        {entry.extraction === "done" && terms.length > 0 && <Link className="btn-quiet btn px-0 text-sm" to={`/entry/${entry.id}`}>{t("entry.edit")}</Link>}
+        {pii > 0 && (
+          <Link to={`/entry/${entry.id}`} className="inline-flex items-center gap-1.5 text-sm text-muted" data-testid="pii-badge">
+            <ShieldCheck size={14} aria-hidden className="text-accent" />{tn("entry.pii", pii)}
+          </Link>
+        )}
       </div>
     </article>
   );

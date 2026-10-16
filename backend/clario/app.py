@@ -22,22 +22,25 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from . import brief as briefing
+from . import clinic_ddx
+from . import overview as overview_mod
 from . import privacy
 from . import doc_routes
 from . import gpu as gpumetrics
 from . import share as sharing
 from .config import Settings
-from .share import now_iso
+from .share import lab_needs_check, now_iso
 from . import documents as docs
 from .demo import DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_entries
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
 from .knowledge import Ontology, fold
 from .llm import extract_json, make_llm
-from .models import AnswerResult, Brief, BriefDecisions, ClinicMetrics, DecisionCounts, Entity, Entry, LabResult, NextQuestion, ShareRequest, SharePackage, Term, Timeline, TimelineDay
+from .models import (AnswerResult, Brief, BriefDecisions, ClinicMetrics, DecisionCounts, Differential, Entity, Entry, LabResult,
+                     NextQuestion, ShareRequest, SharePackage, Term, Timeline, TimelineDay, TimelineTerm)
 from .next_question import as_ranked_patterns, next_question, template_question
-from .patterns import counts_as_evidence, evidence_from, patient_patterns, score_patterns
-from .review import ACTIONS, EntityReview, _snap, apply_entity_action, correction_record, register_review_kind
+from .patterns import counts_as_evidence, evidence_from, patient_label, patient_patterns, score_patterns
+from .review import ACTIONS, EntityReview, apply_entity_action, correction_record, register_review_kind
 from .safety import check_entry
 from .vault import BadPassphrase, Locked, Vault
 
@@ -78,7 +81,11 @@ class AnswerIn(BaseModel):
 
 class DemoIn(BaseModel):
     persona: str = "giulia"
-    reviewed: bool = True  # the demo diary arrives read through once: terms the model was sure of are confirmed (hedged ones stay in the queue)
+
+
+class ProfileIn(BaseModel):
+    age: int | None = None
+    sex: str | None = None  # female | male | other
 
 
 class InboxIn(BaseModel):
@@ -91,7 +98,7 @@ class LabDecisionIn(BaseModel):
 
 
 class LabBulkIn(BaseModel):
-    """Decide many unchecked lab rows in one call. No filter means every unchecked row; `test_key` narrows to one test,
+    """Decide many readings that still need a check in one call. No filter means every such reading; `test_key` narrows to one test,
     `page` (with `entry_id`, the import) to one page of one report."""
 
     decision: str
@@ -107,6 +114,16 @@ class ReviewIn(BaseModel):
 
 class FinalizeIn(BaseModel):
     seconds: float | None = None  # opening the package to finalize, measured in the clinic UI
+
+
+class TermDecisionIn(BaseModel):
+    decision: str  # confirmed | rejected | pending
+
+
+class ClinicAnswerIn(BaseModel):
+    feature_id: str
+    answer: str  # yes | no | unsure
+    lang: str = "en"
 
 
 # ---------------------------------------------------------------- run bus (SSE)
@@ -191,6 +208,11 @@ def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
             raise HTTPException(404, "run not found")
         return EventSourceResponse(runs.stream(rid), ping=10)
 
+    @app.get("/api/terms/systems")
+    def term_systems(ids: str = "") -> dict[str, str]:
+        """Organ-system key per HPO id ("skin", "joints", ...), for grouping heat map rows. Ontology only, no patient data."""
+        return {h: clinic_ddx.system_key(onto, h) for h in ids.split(",")[:200] if h.strip()}
+
     @app.exception_handler(Locked)
     async def locked_handler(_r: Request, _e: Locked):
         return JSONResponse({"detail": "Diary is locked"}, status_code=423)
@@ -242,26 +264,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return sorted((Entry.model_validate(d) for d in vault.all("entry")),
                       key=lambda e: (e.occurred_on, e.created_at), reverse=True)
 
-    def confirm_auto(entry: Entry, actor: str) -> int:
-        """auto -> confirmed on every entity of the entry, one correction_log record each. needs_review stays queued."""
-        n = 0
-        for i, x in enumerate(entry.entities):
-            if x.review != "auto":
-                continue
-            new = x.model_copy(update={"review": "confirmed"})
-            entry.entities[i] = new
-            rid, rec = correction_record("entity", x.id, "confirm", {
-                "entry_id": entry.id, "source_excerpt": x.quote, "before": _snap(x), "after": _snap(new), "actor": actor})
-            vault.put("correction_log", rid, rec)
-            n += 1
-        return n
-
-    def auto_terms(entries: list[Entry]) -> int:
-        """Distinct terms the model was sure of that nobody has confirmed yet (they count for nothing until then)."""
-        return len({x.hpo_id for e in entries for x in e.entities
-                    if x.review == "auto" and x.hpo_id and not x.negated and not x.family_history})
-
-    async def run_extraction(eid: str, confirm_as: str | None = None) -> Entry | None:
+    async def run_extraction(eid: str) -> Entry | None:
         try:
             e = load(eid)
         except Locked:
@@ -279,8 +282,6 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             cur.entities = keep + [x for x in ents if (x.hpo_id, x.quote.lower()) not in
                                    {(k.hpo_id, k.quote.lower()) for k in keep}]
             cur.extraction = status
-            if confirm_as:
-                confirm_auto(cur, confirm_as)
             return save(cur)
         return None
 
@@ -342,26 +343,6 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         vault.delete(eid)
         return {"ok": True}
 
-    @app.post("/api/confirm-auto")
-    def confirm_every_auto():
-        """Confirm every term the model was sure of, in all notes. Hedged ones stay in the review list."""
-        n = 0
-        for e in all_entries():
-            k = confirm_auto(e, "patient")
-            if k:
-                save(e)
-                n += k
-        return {"confirmed": n}
-
-    @app.post("/api/entries/{eid}/confirm-all")
-    def confirm_all(eid: str):
-        """"All correct": confirm every term the model was sure of in this note. Hedged ones stay in the review list."""
-        e = load(eid)
-        n = confirm_auto(e, "patient")
-        if n:
-            save(e)
-        return {"confirmed": n, "entry": e}
-
     @app.post("/api/entries/{eid}/extract")
     async def re_extract(eid: str) -> Entry:
         load(eid)
@@ -398,7 +379,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
     @app.get("/api/review")
     def review_queue():
         items = [i for k in app.state.review_kinds.values() for i in k.items()]
-        return {"items": items, "count": len(items), "auto": auto_terms(all_entries())}
+        return {"items": items, "count": len(items)}
 
     @app.post("/api/review/{kind}/{item_id}")
     def review_act(kind: str, item_id: str, body: ReviewAction):
@@ -416,6 +397,16 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         rid, rec = correction_record(kind, item_id, body.action, detail)
         vault.put("correction_log", rid, rec)
         return {"ok": True, "count": sum(len(k.items()) for k in app.state.review_kinds.values())}
+
+    @app.get("/api/privacy/counts")
+    def privacy_counts() -> dict[str, int]:
+        """Personal details found per entry (only entries with at least one). Positions and values stay on the device."""
+        out = {}
+        for e in all_entries():
+            n = len(privacy.pseudonymize(e.text)[1])
+            if n:
+                out[e.id] = n
+        return out
 
     @app.get("/api/terms/search")
     def term_search(q: str = "", lang: str = "en"):
@@ -454,7 +445,9 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return out
 
     @app.get("/api/timeline")
-    def timeline() -> Timeline:
+    def timeline(lang: str = "en") -> Timeline:
+        """Days with their notes, and the patient's terms in everyday words (clinical name kept in `clinical`)."""
+        lang = norm_lang(lang)
         entries = all_entries()
         days: dict[str, TimelineDay] = {}
         for e in entries:
@@ -463,8 +456,10 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             for x in e.entities:
                 if counts_as_evidence(x):
                     d.terms.append(Term(hpo_id=x.hpo_id, label=x.hpo_label or x.canonical))
-        terms = sorted(evidence_from(entries, onto).values(), key=lambda v: -v.count)
-        return Timeline(days=sorted(days.values(), key=lambda d: d.date), terms=terms)
+        terms = [TimelineTerm(**t.model_dump() | {"label": patient_label(onto, t.hpo_id, lang).capitalize(), "clinical": t.label})
+                 for t in sorted(evidence_from(entries, onto).values(), key=lambda v: -v.count)]
+        systems = {t.hpo_id: clinic_ddx.system_key(onto, t.hpo_id) for t in terms}
+        return Timeline(days=sorted(days.values(), key=lambda d: d.date), terms=terms, systems=systems)
 
     @app.get("/api/patterns")
     async def patterns(lang: str = "en"):
@@ -473,10 +468,10 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 
         def compute():  # vault reads and scoring are CPU work: keep them off the event loop
             entries = all_entries()
-            return len(evidence_from(entries, onto)), patient_patterns(entries, onto, lang), auto_terms(entries)
+            return len(evidence_from(entries, onto)), patient_patterns(entries, onto, lang)
 
-        n_terms, pats, to_check = await asyncio.to_thread(compute)
-        return {"patterns": pats, "confirmed_terms": n_terms, "to_check": to_check, "note": PATTERNS_NOTE[lang][1 if n_terms < 3 else 0 if pats else 2]}
+        n_terms, pats = await asyncio.to_thread(compute)
+        return {"patterns": pats, "confirmed_terms": n_terms, "note": PATTERNS_NOTE[lang][1 if n_terms < 3 else 0 if pats else 2]}
 
     doc_routes.register(app, s, vault, llm, spawn, gpu_reader)
     asked: dict[str, str] = {}  # feature_id -> question text last shown (so the diary entry quotes what was asked)
@@ -517,14 +512,33 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         after = as_ranked_patterns(onto, all_entries(), norm_lang(body.lang))
         return AnswerResult(before=before, after=after, entry_id=entry_id)
 
+    def load_profile() -> dict:
+        d = vault.get("profile") or {}
+        return {k: d[k] for k in ("age", "sex") if d.get(k) is not None}
+
+    @app.get("/api/profile")
+    def get_profile() -> dict:
+        return load_profile()
+
+    @app.put("/api/profile")
+    def put_profile(body: ProfileIn) -> dict:
+        """Age and sex, optional, kept in the vault. Sent to a clinic only when the patient leaves include_profile on."""
+        if body.age is not None and not 0 <= body.age <= 120:
+            raise HTTPException(422, "Age must be between 0 and 120")
+        if body.sex not in (None, "", "female", "male", "other"):
+            raise HTTPException(422, "sex must be female, male or other")
+        vault.put("profile", "profile", {"age": body.age, "sex": body.sex or None})
+        return load_profile()
+
     @app.post("/api/demo")
     async def demo(body: DemoIn):
         if body.persona not in PERSONAS:
             raise HTTPException(404, "unknown persona")
+        vault.put("profile", "profile", {"age": 29, "sex": "female"})  # Giulia, 29 (synthetic)
         n = 0
         for day, text, mood in persona_entries(body.persona):
             e = save(Entry(id=f"e_{uuid.uuid4().hex[:10]}", created_at=now_iso(), occurred_on=day, text=text, mood=mood))
-            spawn(run_extraction(e.id, "demo_seed" if body.reviewed else None))
+            spawn(run_extraction(e.id))
             n += 1
         return {"ok": True, "entries": n, "persona": body.persona, "lang": PERSONA_LANG[body.persona]}
 
@@ -566,7 +580,8 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         labs = [LabResult.model_validate(d) for d in vault.all("lab")]
         batch_entry = {d["batch_id"]: d["entry_id"] for d in vault.all("docbatch")}
         pkg = sharing.build_package(entries, body.since, body.until, sharing.alias(str(s.data_dir.resolve())),
-                                    body.note, pats, body.expires_hours, labs, batch_entry)
+                                    body.note, pats, body.expires_hours, labs, batch_entry,
+                                    load_profile() if body.include_profile else None)
         if not pkg.entries:
             raise HTTPException(422, "No entries in that period")
         sealed = sharing.seal(pkg, key["public_key"])
@@ -588,8 +603,6 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, runs: Runs, spawn, onto: Ontology) -> None:
     inbox_dir = s.data_dir / "inbox"
     briefs_dir = s.data_dir / "briefs"
-    labdec_dir = s.data_dir / "labdec"
-    labdec_dir.mkdir(parents=True, exist_ok=True)
     inbox_dir.mkdir(parents=True, exist_ok=True)
     briefs_dir.mkdir(parents=True, exist_ok=True)
     decisions_file = s.data_dir / "decisions.jsonl"  # counts and timing only, no diary text
@@ -611,8 +624,34 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             raise HTTPException(410, "This package has expired and was deleted")
         return pkg
 
+    decisions_dir = s.data_dir / "decisions"
+    decisions_dir.mkdir(parents=True, exist_ok=True)
+
+    def load_decisions(pid: str) -> dict:
+        """The clinician's decisions on one package: term checks and answers. Encrypted at rest like the briefs."""
+        f = decisions_dir / f"{safe_id(pid)}.json"
+        if not f.exists():
+            return {"terms": {}, "labs": {}, "answers": []}
+        return {"labs": {}} | json.loads(keys.open_data(f.read_bytes()))
+
+    def save_decisions(pid: str, d: dict) -> None:
+        (decisions_dir / f"{safe_id(pid)}.json").write_bytes(keys.seal_data(json.dumps(d).encode()))
+
+    def differential(pkg: SharePackage, d: dict, lang: str) -> Differential:
+        rejected = {k for k, v in d["terms"].items() if v == "rejected"}
+        entries = clinic_ddx.with_answers(pkg.entries, d["answers"], rejected)
+        answered = {a["feature_id"] for a in d["answers"]}
+        conds = clinic_ddx.conditions(onto, entries, lang)
+        q = clinic_ddx.question(onto, entries, answered, lang) if conds else None
+        n_terms = len(evidence_from(entries, onto))
+        note = "" if conds else ("Not enough specific findings yet to suggest conditions." if lang != "it"
+                                 else "Non ci sono ancora abbastanza elementi specifici per suggerire condizioni.")
+        return Differential(conditions=conds, question=q, answers=d["answers"], n_terms=n_terms, note=note)
+
     def purge(pid: str) -> None:
-        for d in (inbox_dir, briefs_dir, labdec_dir):
+        with contextlib.suppress(FileNotFoundError):
+            (decisions_dir / f"{pid}.json").unlink()
+        for d in (inbox_dir, briefs_dir):
             with contextlib.suppress(FileNotFoundError):
                 (d / f"{pid}.json").unlink()
 
@@ -628,25 +667,23 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             save_brief(b)
             return b
 
-    def load_decisions(pid: str) -> dict[str, str]:
-        f = labdec_dir / f"{safe_id(pid)}.json"
-        if not f.exists():
-            return {}
-        try:
-            return json.loads(keys.open_data(f.read_bytes()))
-        except Exception:  # noqa: BLE001
-            return {}
-
     def decided(pkg: SharePackage, drop_rejected: bool) -> SharePackage:
-        """The package with the clinic's lab decisions applied. Unchecked rows the clinician accepted count as checked."""
-        dec = load_decisions(pkg.package_id)
+        """The package with the clinic's decisions applied. A row or term the clinician confirmed no longer asks for a check;
+        a rejected one is dropped (`drop_rejected`) or kept marked, so the page can offer undo."""
+        d = load_decisions(pkg.package_id)
         labs = []
         for l in pkg.labs:
-            d = dec.get(l.id) if not l.reviewed else None
-            if d == "rejected" and drop_rejected:
+            v = d["labs"].get(l.id) if l.id else None
+            if v == "rejected" and drop_rejected:
                 continue
-            labs.append(l.model_copy(update={"decision": d, "reviewed": l.reviewed or d == "accepted"}))
-        return pkg.model_copy(update={"labs": labs})
+            labs.append(l.model_copy(update={"decision": v if v in ("confirmed", "rejected") else None}))
+        ents = []
+        for x in pkg.entities:
+            v = d["terms"].get(x.id) if x.id else None
+            if v == "rejected" and drop_rejected:
+                continue
+            ents.append(x.model_copy(update={"needs_review": False, "reviewed": True}) if v == "confirmed" else x)
+        return pkg.model_copy(update={"labs": labs, "entities": ents})
 
     def save_brief(b: Brief) -> Brief:
         """Briefs quote the diary, so they are encrypted at rest (key derived from the clinic key). The inbox is already sealed."""
@@ -694,47 +731,104 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     def get_pkg(pid: str) -> SharePackage:
         return decided(open_pkg(pid), drop_rejected=False)
 
-    @app.put("/api/inbox/{pid}/labs/{lab_id}")
-    def decide_lab(pid: str, lab_id: str, body: LabDecisionIn) -> SharePackage:
-        """The clinician accepts or rejects a lab row read from a document and not checked by the patient."""
+    @app.api_route("/api/inbox/{pid}/labs/{lab_id}", methods=["PATCH", "PUT"])
+    def decide_lab(pid: str, lab_id: str, body: LabDecisionIn) -> dict:
+        """The clinician confirms or rejects one lab value (`accepted` is accepted as an alias of `confirmed`).
+        Returns the clinic's decisions, `labs` keyed by row id."""
         pkg = open_pkg(pid)
         row = next((l for l in pkg.labs if l.id == lab_id), None)
         if row is None:
             raise HTTPException(404, "lab row not found")
-        if row.reviewed:
-            raise HTTPException(409, "The patient already checked this row")
-        write_lab_decisions(pid, pkg, [row], body.decision, "row")
-        return decided(pkg, drop_rejected=False)
+        write_lab_decisions(pid, [row], body.decision, "row")
+        return load_decisions(pid)
 
     @app.post("/api/inbox/{pid}/labs/decide")
     def decide_labs(pid: str, body: LabBulkIn) -> SharePackage:
-        """Accept or reject many unchecked lab rows at once: all of them, one test, or one page of one report."""
-        pkg = open_pkg(pid)
-        rows = [l for l in pkg.labs if not l.reviewed
+        """Confirm or reject many readings that still need a check at once: all of them, one test, or one page of one report."""
+        pkg = decided(open_pkg(pid), drop_rejected=False)
+        rows = [l for l in pkg.labs if lab_needs_check(l)
                 and (body.test_key is None or (l.test_key or l.test_name) == body.test_key)
                 and (body.page is None or (l.page == body.page and (body.entry_id is None or l.entry_id == body.entry_id)))]
         scope = "test" if body.test_key else "page" if body.page is not None else "all"
-        write_lab_decisions(pid, pkg, rows, body.decision, scope)
-        return decided(pkg, drop_rejected=False)
+        write_lab_decisions(pid, rows, body.decision, scope)
+        return decided(open_pkg(pid), drop_rejected=False)
 
-    def write_lab_decisions(pid: str, pkg: SharePackage, rows: list, decision: str, scope: str) -> None:
+    def write_lab_decisions(pid: str, rows: list, decision: str, scope: str) -> None:
         b = load_brief(pid)
         if b and b.finalized:
             raise HTTPException(409, "Brief is final")
-        if decision not in ("pending", "accepted", "rejected"):
-            raise HTTPException(422, "decision must be pending, accepted or rejected")
-        if any(r.reviewed for r in rows):
-            raise HTTPException(409, "The patient already checked this row")
-        dec = load_decisions(pid)
+        decision = {"accepted": "confirmed"}.get(decision, decision)
+        if decision not in ("pending", "confirmed", "rejected"):
+            raise HTTPException(422, "decision must be pending, confirmed or rejected")
+        d = load_decisions(pid)
         at = now_iso()
         with labdec_log.open("a") as fh:  # one row per lab, ids and timing only: no values, no diary text
             for r in rows:
                 if decision == "pending":
-                    dec.pop(r.id, None)
+                    d["labs"].pop(r.id, None)
                 else:
-                    dec[r.id] = decision
+                    d["labs"][r.id] = decision
                 fh.write(json.dumps({"package_id": pid, "lab_id": r.id, "decision": decision, "scope": scope, "at": at}) + "\n")
-        (labdec_dir / f"{pid}.json").write_bytes(keys.seal_data(json.dumps(dec).encode()))
+        save_decisions(pid, d)
+
+    @app.get("/api/inbox/{pid}/overview")
+    def get_overview(pid: str, lang: str = "en") -> dict:
+        """Plain-words summary of the package for the first look: no model call, no codes."""
+        return overview_mod.overview(open_pkg(pid), onto, norm_lang(lang))
+
+    @app.get("/api/inbox/{pid}/decisions")
+    def get_decisions(pid: str) -> dict:
+        open_pkg(pid)
+        return load_decisions(pid)
+
+    @app.patch("/api/inbox/{pid}/terms/{ent_id}")
+    def decide_term(pid: str, ent_id: str, body: TermDecisionIn) -> dict:
+        """The clinician confirms or rejects a term the extractor was unsure about. Rejected terms leave the differential."""
+        pkg = open_pkg(pid)
+        if body.decision not in ("confirmed", "rejected", "pending"):
+            raise HTTPException(422, "decision must be confirmed, rejected or pending")
+        if not any(x.id == ent_id for x in pkg.entities):
+            raise HTTPException(404, "term not found")
+        d = load_decisions(pid)
+        if body.decision == "pending":
+            d["terms"].pop(ent_id, None)
+        else:
+            d["terms"][ent_id] = body.decision
+        save_decisions(pid, d)
+        return d
+
+    @app.get("/api/inbox/{pid}/ddx")
+    async def get_ddx(pid: str, lang: str = "en") -> Differential:
+        pkg = open_pkg(pid)
+        d = load_decisions(pid)
+        return await asyncio.to_thread(differential, pkg, d, norm_lang(lang))
+
+    @app.post("/api/inbox/{pid}/ddx/answer")
+    async def ddx_answer(pid: str, body: ClinicAnswerIn) -> dict:
+        """Record what the clinician found, score again, and return the ranking before and after plus the next question."""
+        if body.answer not in ("yes", "no", "unsure"):
+            raise HTTPException(422, "answer must be yes, no or unsure")
+        label = onto.label(body.feature_id)
+        if label is None:
+            raise HTTPException(422, "Unknown feature")
+        pkg = open_pkg(pid)
+        lang = norm_lang(body.lang)
+        d = load_decisions(pid)
+        before = await asyncio.to_thread(differential, pkg, d, lang)
+        d["answers"] = [a for a in d["answers"] if a["feature_id"] != body.feature_id]
+        d["answers"].append({"feature_id": body.feature_id, "label": term_label(body.feature_id, label, lang),
+                             "answer": body.answer, "at": now_iso()})
+        save_decisions(pid, d)
+        after = await asyncio.to_thread(differential, pkg, d, lang)
+        return {"before": [c.model_dump() for c in before.conditions], "differential": after.model_dump()}
+
+    @app.delete("/api/inbox/{pid}/ddx/answers")
+    async def ddx_reset(pid: str, lang: str = "en") -> Differential:
+        pkg = open_pkg(pid)
+        d = load_decisions(pid)
+        d["answers"] = []
+        save_decisions(pid, d)
+        return await asyncio.to_thread(differential, pkg, d, norm_lang(lang))
 
     async def draft(rid: str, pkg: SharePackage, lang: str = "en") -> None:
         try:
@@ -822,9 +916,9 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         if not b:
             raise HTTPException(404, "No brief yet")
         dpkg = decided(open_pkg(pid), drop_rejected=True)
-        unchecked = [l for l in dpkg.labs if not l.reviewed]
+        unchecked = [l for l in dpkg.labs if lab_needs_check(l)]
         if unchecked:
-            raise HTTPException(409, f"{len(unchecked)} lab row(s) from documents still need a decision")
+            raise HTTPException(409, f"{len(unchecked)} lab reading(s) still need a check")
         pending = [i for i in b.items if i.review == "pending" and i.section != "labs"]
         if pending:
             raise HTTPException(409, f"{len(pending)} AI item(s) still need review")

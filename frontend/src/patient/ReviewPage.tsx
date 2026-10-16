@@ -38,15 +38,13 @@ function rowsOf(items: ReviewItem[]): Row[] {
 }
 
 export default function ReviewPage() {
-  const { t, tn } = useT();
+  const { t } = useT();
   const { data, error, loading, reload } = useAsync(() => api.review(), []);
   const [gone, setGone] = useState<Set<string>>(new Set());
   const [err, setErr] = useState<string | null>(null);
-  const [autoDone, setAutoDone] = useState(false);
   if (loading && !data) return <Loading />;
   if (error || !data) return <ErrorBox error={error ?? t("review.loadError")} retry={reload} />;
   const items = data.items.filter((i) => !gone.has(`${i.kind}:${i.id}`));
-  const autoLeft = autoDone ? 0 : data.auto ?? 0;
 
   const act = async (i: ReviewItem, action: "confirm" | "correct" | "reject", value?: string) => {
     setErr(null);
@@ -61,11 +59,6 @@ export default function ReviewPage() {
     for (const i of rows) await act(i, "confirm");
   };
 
-  const confirmAuto = async () => {
-    setErr(null);
-    try { await api.confirmAuto(); setAutoDone(true); notifyReview(); } catch (x) { setErr((x as Error).message); }
-  };
-
   return (
     <div className="space-y-5">
       <div>
@@ -73,13 +66,7 @@ export default function ReviewPage() {
         <p className="text-muted mt-1">{t("review.intro")}</p>
       </div>
       {err && <p role="alert" className="text-strong text-sm">{err}</p>}
-      {autoLeft > 0 && (
-        <section className="card space-y-2" data-testid="auto-terms">
-          <p>{tn("review.auto", autoLeft)}</p>
-          <button className="btn" onClick={confirmAuto}><Check size={16} aria-hidden /> {t("review.autoAll", { n: autoLeft })}</button>
-        </section>
-      )}
-      {items.length === 0 && autoLeft === 0 ? (
+      {items.length === 0 ? (
         <Empty title={t("review.emptyTitle")}>{t("review.emptyText")}<Link className="underline" to="/">{t("review.back")}</Link></Empty>
       ) : (
         <ul className="space-y-3" aria-label={t("review.listAria")}>

@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from .i18n import hpo_it
 from .models import Brief, BriefItem, SharePackage
 from .safety import hedge_problems
+from .share import lab_needs_check
 
 SYSTEM = """You draft a one-page brief for a clinician who has 15 minutes with this patient. You get the \
 patient's own diary entries (with ids), the clinical terms the patient confirmed, and pattern overlaps computed by \
@@ -40,8 +41,8 @@ class DraftOut(BaseModel):
     items: list[DraftItem] = Field(default_factory=list)
 
 
-NOT_REVIEWED = "not reviewed by a person"
-LAB_PENDING = {"en": "from documents, pending check", "it": "dai referti, da verificare"}
+LOW_CONFIDENCE = "low-confidence reading, please check"
+_LOW = {"en": LOW_CONFIDENCE, "it": "lettura incerta, da verificare"}
 SECTIONS = {"summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"}
 
 
@@ -115,7 +116,7 @@ def _lab_value(r, lang: str = "en") -> str:
 
 def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
     """Lab lines straight from the shared rows (no model). Only tests that are out of range, positive or changed over
-    time get a line; the rest are one count. A line is `pending` while any of its rows is unchecked, then `accepted`."""
+    time get a line; the rest are one count. A line is `pending` while any of its rows still needs a clinician check, then `accepted`."""
     it = lang == "it"
     year = pkg.period[0][:4] != pkg.period[1][:4]
     groups: dict[str, list] = {}
@@ -125,7 +126,7 @@ def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
     calm, calm_pending = 0, False
     for key, rows in sorted(groups.items(), key=lambda kv: min(r.date for r in kv[1])):
         rows = sorted(rows, key=lambda r: (r.date, r.page))
-        pending = any(not r.reviewed for r in rows)
+        pending = any(lab_needs_check(r) for r in rows)
         changed = len({_lab_value(r) for r in rows}) > 1
         if not (changed or any(r.abnormal or r.flag in ("low", "high") for r in rows)):
             calm += 1
@@ -138,7 +139,7 @@ def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
             parts.append(f"{(_lab_value(r, lang) + ' ' + r.unit).strip()}{flag} ({fdate(r.date, lang, year)}, {'pagina' if it else 'page'} {r.page})")
         rng = next((r for r in rows if r.ref_low is not None or r.ref_high is not None), None)
         rtxt = f"; {_range_text(rng.ref_low, rng.ref_high, lang)}" if rng else ""
-        mark = f" ({LAB_PENDING[lang]})" if pending else ""
+        mark = f" ({_LOW[lang]})" if pending else ""
         items.append(BriefItem(id=f"bi_lab_{key}"[:60], section="labs", text=f"{name}: {'; '.join(parts)}{rtxt}{mark}",
                                pages=sorted({r.page for r in rows}), origin="document",
                                review="pending" if pending else "accepted"))
@@ -197,8 +198,8 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         if onset:
             extra += f"; {'esordio' if it else 'onset'}: {onset}"
         mark = ""
-        if any(not x.reviewed for x in xs):
-            mark = f" ({'non verificato da una persona' if it else NOT_REVIEWED})"
+        if any(x.needs_review for x in xs):
+            mark = f" ({_LOW[lang]})"
         rec = f"registrato {_times(len(cites), lang)}" if it else f"recorded {_times(len(cites), lang)}"
         items.append(BriefItem(id=_id(), section=sec, text=f"{label}: {rec}, {_span(ds, lang, year)}{extra}{mark}",
                                cites=sorted(set(cites)), origin="patient", review="accepted",

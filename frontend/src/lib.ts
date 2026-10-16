@@ -19,21 +19,32 @@ export function weekStart(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export interface HeatModel { weeks: string[]; rows: { hpo_id: string; label: string; cells: number[]; max: number }[]; max: number }
+export interface HeatRow { hpo_id: string; label: string; group: string; cells: number[]; entryIds: string[][]; max: number }
+export interface HeatModel { weeks: string[]; rows: HeatRow[]; max: number }
 
-/** entryDates maps entry id -> occurred_on. Cell = number of distinct entries with the term in that week. */
-export function buildHeat(terms: Evidence[], entryDates: Record<string, string>): HeatModel {
+/** Organ-system groups in display order (keys from GET /api/terms/systems). */
+export const SYSTEM_ORDER = ["skin", "joints", "kidney", "blood", "immune", "nervous", "heart", "lungs", "digestive", "eye",
+  "endocrine", "metabolism", "head", "general", "other"];
+export const SYSTEM_COLOR: Record<string, string> = {
+  skin: "#C2410C", joints: "#1D4ED8", kidney: "#7C3AED", blood: "#B91C1C", immune: "#0F766E", nervous: "#A16207",
+  heart: "#BE185D", lungs: "#0369A1", digestive: "#4D7C0F", eye: "#6D28D9", endocrine: "#9333EA", metabolism: "#57534E",
+  head: "#C2410C", general: "#64748B", other: "#64748B",
+};
+
+/** entryDates maps entry id -> occurred_on. Cell = number of distinct entries with the term in that week.
+ * With `systems` (hpo id -> organ-system key) rows are grouped by system, then sorted by how often they appear. */
+export function buildHeat(terms: Evidence[], entryDates: Record<string, string>, systems?: Record<string, string>): HeatModel {
   const all: string[] = [];
   const perRow = terms.map((t) => {
-    const counts = new Map<string, number>();
+    const byWeek = new Map<string, string[]>();
     for (const id of new Set(t.entry_ids)) {
       const d = entryDates[id];
       if (!d) continue;
       const w = weekStart(d);
-      counts.set(w, (counts.get(w) ?? 0) + 1);
+      byWeek.set(w, [...(byWeek.get(w) ?? []), id]);
       all.push(w);
     }
-    return { t, counts };
+    return { t, byWeek };
   });
   if (all.length === 0) return { weeks: [], rows: [], max: 0 };
   const sorted = [...all].sort();
@@ -43,13 +54,27 @@ export function buildHeat(terms: Evidence[], entryDates: Record<string, string>)
     weeks.push(d.toISOString().slice(0, 10));
   }
   let max = 0;
-  const rows = perRow.map(({ t, counts }) => {
-    const cells = weeks.map((w) => counts.get(w) ?? 0);
+  const rows: HeatRow[] = perRow.map(({ t, byWeek }) => {
+    const entryIds = weeks.map((w) => byWeek.get(w) ?? []);
+    const cells = entryIds.map((ids) => ids.length);
     const m = Math.max(0, ...cells);
     max = Math.max(max, m);
-    return { hpo_id: t.hpo_id, label: t.label, cells, max: m };
+    return { hpo_id: t.hpo_id, label: t.label, group: systems?.[t.hpo_id] ?? "other", cells, entryIds, max: m };
   });
+  if (systems) {
+    const rank = (g: string) => { const i = SYSTEM_ORDER.indexOf(g); return i < 0 ? SYSTEM_ORDER.length : i; };
+    const total = (r: HeatRow) => r.cells.reduce((a, b) => a + b, 0);
+    rows.sort((a, b) => rank(a.group) - rank(b.group) || total(b) - total(a));
+  }
   return { weeks, rows, max };
+}
+
+/** Average mood per heat-map week (null when no note that week had a mood). */
+export function weeklyMood(weeks: string[], entries: { occurred_on: string; mood: number | null }[]): (number | null)[] {
+  return weeks.map((w) => {
+    const ms = entries.filter((e) => e.mood !== null && weekStart(e.occurred_on) === w).map((e) => e.mood as number);
+    return ms.length ? Math.round((ms.reduce((a, b) => a + b, 0) / ms.length) * 10) / 10 : null;
+  });
 }
 
 // ---- quote highlighting ----

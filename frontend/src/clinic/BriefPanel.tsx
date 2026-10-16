@@ -19,6 +19,8 @@ export function countDecisions(items: BriefItem[]) {
 
 export function jumpTo(entryId: string) {
   const el = document.getElementById(`entry-${entryId}`);
+  const box = el?.closest("details");
+  if (box) box.open = true;  // the full notes live in the collapsed details block
   if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); }
 }
 
@@ -56,7 +58,7 @@ export function FinalizeButton({ items, onClick, busy, pendingLabs = 0 }: { item
 }
 
 export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief: Brief | null; setBrief: (b: Brief) => void }) {
-  const pendingLabs = pkg.labs.filter((l) => !l.reviewed && !l.decision).length;
+  const pendingLabs = pkg.labs.filter((l) => l.needs_review && !l.decision).length;
   const { t, lang } = useT();
   const { state, start } = useRun();
   const [err, setErr] = useState<string | null>(null);
@@ -221,7 +223,7 @@ function ItemRow({ it, pkg, locked, onReview }: { it: BriefItem; pkg: SharePacka
     );
   }
   return (
-    <li className="card text-[15px]" style={{ borderLeft: `4px solid ${tone}`, opacity: it.review === "rejected" ? 0.6 : 1, background: flagged && it.review === "pending" ? "var(--amber-bg)" : undefined }}>
+    <li className="card !py-3 text-[15px]" style={{ borderLeft: `4px solid ${tone}`, opacity: it.review === "rejected" ? 0.6 : 1, background: flagged && it.review === "pending" ? "var(--amber-bg)" : undefined }}>
       {editing ? (
         <div>
           <label htmlFor={`t-${it.id}`} className="label">{t("brief.editItem")}</label>
@@ -246,18 +248,19 @@ function ItemRow({ it, pkg, locked, onReview }: { it: BriefItem; pkg: SharePacka
           {ai && !locked && confirming && (
             <div className="mt-2 space-y-2" data-testid="flag-confirm">
               <p className="text-sm font-bold">{t("brief.flagConfirm")}</p>
-              <div className="flex gap-2 flex-wrap">
-                <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} aria-hidden /> {t("brief.edit")}</button>
-                <button className="btn" onClick={() => { setConfirming(false); onReview(it, "accepted"); }}><Check size={16} aria-hidden /> {t("brief.acceptAnyway")}</button>
-                <button className="btn" onClick={() => setConfirming(false)}>{t("common.cancel")}</button>
+              <div className="flex gap-1.5 flex-wrap">
+                <button className="btn btn-sm" onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> {t("brief.edit")}</button>
+                <button className="btn btn-sm" onClick={() => { setConfirming(false); onReview(it, "accepted"); }}><Check size={14} aria-hidden /> {t("brief.acceptAnyway")}</button>
+                <button className="btn btn-sm" onClick={() => setConfirming(false)}>{t("common.cancel")}</button>
               </div>
             </div>
           )}
           {ai && !locked && !confirming && (
-            <div className="mt-2 flex gap-2 flex-wrap">
-              <button className="btn" onClick={() => (flagged ? setConfirming(true) : onReview(it, "accepted"))} aria-pressed={it.review === "accepted"}><Check size={16} aria-hidden /> {t("brief.accept")}</button>
-              <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} aria-hidden /> {t("brief.edit")}</button>
-              <button className="btn" onClick={() => onReview(it, "rejected")} aria-pressed={it.review === "rejected"}><X size={16} aria-hidden /> {t("brief.reject")}</button>
+            <div className="mt-2 flex gap-1.5 flex-wrap">
+              <button className="btn btn-sm" onClick={() => (flagged ? setConfirming(true) : onReview(it, "accepted"))} aria-pressed={it.review === "accepted"}
+                style={it.review === "accepted" ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}><Check size={14} aria-hidden /> {t("brief.accept")}</button>
+              <button className="btn btn-sm" onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> {t("brief.edit")}</button>
+              <button className="btn btn-sm" onClick={() => onReview(it, "rejected")} aria-pressed={it.review === "rejected"}><X size={14} aria-hidden /> {t("brief.reject")}</button>
             </div>
           )}
         </>

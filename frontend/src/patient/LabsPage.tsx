@@ -87,23 +87,16 @@ export function LabRow({ v, unit, onAct }: { v: LabValue; unit: string; onAct: (
     return act({ action: "correct", unit: u, ...(isNum ? { value_numeric: n } : { value_text: val.trim() }) });
   };
   return (
-    <li data-testid="lab-row" data-review={v.review} className="py-2 px-2 -mx-2 rounded-lg"
-      style={review ? { background: "color-mix(in srgb, var(--moderate) 14%, transparent)" } : undefined}>
+    <li data-testid="lab-row" data-review={v.review} className="py-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="text-sm text-muted whitespace-nowrap min-w-[4.75rem]">{fmtDate(v.date, { day: "numeric", month: "short", year: "2-digit" })}</span>
         <span className="font-bold tabular-nums" style={qualKind(v) === "pos" ? { color: "var(--strong)" } : undefined}>{valueText(v)} <span className="font-normal text-muted text-sm">{unit}</span></span>
         <FlagPill v={v} />
-        {review && <span className="text-sm font-bold" style={{ color: "var(--moderate)" }}>{v.confidence !== null && !offline ? tt("labs.needsLookSure") : tt("labs.needsLook")}</span>}
+        {review && <span className="text-sm text-muted">{v.confidence !== null && !offline ? tt("labs.needsLookSure") : tt("labs.needsLook")}</span>}
+        {review && !editing && <button className="btn-quiet btn px-0 min-h-[32px] text-sm" disabled={busy} onClick={() => setEditing(true)}>{tt("labs.fix")}</button>}
         {v.review === "confirmed" && <span className="text-sm text-muted">{tt("common.confirmed")}</span>}
         {v.review === "corrected" && <span className="text-sm text-muted">{tt("labs.corrected")}</span>}
       </div>
-      {review && !editing && (
-        <div className="flex flex-wrap gap-2 mt-2">
-          <button className="btn" disabled={busy} onClick={() => act({ action: "confirm" })}>{tt("common.confirm")}</button>
-          <button className="btn" disabled={busy} onClick={() => setEditing(true)}>{tt("common.correct")}</button>
-          <button className="btn" disabled={busy} onClick={() => act({ action: "reject" })}>{tt("common.reject")}</button>
-        </div>
-      )}
       {review && editing && (
         <form className="flex flex-wrap items-end gap-2 mt-2" onSubmit={(e) => { e.preventDefault(); save(); }}>
           <label className="flex-1 min-w-[7rem]"><span className="label">{tt("labs.value")}</span><input className="input" value={val} onChange={(e) => setVal(e.target.value)} inputMode="decimal" /></label>

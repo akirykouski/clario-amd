@@ -1,4 +1,4 @@
-"""Pattern signals from confirmed terms. Never a diagnosis.
+"""Pattern signals from the patient's terms (everything except what a person rejected). Never a diagnosis.
 
 Score and signal level are computed in code (IC-weighted best-match overlap against HPO disease annotations, counting
 only close matches). A card needs at least three specific matched terms; fever, headache and fatigue alone never make
@@ -53,10 +53,9 @@ def counts_as_evidence(ent: Entity) -> bool:
 
 
 def evidence_from(entries: list[Entry], onto: Ontology) -> dict[str, Evidence]:
-    """HPO terms a person confirmed or corrected, about the patient (not negated, not a relative's), with their entries.
+    """HPO terms about the patient (not negated, not a relative's, not rejected by a person), with their entries.
 
-    Entities that are unreviewed, in the review queue (needs_review) or rejected never count. `count` is the number of
-    notes that mention the term (two mentions in one note are one note).
+    `count` is the number of notes that mention the term (two mentions in one note are one note).
     """
     by_term: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for e in entries:
@@ -79,7 +78,7 @@ def neutral_label(labels: list[str]) -> str:
 
 
 def negated_ids(entries: list[Entry]) -> set[str]:
-    """Confirmed HPO terms the patient said are absent and never reported present in another note."""
+    """HPO terms the patient said are absent and never reported present in another note."""
     conf = [ent for e in entries for ent in e.entities if ent.review in COUNTED and ent.hpo_id and not ent.family_history]
     return {x.hpo_id for x in conf if x.negated} - {x.hpo_id for x in conf if not x.negated}
 

@@ -1,6 +1,6 @@
 """Patient -> clinic sharing.
 
-The patient picks a period. Only confirmed entities and the entries in that period leave the device,
+The patient picks a period. The entries in that period and their terms (never rejected ones) leave the device,
 sealed with the clinic's X25519 public key (libsodium sealed box): only the clinic server can open it.
 Packages carry an expiry; the clinic rejects expired ones and purges them.
 """
@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from nacl.public import PrivateKey, PublicKey, SealedBox
 
-from .models import COUNTED, Entity, Entry, LabResult, Pattern, SharedEntity, SharedLab, SharePackage
+from .models import COUNTED, REVIEWED, Entity, Entry, LabResult, Pattern, SharedEntity, SharedLab, SharePackage
 
 
 def now_iso() -> str:
@@ -76,39 +76,47 @@ def lab_abnormal(l: LabResult) -> bool:
     return l.flag in ("low", "high") or bool(l.value_text and _POSITIVE.match(l.value_text))
 
 
+def lab_needs_check(l: SharedLab) -> bool:
+    """A reading the clinician still has to confirm or reject. Blocks finalizing the brief."""
+    return l.needs_review and l.decision is None
+
+
 def shared_labs(labs: list[LabResult], since: str, until: str, batch_entry: dict[str, str] | None = None) -> list[SharedLab]:
     """Lab history a clinic needs: every result of each test that appears in the period (so an earlier positive stays
     visible next to a later negative), plus any out-of-range result from the 12 months before the end date.
-    Rows a person confirmed or corrected, plus confident rows nobody has looked at (marked, the clinic must check them)."""
+    Every row except rejected ones; nobody-checked rows are marked and low-confidence rows ask the clinician."""
     batch_entry = batch_entry or {}
-    ok = [l for l in labs if l.date <= until and l.review in (*COUNTED, "auto")]
+    ok = [l for l in labs if l.date <= until and l.review in COUNTED]
     in_period = {l.test_key for l in ok if since <= l.date <= until}
     floor = (date.fromisoformat(until) - timedelta(days=RECENT_DAYS)).isoformat()
     rows = [l for l in ok if l.test_key in in_period or (l.date >= floor and lab_abnormal(l))]
     rows.sort(key=lambda l: (l.date, l.test_key, l.page))
-    return [SharedLab(test_name=l.test_name, value_numeric=l.value_numeric, value_text=l.value_text, unit=l.unit,
+    return [SharedLab(id=l.id, test_name=l.test_name, value_numeric=l.value_numeric, value_text=l.value_text, unit=l.unit,
                       ref_low=l.ref_low, ref_high=l.ref_high, flag=l.flag, date=l.date, page=l.page,
-                      entry_id=batch_entry.get(l.batch_id), reviewed=l.review in COUNTED, id=l.id, test_key=l.test_key,
-                      name_en=LAB_NAMES_EN.get(l.test_key), abnormal=lab_abnormal(l)) for l in rows]
+                      entry_id=batch_entry.get(l.batch_id), reviewed=l.review in REVIEWED, confidence=l.confidence,
+                      needs_review=l.review == "needs_review", test_key=l.test_key, name_en=LAB_NAMES_EN.get(l.test_key),
+                      abnormal=lab_abnormal(l)) for l in rows]
 
 
 def build_package(entries: list[Entry], since: str, until: str, patient_alias: str, note: str | None,
                   patterns: list[Pattern], expires_hours: int, labs: list[LabResult] | None = None,
-                  batch_entry: dict[str, str] | None = None) -> SharePackage:
+                  batch_entry: dict[str, str] | None = None, profile: dict | None = None) -> SharePackage:
     chosen = sorted((e for e in entries if since <= e.occurred_on <= until), key=lambda e: e.occurred_on)
     shared_entities, slim = [], []
     for e in chosen:
-        confirmed = [_clinic_copy(x) for x in e.entities if x.review in COUNTED]  # a person decided; needs_review never leaves
-        shared_entities += [SharedEntity(entry_id=e.id, occurred_on=e.occurred_on, type=x.type, quote=x.quote,
+        kept = [_clinic_copy(x) for x in e.entities if x.review in COUNTED]  # rejected never leaves
+        shared_entities += [SharedEntity(id=x.id, entry_id=e.id, occurred_on=e.occurred_on, type=x.type, quote=x.quote,
                                          canonical=x.canonical, hpo_id=x.hpo_id, negated=x.negated,
                                          family_history=x.family_history, severity=x.severity, onset_hint=x.onset_hint,
-                                         reviewed=x.review in COUNTED, from_question="from_question" in x.flags) for x in confirmed]
-        slim.append(e.model_copy(update={"entities": confirmed}))
+                                         reviewed=x.review in REVIEWED, confidence=x.confidence,
+                                         needs_review=x.review == "needs_review",
+                                         from_question="from_question" in x.flags) for x in kept]
+        slim.append(e.model_copy(update={"entities": kept}))
     created = datetime.now(timezone.utc)
     return SharePackage(package_id=f"pkg_{uuid.uuid4().hex[:12]}", patient_alias=patient_alias,
                         created_at=created.isoformat(timespec="seconds"),
                         expires_at=(created + timedelta(hours=expires_hours)).isoformat(timespec="seconds"),
-                        period=(since, until), note=note, entries=slim, entities=shared_entities,
+                        period=(since, until), note=note, profile=profile or None, entries=slim, entities=shared_entities,
                         labs=shared_labs(labs or [], since, until, batch_entry), patterns=patterns)
 
 

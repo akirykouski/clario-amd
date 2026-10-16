@@ -11,7 +11,7 @@ afterEach(() => { vi.restoreAllMocks(); act(() => setLang("en")); });
 
 const lab = (id: string, test_key: string, page: number, over: Partial<SharedLab> = {}): SharedLab => ({
   test_name: test_key, value_numeric: 5, value_text: null, unit: "mg/dL", ref_low: null, ref_high: 200, flag: "normal", date: "2026-09-15", page,
-  entry_id: "e9", reviewed: false, id, test_key, name_en: null, abnormal: false, decision: null, ...over,
+  entry_id: "e9", reviewed: false, needs_review: true, id, test_key, name_en: null, abnormal: false, decision: null, ...over,
 });
 const pkg: SharePackage = {
   package_id: "pkg_1", patient_alias: "Ash-001", created_at: "x", expires_at: "2026-12-01", period: ["2026-09-01", "2026-10-02"], note: null,
@@ -58,6 +58,14 @@ describe("brief citation check", () => {
   });
 });
 
+describe("finalize gate", () => {
+  it("stays off while a reading that needs a check has no decision, and says how many", () => {
+    renderPanel([ai("p", { review: "accepted" })]);
+    expect(screen.getByRole("button", { name: "Finalize brief" })).toBeDisabled();
+    expect(screen.getByTestId("labs-pending")).toHaveTextContent("3");
+  });
+});
+
 describe("brief item origin chips", () => {
   it("names documents, answers to app questions and the patient's note", () => {
     renderPanel([
@@ -82,35 +90,34 @@ describe("lab bulk decisions", () => {
   function open() {
     vi.spyOn(api, "package").mockResolvedValue(pkg);
     vi.spyOn(api, "inbox").mockResolvedValue([{ package_id: "pkg_1", patient_alias: "Ash-001", period: pkg.period, received_at: "x", expires_at: "x", entities: 1, brief_state: "none" }]);
+    vi.spyOn(api, "decisions").mockResolvedValue({ terms: {}, answers: [] });
+    vi.spyOn(api, "termSystems").mockResolvedValue({});
+    vi.spyOn(api, "ddx").mockResolvedValue({ conditions: [], question: null, answers: [], n_terms: 0, note: "" });
+    vi.spyOn(api, "overview").mockRejectedValue(new Error("none"));
     return render(<MemoryRouter initialEntries={["/p/pkg_1"]}><Routes><Route path="/p/:id" element={<PackagePage />} /></Routes></MemoryRouter>);
   }
 
-  it("accepts a whole test, a whole report page, or everything in one call each", async () => {
-    const all = { ...pkg, labs: pkg.labs.map((l) => ({ ...l, decision: "accepted" as const })) };
-    const decide = vi.spyOn(api, "decideLabs").mockResolvedValueOnce(pkg).mockResolvedValueOnce(pkg).mockResolvedValue(all);
+  it("confirms a whole report page, or everything, in one call each", async () => {
+    const all = { ...pkg, labs: pkg.labs.map((l) => ({ ...l, decision: "confirmed" as const })) };
+    const decide = vi.spyOn(api, "decideLabs").mockResolvedValueOnce(pkg).mockResolvedValue(all);
     open();
     const bulk = await screen.findByTestId("lab-bulk");
-    fireEvent.click(within(bulk).getByRole("button", { name: "Accept the 2 values from page 2" }));
-    expect(decide).toHaveBeenLastCalledWith("pkg_1", { decision: "accepted", page: 2, entry_id: "e9" });
+    fireEvent.click(within(bulk).getByRole("button", { name: "Confirm the 2 readings from page 2" }));
+    expect(decide).toHaveBeenLastCalledWith("pkg_1", { decision: "confirmed", page: 2, entry_id: "e9" });
     await act(async () => {});
-    const sodio = screen.getAllByTestId("lab-test").find((x) => x.textContent?.includes("sodio")) as HTMLElement;
-    fireEvent.click(within(sodio).getByRole("button", { name: "Accept all 2" }));
-    expect(decide).toHaveBeenLastCalledWith("pkg_1", { decision: "accepted", test_key: "sodio" });
-    await act(async () => {});
-    fireEvent.click(within(bulk).getByRole("button", { name: "Accept all 3 values from documents" }));
-    expect(decide).toHaveBeenLastCalledWith("pkg_1", { decision: "accepted" });
-    expect(decide).toHaveBeenCalledTimes(3);
-    // everything decided: the test cards collapse to one line each
+    fireEvent.click(within(bulk).getByRole("button", { name: "Confirm all 3 readings" }));
+    expect(decide).toHaveBeenLastCalledWith("pkg_1", { decision: "confirmed" });
+    expect(decide).toHaveBeenCalledTimes(2);
+    // everything decided: no bulk buttons are left
     await vi.waitFor(() => expect(screen.queryByTestId("lab-bulk")).toBeNull());
-    expect(screen.getAllByTestId("lab-test").every((x) => x.querySelector("details"))).toBe(true);
   });
 
   it("writes a one-sided printed range in words, in both languages", async () => {
     open();
     await screen.findByTestId("lab-bulk");
-    expect(screen.getAllByText(/Range up to 200/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/up to 200/).length).toBeGreaterThan(0);
     act(() => setLang("it"));
-    expect(screen.getAllByText(/Riferimento fino a 200/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/fino a 200/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/ - 200/)).toBeNull();
   });
 

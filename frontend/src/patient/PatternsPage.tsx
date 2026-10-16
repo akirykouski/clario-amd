@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUp, Circle, HelpCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, Camera, Circle, ClipboardList, HelpCircle, PenLine, Send } from "lucide-react";
 import { api } from "../api";
 import { fmtDate, reorderDelta } from "../lib";
 import type { Answer, NextQuestion, PatientEvidence, PatientPattern } from "../types";
@@ -127,9 +127,7 @@ export default function PatternsPage() {
       </header>
       {data.confirmed_terms < 3 && (
         <Empty title={t("patterns.earlyTitle")}>
-          {(data.to_check ?? 0) > 0
-            ? <>{tn("patterns.toCheck", data.to_check ?? 0)}{" "}<Link to="/review" className="underline underline-offset-4 whitespace-nowrap">{t("patterns.toCheckLink")}</Link></>
-            : tn("patterns.earlyText", data.confirmed_terms)}
+          {tn("patterns.earlyText", data.confirmed_terms)}
         </Empty>
       )}
       {data.confirmed_terms >= 3 && data.patterns.length > 0 && <QuestionCard onAnswered={afterAnswer} onSplits={setRelated} />}
@@ -169,6 +167,24 @@ export default function PatternsPage() {
         ))}
       </div>
       {data.confirmed_terms >= 3 && data.patterns.length === 0 && <Empty title={t("patterns.noneTitle")}>{t("patterns.noneText")}</Empty>}
+      {pats.length > 0 && <PrepCard pats={pats} />}
     </div>
+  );
+}
+
+/** What the patient can do before the visit: watch for the features not recorded yet, keep photos, write questions, share. */
+function PrepCard({ pats }: { pats: PatientPattern[] }) {
+  const { t } = useT();
+  const watch = [...new Map(pats.flatMap((p) => p.missing).map((m) => [m.hpo_id, m.label])).values()].slice(0, 4);
+  return (
+    <section className="card space-y-3" aria-labelledby="prep" data-testid="prep-card">
+      <h2 id="prep" className="text-xl flex items-center gap-2"><ClipboardList size={20} aria-hidden className="text-accent" />{t("patterns.prepTitle")}</h2>
+      <ul className="space-y-2 text-[15px]">
+        {watch.length > 0 && <li className="flex gap-2"><Circle size={16} aria-hidden className="text-muted mt-1 shrink-0" />{t("patterns.prepWatch", { list: watch.join(", ") })}</li>}
+        <li className="flex gap-2"><Camera size={16} aria-hidden className="text-muted mt-1 shrink-0" />{t("patterns.prepPhoto")}</li>
+        <li className="flex gap-2"><PenLine size={16} aria-hidden className="text-muted mt-1 shrink-0" />{t("patterns.prepAsk")}</li>
+      </ul>
+      <Link to="/share" className="btn btn-primary"><Send size={16} aria-hidden />{t("patterns.prepShare")}</Link>
+    </section>
   );
 }

@@ -17,6 +17,8 @@ from typing import Iterable
 from clario.models import Term
 
 DEFAULT_PATH = Path(__file__).parent / "data" / "knowledge.json.gz"
+# Optional: verified everyday English phrasings per term (train/lay_expand.py). Search only, never shown as synonyms.
+LAY_LEXICON_PATH = Path(__file__).parent / "data" / "lay_lexicon_en.json"
 ROOT = "HP:0000118"
 CAND_IC = 1.2  # ancestors below this IC carry no signal and are skipped when pruning
 STOP = {"a", "an", "the", "of", "and", "or", "in", "on", "my", "i", "is", "are", "to", "with",
@@ -65,7 +67,8 @@ class Ontology:
     def load(cls, path: str | Path | None = None) -> "Ontology":
         return _load(str(Path(path) if path else DEFAULT_PATH))
 
-    def __init__(self, raw: dict) -> None:
+    def __init__(self, raw: dict, search_extra: dict[str, list[str]] | None = None) -> None:
+        self._search_extra = search_extra or {}
         self._label: dict[str, str] = {}
         self._syn: dict[str, list[str]] = {}
         self._parents: dict[str, list[str]] = {}
@@ -148,7 +151,7 @@ class Ontology:
         self._tok: dict[str, set[int]] = defaultdict(set)
         self._phr: list[tuple[str, str, bool, frozenset[str]]] = []
         for t, label in self._label.items():
-            for k, ph in enumerate([label, *self._syn[t]]):
+            for k, ph in enumerate([label, *self._syn[t], *self._search_extra.get(t, ())]):
                 n = _norm(ph)
                 if not n:
                     continue
@@ -285,4 +288,6 @@ class Ontology:
 @lru_cache(maxsize=4)
 def _load(path: str) -> Ontology:
     with gzip.open(path, "rt", encoding="utf-8") as f:
-        return Ontology(json.load(f))
+        raw = json.load(f)
+    extra = json.loads(LAY_LEXICON_PATH.read_text(encoding="utf-8")) if LAY_LEXICON_PATH.exists() else None
+    return Ontology(raw, extra)

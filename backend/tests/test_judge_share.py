@@ -32,9 +32,10 @@ def test_family_history_is_shared_only_as_family_history_and_never_counted():
     fam = [x for x in pkg.entities if x.family_history]
     assert len(fam) == 1 and fam[0].hpo_id is None  # no ontology id: a consumer cannot count it as the patient's term
     assert all(x.hpo_id is None for en in pkg.entries for x in en.entities if x.family_history)
-    assert {x.canonical for x in patient_mentions(pkg.entities)} == {"Arthralgia"}
-    assert counts(pkg) == {"entities": 1, "mentions": 1, "terms": 1, "labs": 0}
-    assert "Fatigue" not in {x.canonical for x in pkg.entities}  # needs_review never leaves
+    assert {x.canonical for x in patient_mentions(pkg.entities)} == {"Arthralgia", "Fatigue"}
+    assert counts(pkg) == {"entities": 2, "mentions": 2, "terms": 2, "labs": 0}
+    fat = next(x for x in pkg.entities if x.canonical == "Fatigue")  # unsure terms leave flagged for the clinician
+    assert fat.needs_review and not fat.reviewed and fat.id == "x4"
 
 
 def test_italian_persona_lupus_never_reaches_the_clinic_as_a_patient_term(unlocked, clinic_server, tmp_path):
@@ -68,8 +69,9 @@ def test_shared_labs_are_confirmed_or_marked_and_in_the_period():
             lab(4, "Sodium", 140, review="rejected"), lab(5, "Old", 1, day="2025-01-01"), lab(6, "Fixed", 2, review="corrected")]
     got = shared_labs(rows, "2026-09-01", "2026-10-31", {"b1": "e9"})
     by = {l.test_name: l for l in got}
-    assert set(by) == {"Cholesterol", "Glucose", "Fixed"}  # needs_review, rejected and out-of-period rows never leave
+    assert set(by) == {"Cholesterol", "Glucose", "Ferritin", "Fixed"}  # rejected and out-of-period rows never leave
     assert by["Cholesterol"].reviewed and by["Fixed"].reviewed and not by["Glucose"].reviewed
+    assert by["Ferritin"].needs_review and not by["Glucose"].needs_review  # the clinician is asked to check unsure rows
     assert by["Cholesterol"].entry_id == "e9" and by["Cholesterol"].page == 1 and by["Cholesterol"].ref_high == 200
 
 

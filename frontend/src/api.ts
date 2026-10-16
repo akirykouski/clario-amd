@@ -1,6 +1,6 @@
 import type {
   AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicMetrics, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
-  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState,
+  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition, Overview, Profile,
 } from "./types";
 
 export class ApiError extends Error {
@@ -59,24 +59,20 @@ export const api = {
   reviewAct: (kind: string, id: string, action: ReviewAction, value?: string) =>
     request<{ ok: boolean; count: number }>("POST", `/review/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { body: { action, value } }),
   searchTerms: (q: string, lang?: string) => request<Term[]>("GET", "/terms/search", { params: { q, lang } }),
-  timeline: () => request<Timeline>("GET", "/timeline"),
+  timeline: (lang?: string) => request<Timeline>("GET", "/timeline", { params: { lang } }),
   gpu: () => request<Record<string, unknown> | null>("GET", "/system/gpu"),
   patterns: (lang?: string) => request<PatternsResponse>("GET", "/patterns", { params: { lang } }),
   nextQuestion: (lang: string) => request<NextQuestion | null>("GET", "/patterns/next-question", { params: { lang } }),
   answerQuestion: (b: { feature_id: string; answer: Answer; question?: string; lang?: string }) =>
     request<AnswerResult>("POST", "/patterns/answer", { body: b }),
-  demo: (persona: Persona = "giulia") => request<{ ok: boolean; entries: number; persona: Persona; lang: string }>("POST", "/demo", { body: { persona, reviewed: true } }),
-  confirmAllInEntry: (id: string) => request<{ confirmed: number; entry: Entry }>("POST", `/entries/${encodeURIComponent(id)}/confirm-all`),
-  confirmAuto: () => request<{ confirmed: number }>("POST", "/confirm-auto"),
+  demo: (persona: Persona = "giulia") => request<{ ok: boolean; entries: number; persona: Persona; lang: string }>("POST", "/demo", { body: { persona } }),
   demoDocuments: () => request<BatchStarted>("POST", "/demo/documents"),
   share: (b: ShareRequest) => request<ShareResult>("POST", "/share", { body: b }),
   clinicKey: (url?: string) => request<ClinicKey>("GET", "/clinic/key", { params: { url } }),
   inbox: () => request<InboxRow[]>("GET", "/inbox"),
   package: (id: string) => request<SharePackage>("GET", `/inbox/${encodeURIComponent(id)}`),
-  decideLab: (pkg: string, labId: string, decision: "accepted" | "rejected" | "pending") =>
-    request<SharePackage>("PUT", `/inbox/${encodeURIComponent(pkg)}/labs/${encodeURIComponent(labId)}`, { body: { decision } }),
-  /** Decide many unchecked lab rows in one call: no filter is every row, `test_key` one test, `page` + `entry_id` one report page. */
-  decideLabs: (pkg: string, b: { decision: "accepted" | "rejected" | "pending"; test_key?: string; page?: number; entry_id?: string | null }) =>
+  /** Decide many readings that need a check in one call: no filter is every one, `test_key` one test, `page` + `entry_id` one report page. */
+  decideLabs: (pkg: string, b: { decision: TermDecision; test_key?: string; page?: number; entry_id?: string | null }) =>
     request<SharePackage>("POST", `/inbox/${encodeURIComponent(pkg)}/labs/decide`, { body: b }),
   startBrief: (id: string, lang?: string) => request<{ run_id: string }>("POST", `/inbox/${encodeURIComponent(id)}/brief${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
   brief: (id: string, v?: BriefView) => request<Brief>("GET", `/inbox/${encodeURIComponent(id)}/brief`, { params: v }),
@@ -98,4 +94,18 @@ export const api = {
   },
   batchEventsUrl: (id: string) => buildUrl(`/documents/batch/${encodeURIComponent(id)}/events`),
   runEventsUrl: (runId: string) => buildUrl(`/runs/${encodeURIComponent(runId)}/events`),
+  overview: (id: string, lang?: string) => request<Overview>("GET", `/inbox/${encodeURIComponent(id)}/overview`, { params: { lang } }),
+  profile: () => request<Profile>("GET", "/profile"),
+  saveProfile: (p: Profile) => request<Profile>("PUT", "/profile", { body: p }),
+  privacyCounts: () => request<Record<string, number>>("GET", "/privacy/counts"),
+  termSystems: (ids: string[]) => request<Record<string, string>>("GET", "/terms/systems", { params: { ids: ids.join(",") } }),
+  ddx: (id: string, lang?: string) => request<Differential>("GET", `/inbox/${encodeURIComponent(id)}/ddx`, { params: { lang } }),
+  ddxAnswer: (id: string, b: { feature_id: string; answer: Answer; lang?: string }) =>
+    request<{ before: Condition[]; differential: Differential }>("POST", `/inbox/${encodeURIComponent(id)}/ddx/answer`, { body: b }),
+  ddxReset: (id: string, lang?: string) => request<Differential>("DELETE", `/inbox/${encodeURIComponent(id)}/ddx/answers`, { params: { lang } }),
+  decisions: (id: string) => request<Decisions>("GET", `/inbox/${encodeURIComponent(id)}/decisions`),
+  decideLab: (id: string, labId: string, decision: TermDecision) =>
+    request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/labs/${encodeURIComponent(labId)}`, { body: { decision } }),
+  decideTerm: (id: string, entId: string, decision: TermDecision) =>
+    request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/terms/${encodeURIComponent(entId)}`, { body: { decision } }),
 };

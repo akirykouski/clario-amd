@@ -1,4 +1,4 @@
-"""Lab history reaches the clinic, unchecked rows need a clinician decision, empty-state note follows the term count."""
+"""Lab history reaches the clinic, low-confidence rows need a clinician decision, empty-state note follows the term count."""
 
 from datetime import date, timedelta
 
@@ -24,8 +24,9 @@ def test_history_keeps_earlier_positive_and_recent_out_of_range_tests():
             row(6, "ana", "Positivo", day="2026-10-02", review="needs_review")]
     got = shared_labs(rows, "2026-09-15", "2026-10-31")
     assert [(l.test_key, l.value_text or l.value_numeric) for l in got] == [
-        ("ana", "Positivo 1:160"), ("antidsdna", 90.0), ("ana", "Negativo")]
+        ("ana", "Positivo 1:160"), ("antidsdna", 90.0), ("ana", "Negativo"), ("ana", "Positivo")]
     assert got[0].abnormal and got[1].abnormal and not got[2].abnormal
+    assert [l.needs_review for l in got] == [False, False, False, True]  # a low-confidence row travels, marked for the clinician
     assert got[2].name_en == "ANA" and got[1].name_en == "Anti-dsDNA"
 
 
@@ -42,14 +43,14 @@ def test_clinic_decides_unchecked_labs_before_finalize(unlocked, clinic_server, 
     pid = sh["package_id"]
     with TestClient(create_app(settings(tmp_path, "clinic"))) as clinic:
         pkg = clinic.get(f"/api/inbox/{pid}").json()
-        unchecked = [l for l in pkg["labs"] if not l["reviewed"]]
+        unchecked = [l for l in pkg["labs"] if l["needs_review"]]
         assert unchecked and all(l["decision"] is None for l in unchecked)
         assert {"ana", "antidsdna"} <= {l["test_key"] for l in pkg["labs"]}
         ana = [l["value_text"] for l in pkg["labs"] if l["test_key"] == "ana"]
         assert len(ana) >= 2  # the history, not one latest value
         events = sse(clinic, clinic.post(f"/api/inbox/{pid}/brief").json()["run_id"])
         texts = [i["text"] for i in events[-1]["payload"]["items"] if i["section"] == "labs"]
-        assert any("from documents, pending check" in t for t in texts)
+        assert any("low-confidence reading, please check" in t for t in texts)
         for it in clinic.get(f"/api/inbox/{pid}/brief").json()["items"]:
             if it["review"] == "pending":
                 clinic.patch(f"/api/brief-items/{pid}/{it['id']}", json={"review": "accepted"})
@@ -61,12 +62,14 @@ def test_clinic_decides_unchecked_labs_before_finalize(unlocked, clinic_server, 
         for l in unchecked[1:]:
             r = clinic.put(f"/api/inbox/{pid}/labs/{l['id']}", json={"decision": "accepted"})
             assert r.status_code == 200
-        got = {l["id"]: l for l in r.json()["labs"]}
-        assert got[rejected["id"]]["decision"] == "rejected" and got[unchecked[-1]["id"]]["decision"] == "accepted"
+        assert r.json()["labs"][rejected["id"]] == "rejected" and r.json()["labs"][unchecked[-1]["id"]] == "confirmed"
+        got = {l["id"]: l for l in clinic.get(f"/api/inbox/{pid}").json()["labs"]}
+        assert got[rejected["id"]]["decision"] == "rejected" and got[unchecked[-1]["id"]]["decision"] == "confirmed"
+        assert clinic.patch(f"/api/inbox/{pid}/labs/{unchecked[0]['id']}", json={"decision": "confirmed"}).status_code == 200  # theirs: PATCH, same handler
         fin = clinic.post(f"/api/inbox/{pid}/brief/finalize")
         assert fin.status_code == 200, fin.text
         md = clinic.get(f"/api/inbox/{pid}/brief.md").text
-        assert "pending check" not in md
+        assert "please check" not in md
         assert clinic.put(f"/api/inbox/{pid}/labs/{rejected['id']}", json={"decision": "pending"}).status_code == 409
 
 
@@ -84,17 +87,17 @@ def test_clinic_bulk_lab_decisions_one_log_row_per_lab(unlocked, clinic_server, 
     pid = unlocked.post("/api/share", json=share_body(clinic_server)).json()["package_id"]
     with TestClient(create_app(settings(tmp_path, "clinic"))) as clinic:
         pkg = clinic.get(f"/api/inbox/{pid}").json()
-        unchecked = [l for l in pkg["labs"] if not l["reviewed"]]
+        unchecked = [l for l in pkg["labs"] if l["needs_review"]]
         key = unchecked[0]["test_key"]
         n_key = sum(1 for l in unchecked if l["test_key"] == key)
         r = clinic.post(f"/api/inbox/{pid}/labs/decide", json={"decision": "accepted", "test_key": key})
-        assert r.status_code == 200 and sum(1 for l in r.json()["labs"] if l["test_key"] == key and l["decision"] == "accepted") == n_key
+        assert r.status_code == 200 and sum(1 for l in r.json()["labs"] if l["test_key"] == key and l["decision"] == "confirmed") == n_key
         page = next(l for l in unchecked if l["test_key"] != key)
         r = clinic.post(f"/api/inbox/{pid}/labs/decide", json={"decision": "accepted", "page": page["page"], "entry_id": page["entry_id"]})
-        assert all(l["decision"] == "accepted" for l in r.json()["labs"] if not l["reviewed"] and (l["page"] == page["page"] or l["test_key"] == key))
+        assert all(l["decision"] == "confirmed" for l in r.json()["labs"] if l["needs_review"] and (l["page"] == page["page"] or l["test_key"] == key))
         assert clinic.post(f"/api/inbox/{pid}/labs/decide", json={"decision": "maybe"}).status_code == 422
         r = clinic.post(f"/api/inbox/{pid}/labs/decide", json={"decision": "accepted"})
-        assert all(l["decision"] == "accepted" for l in r.json()["labs"] if not l["reviewed"])
+        assert all(l["decision"] == "confirmed" for l in r.json()["labs"] if l["needs_review"])
         log = [json.loads(x) for x in (tmp_path / "clinic" / "lab_decisions.jsonl").read_text().splitlines()]
         assert len(log) >= len(unchecked) and {"lab_id", "decision", "scope", "at"} <= set(log[0]) and "value" not in log[0]
         assert {x["scope"] for x in log} >= {"test", "page"}
@@ -117,15 +120,15 @@ def test_brief_text_is_localized_and_does_not_double_the_label():
     assert _range_text(5, None, "en") == "printed range from 5" and _range_text(5, 9, "it") == "valori di riferimento da 5 a 9"
     from clario.models import SharedLab, SharePackage
 
-    def row(i, name, v, lo, hi, flag, reviewed=True):
+    def row(i, name, v, lo, hi, flag, needs_review=False):
         return SharedLab(id=f"l{i}", test_key=name.lower(), test_name=name, value_numeric=v, unit="mg/dL", ref_low=lo, ref_high=hi,
-                         flag=flag, date="2026-09-15", page=i, reviewed=reviewed, abnormal=flag in ("low", "high"))
+                         flag=flag, date="2026-09-15", page=i, needs_review=needs_review, abnormal=flag in ("low", "high"))
 
     pkg = SharePackage(package_id="pkg_x", patient_alias="A", created_at="x", expires_at="x", period=("2026-09-01", "2026-09-30"),
-                       entries=[], entities=[], labs=[row(1, "Sodium", 140, 135, 145, "normal"), row(2, "Potassium", 4, 3.5, 5, "normal", False),
+                       entries=[], entities=[], labs=[row(1, "Sodium", 140, 135, 145, "normal"), row(2, "Potassium", 4, 3.5, 5, "normal", True),
                                                       row(3, "Cholesterol", 264, None, 200, "high")])
     out = {i.id: i for i in lab_items(pkg, "en")}
-    assert out["bi_lab_in_range"].text == "2 tests in range" and out["bi_lab_in_range"].review == "pending"  # one row unchecked
+    assert out["bi_lab_in_range"].text == "2 tests in range" and out["bi_lab_in_range"].review == "pending"  # one reading needs a check
     assert "printed range up to 200" in out["bi_lab_cholesterol"].text and out["bi_lab_cholesterol"].pages == [3]
     assert lab_items(pkg, "it")[-1].text == "2 esami nella norma"
 
