@@ -26,7 +26,7 @@ No certified threshold recorded yet (`eval/conformal.py` on a `--sc-n` run).
 
 | file | model | backend | dataset | n | date |
 |---|---|---|---|---|---|
-| pattern_calibration.json | clario-patterns 4395c2b | cpu | simulated patients from the shipped HPO/Orphanet annotations (knowledge.json.gz, 12820 diseases), k=3..8 terms frequency weighted, 30% moved to an ancestor, 1-2 noise terms, 30% with one negated term; synthetic, no real patients | 1200 | 2026-10-16 |
+| pattern_calibration.json | clario-patterns 6f1cf36 | cpu | simulated patients from the shipped HPO/Orphanet annotations (knowledge.json.gz, 12820 diseases), k=3..8 terms frequency weighted, 30% moved to an ancestor, 1-2 noise terms, 30% with one negated term; synthetic, no real patients | 1200 | 2026-10-16 |
 | pii_leak.json | clario-privacy d38ab8e | cpu | synthetic templates v1, seed 20261016 | 1700 | 2026-10-16 |
 
 ## Offline checks (not model results)

@@ -1,7 +1,7 @@
 {
   "n": 1200,
   "dataset": "simulated patients from the shipped HPO/Orphanet annotations (knowledge.json.gz, 12820 diseases), k=3..8 terms frequency weighted, 30% moved to an ancestor, 1-2 noise terms, 30% with one negated term; synthetic, no real patients",
-  "model": "clario-patterns 4395c2b",
+  "model": "clario-patterns 6f1cf36",
   "backend": "cpu",
   "hardware": {
     "gpu_name": "none (CPU only, no model)",
@@ -374,5 +374,5 @@
   },
   "slack": 0.03,
   "min_support": 40,
-  "seconds": 32.9
+  "seconds": 38.9
 }
