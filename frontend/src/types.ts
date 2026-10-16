@@ -53,6 +53,7 @@ export interface ShareRequest {
 }
 
 export interface SharedEntity {
+  id?: string | null; confidence?: number | null; needs_review?: boolean;
   entry_id: string; occurred_on: string; type: EntityType; quote: string; canonical: string;
   hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; onset_hint?: string | null; reviewed: boolean;
 }
@@ -60,6 +61,7 @@ export interface SharedEntity {
 export interface SharedLab {
   test_name: string; value_numeric: number | null; value_text: string | null; unit: string; ref_low: number | null;
   ref_high: number | null; flag: LabFlag | null; date: string; page: number; entry_id: string | null; reviewed: boolean;
+  confidence?: number | null; needs_review?: boolean;
 }
 
 export interface SharePackage {
@@ -104,7 +106,7 @@ export interface PrivacyVerify { ok: boolean; broken_at: string | null; count: n
 export interface SafetyNotice { level: "emergency" | "advice"; message: string; matched: string }
 export interface VaultState { initialized: boolean; locked: boolean }
 export interface TimelineDay { date: string; entries: Entry[]; terms: Term[] }
-export interface Timeline { days: TimelineDay[]; terms: Evidence[] }
+export interface Timeline { days: TimelineDay[]; terms: Evidence[]; systems?: Record<string, string> }
 export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms: number; note: string }
 export interface ShareResult {
   package_id: string; clinic_url: string; expires_at: string; qr_payload: string; entities: number; entries: number;
@@ -153,3 +155,15 @@ export interface NextQuestion {
 export interface RankedPattern { card_id: string; label: string; score: number; rank: number }
 export interface AnswerResult { before: RankedPattern[]; after: RankedPattern[]; entry_id: string | null }
 export type Answer = "yes" | "no" | "unsure";
+
+// Clinic differential (clinician only)
+export interface ConditionFeature { hpo_id: string; label: string; count: number; freq: number | null }
+export interface Condition {
+  disease_id: string; name: string; full_name: string; signal: Signal | null; score: number; rank: number; url: string | null;
+  matched: ConditionFeature[]; missing: ConditionFeature[];
+}
+export interface ClinicQuestion { feature_id: string; label: string; question: string; ig: number; freq_by: { name: string; freq: number | null }[] }
+export interface ClinicAnswer { feature_id: string; label: string; answer: Answer; at: string }
+export interface Differential { conditions: Condition[]; question: ClinicQuestion | null; answers: ClinicAnswer[]; n_terms: number; note: string }
+export type TermDecision = "confirmed" | "rejected" | "pending";
+export interface Decisions { terms: Record<string, TermDecision>; answers: ClinicAnswer[] }

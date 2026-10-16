@@ -40,6 +40,7 @@ class DraftOut(BaseModel):
 
 
 NOT_REVIEWED = "not reviewed by a person"
+LOW_CONFIDENCE = "low-confidence reading, please check"
 SECTIONS = {"summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"}
 
 
@@ -86,8 +87,8 @@ def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
             hi = "" if rng.ref_high is None else f"{rng.ref_high:g}"
             rtxt = f"; {'intervallo stampato' if it else 'printed range'} {lo} {'a' if it else 'to'} {hi}".replace("  ", " ")
         mark = ""
-        if any(not r.reviewed for r in rows):
-            mark = f" ({'non verificato da una persona' if it else NOT_REVIEWED})"
+        if any(r.needs_review for r in rows):
+            mark = f" ({'lettura incerta, da verificare' if it else LOW_CONFIDENCE})"
         cites = sorted({r.entry_id for r in rows if r.entry_id})
         items.append(BriefItem(id=_id(), section="labs", text=f"{name}: {'; '.join(parts)}{rtxt}{mark}", cites=cites,
                                origin="patient", review="accepted"))
@@ -121,8 +122,8 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         if onset:
             extra += f"; {'esordio' if it else 'onset'}: {onset}"
         mark = ""
-        if any(not x.reviewed for x in xs):
-            mark = f" ({'non verificato da una persona' if it else NOT_REVIEWED})"
+        if any(x.needs_review for x in xs):
+            mark = f" ({'lettura incerta, da verificare' if it else LOW_CONFIDENCE})"
         rec = f"registrato {len(cites)} {'volta' if len(cites) == 1 else 'volte'}" if it else f"recorded {len(cites)}x"
         items.append(BriefItem(id=_id(), section=sec, text=f"{label}: {rec}, {_span(ds, lang)}{extra}{mark}",
                                cites=sorted(set(cites)), origin="patient", review="accepted"))

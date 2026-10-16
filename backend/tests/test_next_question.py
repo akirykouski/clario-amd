@@ -126,9 +126,7 @@ def test_real_ontology_never_asks_red_flags_or_names():
 def test_api_question_and_answer_reorders_and_is_traceable(unlocked):
     unlocked.post("/api/demo", json={"persona": "giulia"})
     wait_extracted(unlocked)
-    assert unlocked.get("/api/patterns/next-question").json() is None  # nothing confirmed yet
-    confirm_all(unlocked)
-    q = unlocked.get("/api/patterns/next-question", params={"lang": "en"}).json()
+    q = unlocked.get("/api/patterns/next-question", params={"lang": "en"}).json()  # extracted terms count without clicks
     assert q and q["question"].endswith("?") and q["ig"] > 0
     n_before = len(unlocked.get("/api/entries").json())
     r = unlocked.post("/api/patterns/answer", json={"feature_id": q["feature_id"], "answer": "yes"}).json()

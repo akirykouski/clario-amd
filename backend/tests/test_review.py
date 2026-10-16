@@ -1,5 +1,5 @@
 from conftest import confirm_all, wait_extracted
-from clario.brief import NOT_REVIEWED, patient_items
+from clario.brief import LOW_CONFIDENCE, patient_items
 from clario.models import Entry, SharedEntity, SharePackage
 from clario.review import register_review_kind
 from clario.share import build_package
@@ -26,18 +26,14 @@ def test_threshold_routes_unsure_entities_to_the_queue(unlocked):
     assert "knees ache" in item["source_excerpt"].lower() and item["entry_id"]
 
 
-def test_needs_review_does_not_count_until_a_person_confirms(unlocked):
+def test_needs_review_counts_and_stays_flagged_until_a_person_decides(unlocked):
     add_hedged_entry(unlocked)
-    confirm_all_but_queue = [x for x in unlocked.get("/api/entries").json()[0]["entities"] if x["review"] != "needs_review"]
-    for x in confirm_all_but_queue:
-        unlocked.patch(f"/api/entities/{x['id']}", json={"review": "confirmed"})
-    labels = {t["label"] for t in unlocked.get("/api/timeline").json()["terms"]}
-    assert "Arthralgia" not in labels and "Fatigue" in labels
+    labels = {t["clinical"] for t in unlocked.get("/api/timeline").json()["terms"]}
+    assert "Arthralgia" in labels and "Fatigue" in labels  # nobody has to confirm anything for terms to count
     item = queue(unlocked)["items"][0]
     r = unlocked.post(f"/api/review/entity/{item['id']}", json={"action": "confirm"}).json()
     assert r == {"ok": True, "count": 0}
-    labels = {t["label"] for t in unlocked.get("/api/timeline").json()["terms"]}
-    assert "Arthralgia" in labels
+    assert "Arthralgia" in {t["clinical"] for t in unlocked.get("/api/timeline").json()["terms"]}
     assert queue(unlocked)["count"] == 0
 
 
@@ -52,7 +48,7 @@ def test_reject_removes_the_term_from_patterns(unlocked):
         assert unlocked.post(f"/api/review/entity/{x['id']}", json={"action": "reject"}).status_code == 200
     after = unlocked.get("/api/patterns").json()
     assert after["confirmed_terms"] == before["confirmed_terms"] - 1
-    assert "Malar rash" not in {t["label"] for t in unlocked.get("/api/timeline").json()["terms"]}
+    assert "Malar rash" not in {t["clinical"] for t in unlocked.get("/api/timeline").json()["terms"]}
 
 
 def test_correct_writes_correction_log_and_updates_the_term(unlocked):
@@ -77,7 +73,7 @@ def test_correct_writes_correction_log_and_updates_the_term(unlocked):
     assert log["after"]["hpo_id"] == "HP:0001386" and log["after"]["review"] == "corrected"
     assert "knees ache" in log["source_excerpt"].lower()
     # corrected entities count as evidence
-    assert "Joint swelling" in {t["label"] for t in unlocked.get("/api/timeline").json()["terms"]}
+    assert "Joint swelling" in {t["clinical"] for t in unlocked.get("/api/timeline").json()["terms"]}
     assert b"knees" not in (unlocked.app.state.settings.data_dir / "clario.db").read_bytes().lower()  # encrypted at rest
 
 
@@ -103,24 +99,30 @@ def test_patch_review_values(unlocked):
     assert unlocked.patch(f"/api/entities/{x['id']}", json={"review": "needs_review"}).status_code == 422
 
 
-def test_brief_marks_items_not_reviewed_by_a_person():
+def test_brief_marks_only_low_confidence_items():
     def ent(**kw):
         return SharedEntity(entry_id="e1", occurred_on="2026-09-01", type="symptom", quote="q", canonical="Fatigue",
                             hpo_id="HP:0012378", **kw)
 
+    def joint(**kw):
+        return ent(**kw).model_copy(update={"canonical": "Arthralgia", "hpo_id": "HP:0002829"})
+
     pkg = SharePackage(package_id="pkg_1", patient_alias="Ash-1", created_at="x", expires_at="y", period=("a", "b"),
-                       entries=[], entities=[ent(reviewed=False), ent(),
+                       entries=[], entities=[ent(reviewed=False, needs_review=True), ent(), joint(reviewed=False),
                                              ent().model_copy(update={"canonical": "Lupus", "family_history": True})])
     texts = {i.text for i in patient_items(pkg)}
-    assert any(t.startswith("Fatigue") and NOT_REVIEWED in t for t in texts)
-    assert any(t.startswith("Family history: Lupus") and NOT_REVIEWED not in t for t in texts)
+    assert any(t.startswith("Fatigue") and LOW_CONFIDENCE in t for t in texts)
+    assert any(t.startswith("Arthralgia") and LOW_CONFIDENCE not in t for t in texts)  # unchecked but confident: no mark
+    assert any(t.startswith("Family history: Lupus") and LOW_CONFIDENCE not in t for t in texts)
 
 
-def test_share_carries_only_decided_entities(unlocked):
-    add_hedged_entry(unlocked)
+def test_share_carries_every_term_but_rejected_ones(unlocked):
+    ents = add_hedged_entry(unlocked)
     entries = [Entry.model_validate(e) for e in unlocked.get("/api/entries").json()]
-    confirm_all(unlocked)  # confirms everything including the queue item
+    pkg = build_package(entries, "2026-01-01", "2026-12-31", "a", None, [], 1)
+    assert len(pkg.entities) == 3 and not any(x.reviewed for x in pkg.entities)
+    assert [x.canonical for x in pkg.entities if x.needs_review] == ["Arthralgia"]
+    unlocked.patch(f"/api/entities/{ents[0]['id']}", json={"review": "rejected"})
     entries2 = [Entry.model_validate(e) for e in unlocked.get("/api/entries").json()]
-    assert build_package(entries, "2026-01-01", "2026-12-31", "a", None, [], 1).entities == []
-    pkg = build_package(entries2, "2026-01-01", "2026-12-31", "a", None, [], 1)
-    assert len(pkg.entities) == 3 and all(x.reviewed for x in pkg.entities)
+    pkg2 = build_package(entries2, "2026-01-01", "2026-12-31", "a", None, [], 1)
+    assert len(pkg2.entities) == 2 and ents[0]["id"] not in {x.id for x in pkg2.entities}

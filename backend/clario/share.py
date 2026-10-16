@@ -1,6 +1,6 @@
 """Patient -> clinic sharing.
 
-The patient picks a period. Only confirmed entities and the entries in that period leave the device,
+The patient picks a period. The entries in that period and their terms (never rejected ones) leave the device,
 sealed with the clinic's X25519 public key (libsodium sealed box): only the clinic server can open it.
 Packages carry an expiry; the clinic rejects expired ones and purges them.
 """
@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from nacl.public import PrivateKey, PublicKey, SealedBox
 
-from .models import COUNTED, Entity, Entry, LabResult, Pattern, SharedEntity, SharedLab, SharePackage
+from .models import COUNTED, REVIEWED, Entity, Entry, LabResult, Pattern, SharedEntity, SharedLab, SharePackage
 
 
 def now_iso() -> str:
@@ -59,13 +59,14 @@ def _clinic_copy(x: Entity) -> Entity:
 
 
 def shared_labs(labs: list[LabResult], since: str, until: str, batch_entry: dict[str, str] | None = None) -> list[SharedLab]:
-    """Lab rows in the period a person confirmed or corrected, plus confident rows nobody has looked at (marked)."""
+    """Lab rows in the period, except rejected ones. Rows nobody checked are marked; low-confidence rows ask the clinician."""
     batch_entry = batch_entry or {}
-    rows = [l for l in labs if since <= l.date <= until and l.review in (*COUNTED, "auto")]
+    rows = [l for l in labs if since <= l.date <= until and l.review in COUNTED]
     rows.sort(key=lambda l: (l.date, l.test_key, l.page))
     return [SharedLab(test_name=l.test_name, value_numeric=l.value_numeric, value_text=l.value_text, unit=l.unit,
                       ref_low=l.ref_low, ref_high=l.ref_high, flag=l.flag, date=l.date, page=l.page,
-                      entry_id=batch_entry.get(l.batch_id), reviewed=l.review in COUNTED) for l in rows]
+                      entry_id=batch_entry.get(l.batch_id), reviewed=l.review in REVIEWED, confidence=l.confidence,
+                      needs_review=l.review == "needs_review") for l in rows]
 
 
 def build_package(entries: list[Entry], since: str, until: str, patient_alias: str, note: str | None,
@@ -74,12 +75,13 @@ def build_package(entries: list[Entry], since: str, until: str, patient_alias: s
     chosen = sorted((e for e in entries if since <= e.occurred_on <= until), key=lambda e: e.occurred_on)
     shared_entities, slim = [], []
     for e in chosen:
-        confirmed = [_clinic_copy(x) for x in e.entities if x.review in COUNTED]  # a person decided; needs_review never leaves
-        shared_entities += [SharedEntity(entry_id=e.id, occurred_on=e.occurred_on, type=x.type, quote=x.quote,
+        kept = [_clinic_copy(x) for x in e.entities if x.review in COUNTED]  # rejected never leaves
+        shared_entities += [SharedEntity(id=x.id, entry_id=e.id, occurred_on=e.occurred_on, type=x.type, quote=x.quote,
                                          canonical=x.canonical, hpo_id=x.hpo_id, negated=x.negated,
                                          family_history=x.family_history, severity=x.severity, onset_hint=x.onset_hint,
-                                         reviewed=x.review in COUNTED) for x in confirmed]
-        slim.append(e.model_copy(update={"entities": confirmed}))
+                                         reviewed=x.review in REVIEWED, confidence=x.confidence,
+                                         needs_review=x.review == "needs_review") for x in kept]
+        slim.append(e.model_copy(update={"entities": kept}))
     created = datetime.now(timezone.utc)
     return SharePackage(package_id=f"pkg_{uuid.uuid4().hex[:12]}", patient_alias=patient_alias,
                         created_at=created.isoformat(timespec="seconds"),

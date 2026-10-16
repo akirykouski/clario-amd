@@ -11,7 +11,8 @@ Signal = Literal["weak", "moderate", "strong"]
 Review = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
 LabReview = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
 LabFlag = Literal["low", "high", "normal"]
-COUNTED = ("confirmed", "corrected")  # decided by a person and kept: counts toward patterns and sharing
+COUNTED = ("auto", "needs_review", "confirmed", "corrected")  # everything except rejected counts toward patterns and sharing
+REVIEWED = ("confirmed", "corrected")  # a person looked at it and kept it
 
 
 def route_review(confidence: float | None, threshold: float, *, none_means: str = "auto") -> str:
@@ -44,8 +45,9 @@ class Entity(BaseModel):
     family_history: bool = Field(False, description="'my mother has lupus' -> about a relative, not the patient")
     onset_hint: str | None = Field(None, description="ISO date or relative phrase from the text ('since Tuesday')")
     confidence: float | None = Field(None, ge=0, le=1, description="Self-consistency share, or the model's own; null if not measured")
-    review: Review = Field("auto", description="auto: not looked at; needs_review: confidence below threshold; "
-                                               "confirmed, corrected, rejected: decided by the patient")
+    review: Review = Field("auto", description="auto: counted, nobody looked at it; needs_review: counted, confidence below "
+                                               "threshold, flagged for the clinician; confirmed, corrected, rejected: decided "
+                                               "by a person (rejected never counts)")
     flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, quote_not_found")
     model: str | None = None
 
@@ -119,6 +121,7 @@ class ShareRequest(BaseModel):
 
 
 class SharedEntity(BaseModel):
+    id: str | None = Field(None, description="Entity id on the patient's device; the clinic keys its decisions on it")
     entry_id: str
     occurred_on: str
     type: EntityType
@@ -130,11 +133,13 @@ class SharedEntity(BaseModel):
     severity: int | None = None
     onset_hint: str | None = Field(None, description="Time phrase the patient wrote ('since Tuesday'); shown to the clinician")
     reviewed: bool = Field(True, description="False: no person has checked it; the brief says so")
+    confidence: float | None = Field(None, ge=0, le=1, description="Extraction confidence, null when not measured")
+    needs_review: bool = Field(False, description="Confidence below the threshold: the clinician is asked to check it")
 
 
 class SharedLab(BaseModel):
-    """One lab row in the shared period. Rows a person confirmed or corrected, or that were read with high confidence
-    (`reviewed=false`, the brief says so). needs_review and rejected rows never leave the device."""
+    """One lab row in the shared period. Every row except rejected ones; low-confidence rows carry `needs_review` so the
+    clinician checks them."""
 
     test_name: str
     value_numeric: float | None = None
@@ -147,10 +152,13 @@ class SharedLab(BaseModel):
     page: int = Field(description="Page within the imported document batch")
     entry_id: str | None = Field(None, description="The diary entry of the import, when known: what the brief cites")
     reviewed: bool = Field(True, description="False: read by the model and not checked by a person")
+    confidence: float | None = Field(None, ge=0, le=1)
+    needs_review: bool = Field(False, description="Read with low confidence: the clinician is asked to check it")
 
 
 class SharePackage(BaseModel):
-    """Decrypted payload a clinic receives. Only confirmed entities, confirmed or confident lab rows, and the selected entries.
+    """Decrypted payload a clinic receives: the entries in the period, their terms and lab rows (never rejected ones).
+    Low-confidence items carry `needs_review` for the clinician.
 
     A relative's condition (`family_history`) is shared only as family history: no HPO id, never a patient term."""
 
@@ -312,3 +320,51 @@ class AnswerResult(BaseModel):
     before: list[RankedPattern]
     after: list[RankedPattern]
     entry_id: str | None = None
+
+
+# ---------------------------------------------------------------- clinic differential (clinician only)
+class ConditionFeature(BaseModel):
+    hpo_id: str
+    label: str
+    count: int = 0
+    freq: float | None = Field(None, description="Share of described cases with the feature (HPO annotation), when known")
+
+
+class Condition(BaseModel):
+    """A condition worth considering, for the clinician. Computed in code from HPO annotations. Never shown to the patient."""
+
+    disease_id: str
+    name: str = Field(description="Family name, subtype numbers dropped")
+    full_name: str = Field("", description="Name as annotated, with the subtype number")
+    signal: Signal | None = Field(description="None: in the differential on score, not enough specific evidence for a signal")
+    score: float
+    rank: int
+    url: str | None = Field(None, description="Orphanet or OMIM page")
+    matched: list[ConditionFeature]
+    missing: list[ConditionFeature] = Field(default_factory=list, description="Common features not recorded yet")
+
+
+class ClinicQuestion(BaseModel):
+    """The finding that would best separate the conditions on screen. Clinical wording; for the clinician to ask or check."""
+
+    feature_id: str
+    label: str
+    question: str
+    ig: float
+    freq_by: list[dict] = Field(default_factory=list, description="[{name, freq}] for the conditions on screen; freq is null "
+                                                                  "when the annotation lists the feature without a frequency")
+
+
+class ClinicAnswer(BaseModel):
+    feature_id: str
+    label: str
+    answer: Literal["yes", "no", "unsure"]
+    at: str
+
+
+class Differential(BaseModel):
+    conditions: list[Condition]
+    question: ClinicQuestion | None = None
+    answers: list[ClinicAnswer] = Field(default_factory=list)
+    n_terms: int = 0
+    note: str = ""

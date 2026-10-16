@@ -19,6 +19,9 @@ export default function Today() {
   const [busy, setBusy] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [safety, setSafety] = useState<SafetyNotice | null>(null);
+  const [pii, setPii] = useState<Record<string, number>>({});
+  const n = data?.length ?? 0;
+  useEffect(() => { api.privacyCounts().then(setPii).catch(() => setPii({})); }, [n]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +77,7 @@ export default function Today() {
             <p>{t("today.emptyText")}</p>
           </Empty>
         )}
-        {entries.map((e) => <EntryCard key={e.id} initial={e} />)}
+        {entries.map((e) => <EntryCard key={e.id} initial={e} pii={pii[e.id] ?? 0} />)}
       </section>
       <DemoMenu onLoaded={reload} open={!loading && entries.length === 0} />
     </div>

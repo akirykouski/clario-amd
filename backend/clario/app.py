@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from . import brief as briefing
+from . import clinic_ddx
 from . import privacy
 from . import doc_routes
 from . import gpu as gpumetrics
@@ -33,9 +34,10 @@ from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
 from .knowledge import Ontology
 from .llm import extract_json, make_llm
-from .models import AnswerResult, Brief, Entity, Entry, LabResult, NextQuestion, ShareRequest, SharePackage, Term
+from .models import (AnswerResult, Brief, Differential, Entity, Entry, LabResult, NextQuestion, ShareRequest, SharePackage,
+                     Term)
 from .next_question import as_ranked_patterns, next_question, template_question
-from .patterns import counts_as_evidence, evidence_from, patient_patterns, score_patterns
+from .patterns import counts_as_evidence, evidence_from, patient_label, patient_patterns, score_patterns
 from .review import ACTIONS, EntityReview, apply_entity_action, correction_record, register_review_kind
 from .safety import check_entry
 from .vault import BadPassphrase, Locked, Vault
@@ -87,6 +89,16 @@ class InboxIn(BaseModel):
 class ReviewIn(BaseModel):
     review: str
     text: str | None = None
+
+
+class TermDecisionIn(BaseModel):
+    decision: str  # confirmed | rejected | pending
+
+
+class ClinicAnswerIn(BaseModel):
+    feature_id: str
+    answer: str  # yes | no | unsure
+    lang: str = "en"
 
 
 # ---------------------------------------------------------------- run bus (SSE)
@@ -166,6 +178,11 @@ def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
         if rid not in runs.runs:
             raise HTTPException(404, "run not found")
         return EventSourceResponse(runs.stream(rid), ping=10)
+
+    @app.get("/api/terms/systems")
+    def term_systems(ids: str = "") -> dict[str, str]:
+        """Organ-system key per HPO id ("skin", "joints", ...), for grouping heat map rows. Ontology only, no patient data."""
+        return {h: clinic_ddx.system_key(onto, h) for h in ids.split(",")[:200] if h.strip()}
 
     @app.exception_handler(Locked)
     async def locked_handler(_r: Request, _e: Locked):
@@ -352,6 +369,16 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         vault.put("correction_log", rid, rec)
         return {"ok": True, "count": sum(len(k.items()) for k in app.state.review_kinds.values())}
 
+    @app.get("/api/privacy/counts")
+    def privacy_counts() -> dict[str, int]:
+        """Personal details found per entry (only entries with at least one). Positions and values stay on the device."""
+        out = {}
+        for e in all_entries():
+            n = len(privacy.pseudonymize(e.text)[1])
+            if n:
+                out[e.id] = n
+        return out
+
     @app.get("/api/terms/search")
     def term_search(q: str = "", lang: str = "en"):
         """Ontology lookup. In Italian the plain Italian names we ship are searched first (labels in Italian)."""
@@ -366,17 +393,21 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return out[:10]
 
     @app.get("/api/timeline")
-    def timeline():
+    def timeline(lang: str = "en"):
+        """Days with their notes, and the patient's terms in everyday words (clinical name kept in `clinical`)."""
+        lang = norm_lang(lang)
         entries = all_entries()
         days: dict[str, dict] = {}
         for e in entries:
             d = days.setdefault(e.occurred_on, {"date": e.occurred_on, "entries": [], "terms": []})
-            d["entries"].append(e.id)
+            d["entries"].append({"id": e.id, "text": e.text, "mood": e.mood, "occurred_on": e.occurred_on})
             for x in e.entities:
                 if counts_as_evidence(x):
                     d["terms"].append({"hpo_id": x.hpo_id, "label": x.hpo_label or x.canonical})
-        terms = sorted(evidence_from(entries, onto).values(), key=lambda v: -v.count)
-        return {"days": sorted(days.values(), key=lambda d: d["date"]), "terms": terms}
+        terms = [{**t.model_dump(), "label": patient_label(onto, t.hpo_id, lang).capitalize(), "clinical": t.label}
+                 for t in sorted(evidence_from(entries, onto).values(), key=lambda v: -v.count)]
+        systems = {t["hpo_id"]: clinic_ddx.system_key(onto, t["hpo_id"]) for t in terms}
+        return {"days": sorted(days.values(), key=lambda d: d["date"]), "terms": terms, "systems": systems}
 
     @app.get("/api/patterns")
     async def patterns(lang: str = "en"):
@@ -520,7 +551,33 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             raise HTTPException(410, "This package has expired and was deleted")
         return pkg
 
+    decisions_dir = s.data_dir / "decisions"
+    decisions_dir.mkdir(parents=True, exist_ok=True)
+
+    def load_decisions(pid: str) -> dict:
+        """The clinician's decisions on one package: term checks and answers. Encrypted at rest like the briefs."""
+        f = decisions_dir / f"{safe_id(pid)}.json"
+        if not f.exists():
+            return {"terms": {}, "answers": []}
+        return json.loads(keys.open_data(f.read_bytes()))
+
+    def save_decisions(pid: str, d: dict) -> None:
+        (decisions_dir / f"{safe_id(pid)}.json").write_bytes(keys.seal_data(json.dumps(d).encode()))
+
+    def differential(pkg: SharePackage, d: dict, lang: str) -> Differential:
+        rejected = {k for k, v in d["terms"].items() if v == "rejected"}
+        entries = clinic_ddx.with_answers(pkg.entries, d["answers"], rejected)
+        answered = {a["feature_id"] for a in d["answers"]}
+        conds = clinic_ddx.conditions(onto, entries, lang)
+        q = clinic_ddx.question(onto, entries, answered, lang) if conds else None
+        n_terms = len(evidence_from(entries, onto))
+        note = "" if conds else ("Not enough specific findings yet to suggest conditions." if lang != "it"
+                                 else "Non ci sono ancora abbastanza elementi specifici per suggerire condizioni.")
+        return Differential(conditions=conds, question=q, answers=d["answers"], n_terms=n_terms, note=note)
+
     def purge(pid: str) -> None:
+        with contextlib.suppress(FileNotFoundError):
+            (decisions_dir / f"{pid}.json").unlink()
         for d in (inbox_dir, briefs_dir):
             with contextlib.suppress(FileNotFoundError):
                 (d / f"{pid}.json").unlink()
@@ -582,6 +639,60 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     @app.get("/api/inbox/{pid}")
     def get_pkg(pid: str) -> SharePackage:
         return open_pkg(pid)
+
+    @app.get("/api/inbox/{pid}/decisions")
+    def get_decisions(pid: str) -> dict:
+        open_pkg(pid)
+        return load_decisions(pid)
+
+    @app.patch("/api/inbox/{pid}/terms/{ent_id}")
+    def decide_term(pid: str, ent_id: str, body: TermDecisionIn) -> dict:
+        """The clinician confirms or rejects a term the extractor was unsure about. Rejected terms leave the differential."""
+        pkg = open_pkg(pid)
+        if body.decision not in ("confirmed", "rejected", "pending"):
+            raise HTTPException(422, "decision must be confirmed, rejected or pending")
+        if not any(x.id == ent_id for x in pkg.entities):
+            raise HTTPException(404, "term not found")
+        d = load_decisions(pid)
+        if body.decision == "pending":
+            d["terms"].pop(ent_id, None)
+        else:
+            d["terms"][ent_id] = body.decision
+        save_decisions(pid, d)
+        return d
+
+    @app.get("/api/inbox/{pid}/ddx")
+    async def get_ddx(pid: str, lang: str = "en") -> Differential:
+        pkg = open_pkg(pid)
+        d = load_decisions(pid)
+        return await asyncio.to_thread(differential, pkg, d, norm_lang(lang))
+
+    @app.post("/api/inbox/{pid}/ddx/answer")
+    async def ddx_answer(pid: str, body: ClinicAnswerIn) -> dict:
+        """Record what the clinician found, score again, and return the ranking before and after plus the next question."""
+        if body.answer not in ("yes", "no", "unsure"):
+            raise HTTPException(422, "answer must be yes, no or unsure")
+        label = onto.label(body.feature_id)
+        if label is None:
+            raise HTTPException(422, "Unknown feature")
+        pkg = open_pkg(pid)
+        lang = norm_lang(body.lang)
+        d = load_decisions(pid)
+        before = await asyncio.to_thread(differential, pkg, d, lang)
+        d["answers"] = [a for a in d["answers"] if a["feature_id"] != body.feature_id]
+        d["answers"].append({"feature_id": body.feature_id, "label": term_label(body.feature_id, label, lang),
+                             "answer": body.answer, "at": now_iso()})
+        save_decisions(pid, d)
+        after = await asyncio.to_thread(differential, pkg, d, lang)
+        return {"before": [c.model_dump() for c in before.conditions], "differential": after.model_dump()}
+
+    @app.delete("/api/inbox/{pid}/ddx/answers")
+    async def ddx_reset(pid: str, lang: str = "en") -> Differential:
+        pkg = open_pkg(pid)
+        d = load_decisions(pid)
+        d["answers"] = []
+        save_decisions(pid, d)
+        return await asyncio.to_thread(differential, pkg, d, norm_lang(lang))
 
     async def draft(rid: str, pkg: SharePackage, lang: str = "en") -> None:
         try:

@@ -1,6 +1,6 @@
 import type {
   AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
-  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState,
+  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition,
 } from "./types";
 
 export class ApiError extends Error {
@@ -59,7 +59,7 @@ export const api = {
   reviewAct: (kind: string, id: string, action: ReviewAction, value?: string) =>
     request<{ ok: boolean; count: number }>("POST", `/review/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, { body: { action, value } }),
   searchTerms: (q: string, lang?: string) => request<Term[]>("GET", "/terms/search", { params: { q, lang } }),
-  timeline: () => request<Timeline>("GET", "/timeline"),
+  timeline: (lang?: string) => request<Timeline>("GET", "/timeline", { params: { lang } }),
   gpu: () => request<Record<string, unknown> | null>("GET", "/system/gpu"),
   patterns: (lang?: string) => request<PatternsResponse>("GET", "/patterns", { params: { lang } }),
   nextQuestion: (lang: string) => request<NextQuestion | null>("GET", "/patterns/next-question", { params: { lang } }),
@@ -89,4 +89,13 @@ export const api = {
   },
   batchEventsUrl: (id: string) => buildUrl(`/documents/batch/${encodeURIComponent(id)}/events`),
   runEventsUrl: (runId: string) => buildUrl(`/runs/${encodeURIComponent(runId)}/events`),
+  privacyCounts: () => request<Record<string, number>>("GET", "/privacy/counts"),
+  termSystems: (ids: string[]) => request<Record<string, string>>("GET", "/terms/systems", { params: { ids: ids.join(",") } }),
+  ddx: (id: string, lang?: string) => request<Differential>("GET", `/inbox/${encodeURIComponent(id)}/ddx`, { params: { lang } }),
+  ddxAnswer: (id: string, b: { feature_id: string; answer: Answer; lang?: string }) =>
+    request<{ before: Condition[]; differential: Differential }>("POST", `/inbox/${encodeURIComponent(id)}/ddx/answer`, { body: b }),
+  ddxReset: (id: string, lang?: string) => request<Differential>("DELETE", `/inbox/${encodeURIComponent(id)}/ddx/answers`, { params: { lang } }),
+  decisions: (id: string) => request<Decisions>("GET", `/inbox/${encodeURIComponent(id)}/decisions`),
+  decideTerm: (id: string, entId: string, decision: TermDecision) =>
+    request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/terms/${encodeURIComponent(entId)}`, { body: { decision } }),
 };

@@ -12,6 +12,8 @@ const sectionTitle = (s: BriefSection) => `brief.section.${s}` as Key;
 
 export function jumpTo(entryId: string) {
   const el = document.getElementById(`entry-${entryId}`);
+  const box = el?.closest("details");
+  if (box) box.open = true;  // the full notes live in the collapsed details block
   if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); }
 }
 
@@ -179,7 +181,7 @@ function ItemRow({ it, locked, onReview }: { it: BriefItem; locked: boolean; onR
   const ai = it.origin === "ai";
   const tone = it.review === "accepted" || it.review === "edited" ? "var(--accent)" : it.review === "rejected" ? "var(--line)" : "var(--moderate)";
   return (
-    <li className="card text-[15px]" style={{ borderLeft: `4px solid ${tone}`, opacity: it.review === "rejected" ? 0.6 : 1 }}>
+    <li className="card !py-3 text-[15px]" style={{ borderLeft: `4px solid ${tone}`, opacity: it.review === "rejected" ? 0.6 : 1 }}>
       {editing ? (
         <div>
           <label htmlFor={`t-${it.id}`} className="label">{t("brief.editItem")}</label>
@@ -199,10 +201,11 @@ function ItemRow({ it, locked, onReview }: { it: BriefItem; locked: boolean; onR
             {it.cites.map((c, i) => <button key={c} className="chip hover:border-accent" onClick={() => jumpTo(c)} aria-label={t("brief.goTo", { n: i + 1 })}>{t("brief.entryN", { n: i + 1 })}</button>)}
           </div>
           {ai && !locked && (
-            <div className="mt-2 flex gap-2 flex-wrap">
-              <button className="btn" onClick={() => onReview(it, "accepted")} aria-pressed={it.review === "accepted"}><Check size={16} aria-hidden /> {t("brief.accept")}</button>
-              <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} aria-hidden /> {t("brief.edit")}</button>
-              <button className="btn" onClick={() => onReview(it, "rejected")} aria-pressed={it.review === "rejected"}><X size={16} aria-hidden /> {t("brief.reject")}</button>
+            <div className="mt-2 flex gap-1.5 flex-wrap">
+              <button className="btn btn-sm" onClick={() => onReview(it, "accepted")} aria-pressed={it.review === "accepted"}
+                style={it.review === "accepted" ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}><Check size={14} aria-hidden /> {t("brief.accept")}</button>
+              <button className="btn btn-sm" onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> {t("brief.edit")}</button>
+              <button className="btn btn-sm" onClick={() => onReview(it, "rejected")} aria-pressed={it.review === "rejected"}><X size={14} aria-hidden /> {t("brief.reject")}</button>
             </div>
           )}
         </>
