@@ -4,10 +4,12 @@
 #
 #   export HF_TOKEN=hf_...                      # required (Gemma weights are gated). Never written to disk.
 #   [export VLLM_API_KEY=...]                   # optional; generated into deploy/amd/.env (chmod 600) if absent
-#   deploy/amd/bootstrap.sh [--synth N] [--train] [--eval] [--bench] [--app] [--skip-smoke]
+#   deploy/amd/bootstrap.sh [--lay] [--synth N] [--train] [--eval] [--bench] [--app] [--skip-smoke]
 #
-# Stages run in this order: core (always) -> --synth -> --train -> --eval -> --bench -> --app
+# Stages run in this order: core (always) -> --lay -> --synth -> --train -> --eval -> --bench -> --app
 #   core      preflight, pull images, start vllm-big (Gemma 4 31B), wait healthy, smoke.sh
+#   --lay     train/lay_expand.py: verified everyday English phrasings per HPO term (train/lay_lexicon.json),
+#             which --synth then uses to word the symptoms (LAY_TERMS, default 800 most frequent terms)
 #   --synth N train/synth.py against vllm-big, N accepted rows, then train/prep.py
 #   --train   train/Dockerfile.rocm image, train_rocm.py on Gemma 4 E4B (LoRA r16)
 #   --eval    serve E4B + the adapter on vllm-small, train/eval.py for base and LoRA
@@ -23,16 +25,17 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 cd "$REPO"
 
-SYNTH_N=0 DO_TRAIN=0 DO_EVAL=0 DO_BENCH=0 DO_APP=0 DO_SMOKE=1
+SYNTH_N=0 DO_LAY=0 DO_TRAIN=0 DO_EVAL=0 DO_BENCH=0 DO_APP=0 DO_SMOKE=1
 while [ $# -gt 0 ]; do
   case "$1" in
+    --lay) DO_LAY=1; shift ;;
     --synth) SYNTH_N="${2:?--synth needs a number}"; shift 2 ;;
     --train) DO_TRAIN=1; shift ;;
     --eval) DO_EVAL=1; shift ;;
     --bench) DO_BENCH=1; shift ;;
     --app) DO_APP=1; shift ;;
     --skip-smoke) DO_SMOKE=0; shift ;;
-    -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown flag: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -144,6 +147,17 @@ wait_http "http://127.0.0.1:8000/health" "vllm-big" "$WAIT_SECS" vllm-big
 if [ "$DO_SMOKE" = 1 ]; then
   say "smoke test"
   BASE_URL="$BIG_URL" MODEL="$BIG_MODEL" bash "$HERE/smoke.sh"
+fi
+
+# ---------------------------------------------------------------- --lay
+if [ "${DO_LAY:-0}" = 1 ]; then
+  say "lay: everyday phrasings for ${LAY_TERMS:-800} terms from $BIG_MODEL"
+  LEXF="$REPO/train/lay_lexicon.json"
+  if [ "$FORCE" != 1 ] && [ -f "$LEXF.stats.json" ]; then
+    echo "skip: $LEXF exists (FORCE=1 to redo)"
+  else
+    pyrun train/lay_expand.py --base-url "$BIG_URL" --model "$BIG_MODEL" --api-key-env VLLM_API_KEY       --terms "${LAY_TERMS:-800}" --concurrency 32 || die "lay_expand failed: see the log above"
+  fi
 fi
 
 # ---------------------------------------------------------------- --synth

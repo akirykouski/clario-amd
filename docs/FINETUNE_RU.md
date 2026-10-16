@@ -2,7 +2,7 @@
 
 Для того, кто запускает дообучение. Читать сверху вниз. Если коротко: **поднять GPU-сервер → одна команда → проверить цифры → скопировать результаты → удалить сервер.**
 
-**Перед стартом:** сделай `git pull`. В `deploy/amd/bootstrap.sh` 16.10 исправлены пути: без этого `--train` падал с «файл не найден» уже после сборки контейнера.
+**Перед стартом:** сделай `git pull`. 16.10 в `deploy/amd/bootstrap.sh` исправлены пути (без этого `--train` падал с «файл не найден» уже после сборки контейнера) и добавлен новый этап `--lay` (бытовой словарь, см. ниже).
 
 ---
 
@@ -16,8 +16,13 @@
 **Модель.** Базовая — **Gemma 4 E4B** (`google/gemma-4-E4B-it`). Она маленькая, работает и на ноутбуке пациента. Дообучаем её LoRA-адаптером.
 
 **Откуда данные.** Готового датасета «бытовой текст → HPO» нет: проверяли, в `docs/DATA_SOURCES.md`. Поэтому **генерируем сами, метки известны заранее**:
+0. **Сначала обогащаем словарь бытовых формулировок** (`train/lay_expand.py`, этап `--lay`). В HPO на каждый термин в среднем 1,8 «бытовых» синонима, и они всё равно звучат по-врачебному. Gemma 4 31B пишет по ~10 вариантов, как термин описал бы обычный человек: подросток в переписке, пожилой человек, с привязкой к месту, с опечатками, через сравнение («my knee is so itchy», «feels like pins and needles»). Каждый вариант проходит две проверки:
+   - **код:** нет медицинских слов, нет копии термина, длина 2–9 слов;
+   - **слепая обратная проверка:** модель видит фразу и пять похожих терминов в перемешанном порядке и должна выбрать исходный.
+
+   Что не прошло, выбрасывается. Результат: `train/lay_lexicon.json`. Только английский, итальянский не трогаем.
 1. Берём болезнь из базы редких болезней (HPO + аннотации `phenotype.hpoa`, это Orphanet и OMIM).
-2. Выбираем её симптомы и бытовые формулировки к ним (`train/lay_terms.json`).
+2. Выбираем её симптомы и бытовые формулировки к ним: для английских записей из нового словаря, плюс случайный «голос» автора (подросток, пенсионер, занятой офисный работник…).
 3. Большая модель **Gemma 4 31B** на том же MI300X пишет запись дневника на английском или итальянском. Подмешиваем отрицания, родственников, жизненный шум и ловушки.
 4. Код проверяет каждую строку. Если симптомы не выражены или есть лишние, строка отбрасывается, причина записывается.
 
@@ -26,8 +31,8 @@
 **Про «сначала нагенерить семплов» — да, именно так.** Порядок такой:
 
 ```
-synth.py  →  prep.py  →  eval (база)  →  train_rocm.py (LoRA)  →  eval (LoRA)  →  сравнение
-генерация    разбиение    до обучения     дообучение              после           base vs LoRA
+lay_expand.py  →  synth.py  →  prep.py  →  eval (база)  →  train_rocm.py (LoRA)  →  eval (LoRA)  →  сравнение
+бытовой словарь   генерация    разбиение    до обучения     дообучение              после           base vs LoRA
 ```
 
 `prep.py` делит данные так, что **одна болезнь попадает только в одну часть** (train, val или test). Тест проверяет, работает ли модель на болезнях, которых она не видела.
@@ -64,7 +69,7 @@ amd-smi || rocm-smi           # должен показать MI300X
 ## 4. Вариант А (рекомендуется): одна команда
 
 ```bash
-deploy/amd/bootstrap.sh --synth 3000 --train --eval
+deploy/amd/bootstrap.sh --lay --synth 3000 --train --eval
 ```
 
 Что произойдёт по шагам. Лог пишется в `deploy/amd/logs/bootstrap-<время>.log`.
@@ -72,7 +77,8 @@ deploy/amd/bootstrap.sh --synth 3000 --train --eval
 | Этап | Что делает | Сколько (оценка) | Как понять, что всё хорошо |
 |---|---|---|---|
 | core | Проверяет GPU и Docker, качает образ vLLM, поднимает **Gemma 4 31B** (первый раз качает ~62 ГБ весов) | 30–60 мин | В логе `vllm-big healthy`, smoke-тест прошёл |
-| `--synth 3000` | `train/synth.py` генерирует 3000 принятых строк через 31B, потом `prep.py` делит их | 30–60 мин | Есть `train/data/v3/train_sft.jsonl`, `val_sft.jsonl`, `test.jsonl` и `train/data/v3/SPLIT.md` |
+| `--lay` | `train/lay_expand.py`: бытовые формулировки для 800 самых частых терминов, с проверкой (число меняется через `LAY_TERMS=...`) | 10–20 мин | Есть `train/lay_lexicon.json` и `train/lay_lexicon.json.stats.json`, в нём `phrases_per_term` примерно 4–8 |
+| `--synth 3000` | `train/synth.py` генерирует 3000 принятых строк через 31B (английские симптомы формулирует по словарю), потом `prep.py` делит их | 30–60 мин | Есть `train/data/v3/train_sft.jsonl`, `val_sft.jsonl`, `test.jsonl` и `train/data/v3/SPLIT.md` |
 | `--train` | Собирает контейнер `train/Dockerfile.rocm` и учит LoRA r16 на **E4B**, 3 эпохи, bf16 | 30–90 мин | Есть `train/out/e4b-r16/adapter/adapter_config.json` и `train/out/e4b-r16/metrics.json` |
 | `--eval` | Поднимает E4B с адаптером и прогоняет тест для базы и для LoRA | ~15 мин | Есть `eval/results/extraction_base-e4b.json` и `extraction_ft-e4b-r16.json` |
 
@@ -81,17 +87,28 @@ deploy/amd/bootstrap.sh --synth 3000 --train --eval
 **Совет:** сначала сделай пробный запуск на 300 строк, чтобы убедиться, что весь стек работает, и только потом запускай 3000. Пробный запуск занимает минут 10 поверх core:
 
 ```bash
-deploy/amd/bootstrap.sh --synth 300 --train --eval
-# всё прошло → удаляем пробные данные, адаптер и результаты eval и запускаем полный прогон
-rm -rf train/data/synth train/data/v3 train/out/e4b-r16 eval/results/extraction_*e4b*.json
-deploy/amd/bootstrap.sh --synth 3000 --train --eval
+LAY_TERMS=100 deploy/amd/bootstrap.sh --lay --synth 300 --train --eval
+# всё прошло → удаляем пробные словарь, данные, адаптер и результаты eval и запускаем полный прогон
+rm -rf train/lay_lexicon.json train/lay_lexicon.json.stats.json train/data/synth train/data/v3 train/out/e4b-r16 eval/results/extraction_*e4b*.json
+deploy/amd/bootstrap.sh --lay --synth 3000 --train --eval
 ```
 
-Без удаления адаптера и результатов eval `--train` и `--eval` пропустятся как «уже готовые» после пробного запуска.
+Без удаления словарь, адаптер и результаты eval пропустятся как «уже готовые» после пробного запуска.
 
 ---
 
 ## 5. Как читать результаты
+
+### 5.0 Словарь (`lay`)
+
+```bash
+cat train/lay_lexicon.json.stats.json            # terms_with_phrases, phrases_per_term, reasons
+python3 -c "import json,random;d=json.load(open('train/lay_lexicon.json'));[print(k, d[k][:4]) for k in random.sample(sorted(d),8)]"
+```
+
+- В `reasons`: `failed_round_trip` — фразы, которые модель не смогла сопоставить обратно с термином (это нормально, так отсеивается мусор), `clinical_word` и `clinical_label` — фразы с медицинскими словами.
+- Если `verified` меньше трети от `code_ok`, пришли файл со статистикой: значит, проверка слишком строгая или модель пишет слишком расплывчато.
+- Глазами просмотри 8 случайных терминов: фразы должны звучать как живые люди, а не как справочник.
 
 ### 5.1 Данные (`synth`)
 
@@ -141,6 +158,7 @@ scp -r root@<IP>:clario/eval/results       ./results-eval     # extraction_base-
 scp -r root@<IP>:clario/train/out/e4b-r16  ./e4b-r16          # адаптер + metrics.json
 scp    root@<IP>:clario/train/data/v3/SPLIT.md ./SPLIT.md
 scp    root@<IP>:clario/train/data/synth/synth.jsonl.stats.json ./synth-stats.json
+scp    root@<IP>:clario/train/lay_lexicon.json root@<IP>:clario/train/lay_lexicon.json.stats.json ./
 scp -r root@<IP>:clario/deploy/amd/logs    ./bootstrap-logs
 ```
 
@@ -151,6 +169,15 @@ scp -r root@<IP>:clario/deploy/amd/logs    ./bootstrap-logs
 pip install -U "huggingface_hub[cli]"   # если команды huggingface-cli нет
 huggingface-cli upload <твой-hf-аккаунт>/clario-extract-e4b-lora train/out/e4b-r16/adapter --private
 ```
+
+**Словарь тоже нужен дальше.** Скопируй `train/lay_lexicon.json` и `train/lay_lexicon.json.stats.json` к себе, закоммить их в `train/` и положи копию для приложения:
+
+```bash
+cp train/lay_lexicon.json backend/clario/data/lay_lexicon_en.json   # приложение подмешивает фразы в поиск терминов HPO
+cd backend && uv run python -m pytest -q                            # должно остаться зелёным
+```
+
+Так «my knee is so itchy» будет находить правильный термин и в самом приложении, даже без дообученной модели. Если тесты бэкенда покраснели, не клади файл в `backend/` и напиши в чат.
 
 **В репозиторий закоммитить** только JSON-результаты: `eval/results/*.json` (эти маленькие файлы — источник всех цифр в README и на слайдах). Сами данные и адаптер в git **не кладём**: `train/data/` и `train/out/` и так в `.gitignore`.
 
@@ -216,4 +243,4 @@ python eval.py --base-url http://localhost:8001/v1 --model clario-extract     --
 - **Любая цифра в README и на слайдах берётся из `eval/results/*.json`.** Нет файла, нет цифры.
 - **Сервер удалить сразу после копирования результатов.**
 
-После прогона пришли в чат четыре файла: `extraction_base-e4b.json`, `extraction_ft-e4b-r16.json`, `train_e4b-r16.json` и `synth-stats.json`. По ним заполним README и слайды.
+После прогона пришли в чат пять файлов: `extraction_base-e4b.json`, `extraction_ft-e4b-r16.json`, `train_e4b-r16.json`, `synth-stats.json` и `lay_lexicon.json.stats.json`. По ним заполним README и слайды.

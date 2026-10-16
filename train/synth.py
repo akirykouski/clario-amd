@@ -45,6 +45,13 @@ from prompt import _extract_json  # noqa: E402
 # HPO terms a patient could notice themselves: those with HPO layperson synonyms, minus the
 # metabolism, blood and immune lab branches (built from hp.json, see lay_terms.json).
 LAY: dict[str, list[str]] = json.loads((HERE / "lay_terms.json").read_text())
+# Verified everyday English phrasings per term, from lay_expand.py (optional: without the file synth works as before).
+LEX_PATH = HERE / "lay_lexicon.json"
+LEX: dict[str, list[str]] = json.loads(LEX_PATH.read_text()) if LEX_PATH.exists() else {}
+P_LEX = 0.85  # share of English symptoms worded from the lexicon; the rest keep the HPO lay synonym
+VOICES = ["a teenager texting a friend", "a retired person writing slowly and politely", "a busy office worker typing fast",
+          "someone who is not a native English speaker", "a tired person writing late at night, short and blunt",
+          "someone who writes a lot about how things feel"]
 NEG_POOL = ["HP:0001945", "HP:0002315", "HP:0012378", "HP:0002018", "HP:0002014", "HP:0002829",
             "HP:0000989", "HP:0002094", "HP:0001369", "HP:0012531"]  # fever, headache, fatigue, nausea...
 TRIGGERS = {"en": ["after a long day in the sun", "after a stressful week at work", "after a cold swim",
@@ -122,14 +129,24 @@ def plan(onto: Ontology, diseases: list, rng: random.Random, it_frac: float = 0.
     onset = dict(zip(rng.sample(present, n_on), rng.sample(ONSET[lang], n_on)))
     n_sev = min(len(present), rng.choice([0, 1, 1, 2]))
     severity = dict(zip(rng.sample(present, n_sev), rng.sample(range(1, 11), n_sev)))
-    return {"disease": d.id, "lang": lang, "kind": "clinical", "present": present, "absent": neg,
-            "family": family, "onset": onset, "severity": severity, "events": events,
-            "trigger": rng.choice(TRIGGERS[lang]) if rng.random() < 0.35 else None,
-            "days": rng.choice([1, 1, 1, 2, 3])}
+    out = {"disease": d.id, "lang": lang, "kind": "clinical", "present": present, "absent": neg,
+           "family": family, "onset": onset, "severity": severity, "events": events,
+           "trigger": rng.choice(TRIGGERS[lang]) if rng.random() < 0.35 else None,
+           "days": rng.choice([1, 1, 1, 2, 3])}
+    if lang == "en" and LEX:  # wording and voice from the verified lexicon (English only)
+        say = {t: rng.choice(LEX[t]) for t in present + [f["id"] for f in family] if t in LEX and rng.random() < P_LEX}
+        if say:
+            out["say"] = say
+        if rng.random() < 0.6:
+            out["voice"] = rng.choice(VOICES)
+    return out
 
 
 def user_prompt(onto: Ontology, p: dict) -> str:
     def line(t):
+        say = p.get("say", {}).get(t)
+        if say:
+            return f'- {t}: {onto.label(t)} (patient wording, use it or something very close: "{say}")'
         syn = ", ".join(LAY.get(t, onto.synonyms(t))[:3])
         return f'- {t}: {onto.label(t)}' + (f" (also: {syn})" if syn else "")
     lang = "Italian" if p["lang"] == "it" else "English"
@@ -138,8 +155,10 @@ def user_prompt(onto: Ontology, p: dict) -> str:
             f"Language: {lang}. One day. The patient has NO health complaint today and mentions NO symptom, pain, "
             "tiredness, sickness, medicine or doctor. It is an ordinary diary entry about everyday life.",
             "Mention these everyday events in passing:", *[f"- {e}" for e in p["events"]]])
-    parts = [f"Language: {lang}. Covers {p['days']} day(s); if more than one, start each day with a short date like 'Mon 3 Mar'.",
-             "Symptoms the patient HAS (describe in lay words):", *map(line, p["present"])]
+    parts = [f"Language: {lang}. Covers {p['days']} day(s); if more than one, start each day with a short date like 'Mon 3 Mar'."]
+    if p.get("voice"):
+        parts.append(f"Voice: write it as {p['voice']}.")
+    parts += ["Symptoms the patient HAS (describe in lay words):", *map(line, p["present"])]
     if p["absent"]:
         parts += ["Symptoms the patient explicitly says they do NOT have (negate them, e.g. 'no fever'):",
                   *map(line, p["absent"])]
@@ -251,7 +270,7 @@ def offline_reply(onto: Ontology, p: dict) -> dict:
         bits += [(e[0].upper() + e[1:] + ".") for e in p["events"]]
         return {"diary": " ".join(bits), "mentions": []}
     for t in p["present"]:
-        q = _lay(onto, t)
+        q = p.get("say", {}).get(t) or _lay(onto, t)
         s = f"Ho notato {q}" if it else f"I noticed {q}"
         if t in p["onset"]:
             s += " " + p["onset"][t]
@@ -264,7 +283,7 @@ def offline_reply(onto: Ontology, p: dict) -> dict:
         bits.append((f"Per fortuna niente {q}." if it else f"At least no {q}."))
         mentions.append({"id": t, "quote": q})
     for f in p["family"]:
-        q = _lay(onto, f["id"])
+        q = p.get("say", {}).get(f["id"]) or _lay(onto, f["id"])
         bits.append(f"{f['relation'][0].upper() + f['relation'][1:]} {'ha' if it else 'has'} {q}.")
         mentions.append({"id": f["id"], "quote": q})
     for e in p["events"]:
