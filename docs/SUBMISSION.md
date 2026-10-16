@@ -70,7 +70,7 @@ Before text reaches a remote model, Clario replaces direct identifiers with plac
 | Cover image | 1920 x 1080 PNG | brief above, real screenshots | TODO: design |
 | Demo video | 2:30 to 3:00, uploaded, link | `docs/VIDEO_SCRIPT.md` | TODO: record after the AMD run |
 | Slides | 10 slides, PDF | `docs/PITCH.md` outline | TODO: build |
-| Public GitHub repo | Public URL, containerised, keys in env only | `Dockerfile`, `deploy/amd/`, `.env.example` | TODO: confirm no secrets in history, choose licence, make public |
+| Public GitHub repo | Public URL, containerised, keys in env only | `Dockerfile`, `deploy/amd/`, `.env.example` | MIT (`LICENSE`). TODO: confirm no secrets in history, make public |
 | App URL | Patient app `https://<ip>.sslip.io`, clinic console `https://clinic.<ip>.sslip.io` | `deploy/amd/bootstrap.sh --app` output | TODO: needs a real MI300X run |
 | Measured numbers in README, video and slides | Only from result files. Today `eval/results/pii_leak.json` (10.8% miss rate held out; 5.8% after fixes chosen by reading test failures; n = 712) and `eval/results/pattern_calibration.json` (CPU ranking calibration, n = 1200) exist | `eval/results/*.json`, `bench/results/*.json`, `train/out/*/metrics.json` | TODO: measured on the AMD droplet by `deploy/amd/bootstrap.sh --all --app`, then fill README placeholders |
 | Safety explanation (Track 2) | Five items mapped to mechanisms | README "How we handle safety", `docs/COMPLIANCE.md` | ready |

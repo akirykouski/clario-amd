@@ -177,7 +177,7 @@ vLLM never gets a public port. The demo instances set `CLARIO_DEMO_INSTANCE=1`, 
 
 | Component | Licence and notes |
 |---|---|
-| This repository | `{{REPO_LICENCE}}` (decide before publishing) |
+| This repository | MIT, see `LICENSE` (Copyright (c) 2026 Clario contributors). The third-party components below keep their own licences |
 | Human Phenotype Ontology (hp.json, phenotype.hpoa) | HPO licence: use with citation and version, no alteration of the files. The app ships a derived index (`backend/clario/data/knowledge.json.gz`) built from a pinned release. Cite: Gargano et al., The Human Phenotype Ontology in 2024, Nucleic Acids Res. https://hpo.jax.org |
 | Orphanet annotations (ORPHA entries inside phenotype.hpoa) and OMIM annotations | Reached through the HPO annotation file. Orphanet is credited as a source of rare disease data ( https://www.orpha.net ). OMIM is a trademark of Johns Hopkins University ( https://omim.org ). No OMIM full text is included |
 | Gemma 4 | Used under the licence printed on each model card (the 26B-A4B card lists Apache 2.0; TODO verify the 31B and E4B cards before publishing). Model ids `google/gemma-4-31B-it`, `google/gemma-4-E4B-it`. Weights are downloaded by the user with their own Hugging Face acceptance and are not in this repository. LoRA adapters derived from Gemma carry the Gemma terms |
