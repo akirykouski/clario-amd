@@ -1,223 +1,178 @@
-# Дообучение модели Clario на AMD MI300X: инструкция
+# Дообучение модели Clario: инструкция (своя видеокарта или Kaggle)
 
-Для того, кто запускает дообучение. Читать сверху вниз. Если коротко: **поднять GPU-сервер → одна команда → проверить цифры → скопировать результаты → удалить сервер.**
+Для того, кто дообучает модель. **На входе** — датасет из `docs/ENRICHMENT_RU.md` (папка `train/data/v3/`). **На выходе** — LoRA-адаптер и честное сравнение «база против дообученной».
 
-**Перед стартом:** сделай `git pull`. 16.10 в `deploy/amd/bootstrap.sh` исправлены пути (без этого `--train` падал с «файл не найден» уже после сборки контейнера) и добавлен новый этап `--lay` (бытовой словарь, см. ниже).
+```
+оценка базы  →  дообучение (LoRA, 4 бита)  →  оценка дообученной  →  сравнение  →  отдать результаты
+```
+
+**Перед стартом:** `git pull`. 16.10 в `train/train_rocm.py` добавлен режим для карт на 16 ГБ (`--load-in-4bit`, точность выбирается сама), а в `train/eval.py` — оценка прямо на видеокарте (`--hf-model`), без всякого API.
 
 ---
 
-## 1. Что мы дообучаем и зачем (за 2 минуты)
+## 1. Что дообучаем (1 минута)
 
-**Задача модели.** Пациент пишет бытовым языком: *«Mi fanno male le ginocchia la mattina, niente febbre, mia madre ha il lupus»* («по утрам болят колени, температуры нет, у мамы волчанка»). Модель должна вернуть JSON по контракту `backend/clario/schemas/extraction_v3.json`:
-- дословную цитату;
-- клинический термин и его ID в онтологии HPO;
-- отметки отрицания («температуры нет»), семейного анамнеза («у мамы»), начала и тяжести симптома.
-
-**Модель.** Базовая — **Gemma 4 E4B** (`google/gemma-4-E4B-it`). Она маленькая, работает и на ноутбуке пациента. Дообучаем её LoRA-адаптером.
-
-**Откуда данные.** Готового датасета «бытовой текст → HPO» нет: проверяли, в `docs/DATA_SOURCES.md`. Поэтому **генерируем сами, метки известны заранее**:
-0. **Сначала обогащаем словарь бытовых формулировок** (`train/lay_expand.py`, этап `--lay`). В HPO на каждый термин в среднем 1,8 «бытовых» синонима, и они всё равно звучат по-врачебному. Gemma 4 31B пишет по ~10 вариантов, как термин описал бы обычный человек: подросток в переписке, пожилой человек, с привязкой к месту, с опечатками, через сравнение («my knee is so itchy», «feels like pins and needles»). Каждый вариант проходит две проверки:
-   - **код:** нет медицинских слов, нет копии термина, длина 2–9 слов;
-   - **слепая обратная проверка:** модель видит фразу и пять похожих терминов в перемешанном порядке и должна выбрать исходный.
-
-   Что не прошло, выбрасывается. Результат: `train/lay_lexicon.json`. Только английский, итальянский не трогаем.
-1. Берём болезнь из базы редких болезней (HPO + аннотации `phenotype.hpoa`, это Orphanet и OMIM).
-2. Выбираем её симптомы и бытовые формулировки к ним: для английских записей из нового словаря, плюс случайный «голос» автора (подросток, пенсионер, занятой офисный работник…).
-3. Большая модель **Gemma 4 31B** на том же MI300X пишет запись дневника на английском или итальянском. Подмешиваем отрицания, родственников, жизненный шум и ловушки.
-4. Код проверяет каждую строку. Если симптомы не выражены или есть лишние, строка отбрасывается, причина записывается.
-
-Так правильный ответ известен до генерации, а не угадывается моделью-учителем. Это главное отличие от прошлого раза.
-
-**Про «сначала нагенерить семплов» — да, именно так.** Порядок такой:
-
-```
-lay_expand.py  →  synth.py  →  prep.py  →  eval (база)  →  train_rocm.py (LoRA)  →  eval (LoRA)  →  сравнение
-бытовой словарь   генерация    разбиение    до обучения     дообучение              после           base vs LoRA
-```
-
-`prep.py` делит данные так, что **одна болезнь попадает только в одну часть** (train, val или test). Тест проверяет, работает ли модель на болезнях, которых она не видела.
+- **Модель:** Gemma 4 E4B (`google/gemma-4-E4B-it`), маленькая и рассчитана на работу на устройстве пациента.
+- **Задача:** запись дневника на бытовом языке → JSON по контракту `backend/clario/schemas/extraction_v3.json`. В нём дословная цитата, медицинский термин и его ID в HPO, а также отметки «нет симптома», «у родственника», начало и тяжесть.
+- **Способ:** QLoRA. Базовая модель загружается в 4 битах, учится маленький адаптер (rank 16). Так всё влезает в 16 ГБ видеопамяти. В прошлый раз было так же, но на 343 примерах, теперь их около 2400 и они качественнее.
 
 ---
 
 ## 2. Что нужно заранее
 
-- [ ] **Доступ к AMD Developer Cloud** (https://devcloud.amd.com) с кредитами (~$100), добавлен SSH-ключ.
-- [ ] **Токен Hugging Face** (read-only), и на страницах моделей нажато **«принять лицензию»**:
-  - https://huggingface.co/google/gemma-4-31B-it
-  - https://huggingface.co/google/gemma-4-E4B-it
-
-  Без этого скачивание весов упадёт с 401/403.
-- [ ] **Бюджет.** MI300X стоит примерно **$2/час**, и **выключение сервера не останавливает оплату**, его нужно **удалить**. Полный прогон этой инструкции занимает около 2,5–4,5 часа, то есть примерно $5–9.
+- [ ] **Датасет:** папка `v3` от того, кто делал обогащение (`train.jsonl`, `val.jsonl`, `test.jsonl`, `train_sft.jsonl`, `val_sft.jsonl`, `test_sft.jsonl`, `SPLIT.md`).
+- [ ] **Hugging Face:** read-токен, и на https://huggingface.co/google/gemma-4-E4B-it нажато «принять лицензию». Без этого скачивание упадёт с 401/403.
+- [ ] **Видеокарта:**
+  - **Вариант А, своя NVIDIA карта** от 16 ГБ, лучше серии RTX 30xx и новее (там есть bf16). **Рекомендуется.**
+  - **Вариант Б, Kaggle:** бесплатная T4 на 16 ГБ, до 30 часов в неделю. На T4 нет bf16, только fp16: работает, но медленнее и капризнее (см. раздел 8).
 
 ---
 
-## 3. Поднять сервер
+## 3. Вариант А: своя видеокарта
 
-1. https://devcloud.amd.com → **Create GPU Droplet** → **1× MI300X**, образ **ROCm** или **vLLM Quick Start** (там уже есть Docker).
-2. Firewall: входящие только 22 (твой IP), 80 и 443.
-3. Подключиться:
+**3.1 Окружение (один раз)**
 
-```bash
-ssh root@<IP_СЕРВЕРА>
-git clone https://github.com/akirykouski/clario-amd.git clario && cd clario
-export HF_TOKEN=hf_...        # только в переменную окружения, никогда не в файл и не в git
-amd-smi || rocm-smi           # должен показать MI300X
+```powershell
+git clone https://github.com/akirykouski/clario-amd.git   # или git pull, если уже есть
+cd clario-amd\train
+python -m venv .venv-train
+.\.venv-train\Scripts\activate                              # macOS/Linux: source .venv-train/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cu128   # версию CUDA подбери: https://pytorch.org/get-started/locally/
+pip install -r requirements-cuda.txt
+huggingface-cli login                                       # вставить HF read-токен
+python -c "import torch;print(torch.cuda.get_device_name(0), torch.cuda.is_bf16_supported())"
 ```
+
+**3.2 Датасет:** положи полученную папку так, чтобы был путь `clario-amd/train/data/v3/train_sft.jsonl`.
+
+**3.3 Пробный прогон (10–15 минут):** проверяет, что весь стек работает.
+
+```powershell
+python eval.py --hf-model google/gemma-4-E4B-it --load-in-4bit --label smoke-base --limit 5
+python train_rocm.py --model google/gemma-4-E4B-it --out out/smoke --epochs 0.05 --load-in-4bit --bsz 2 --grad-accum 4
+python eval.py --hf-model google/gemma-4-E4B-it --adapter out/smoke/adapter --load-in-4bit --label smoke-ft --limit 5
+```
+
+Всё прошло без ошибок → удали пробное: `out/smoke`, `../eval/results/extraction_smoke-*.json`, `../eval/results/train_smoke.json`.
+
+**3.4 Основной прогон**
+
+```powershell
+# 1. база: как модель справляется без дообучения (примерно 20–40 мин)
+python eval.py --hf-model google/gemma-4-E4B-it --load-in-4bit --label base-e4b --confidence
+
+# 2. дообучение (примерно 1–2 часа на RTX)
+python train_rocm.py --model google/gemma-4-E4B-it --out out/e4b-r16 --epochs 2 --load-in-4bit --bsz 2 --grad-accum 8
+
+# 3. дообученная модель на том же тесте
+python eval.py --hf-model google/gemma-4-E4B-it --adapter out/e4b-r16/adapter --load-in-4bit --label ft-e4b-r16 --confidence
+```
+
+`--confidence` просит модель вернуть уверенность. Из этого потом строится график «сколько терминов уходит врачу на проверку».
 
 ---
 
-## 4. Вариант А (рекомендуется): одна команда
+## 4. Вариант Б: Kaggle
 
-```bash
-deploy/amd/bootstrap.sh --lay --synth 3000 --train --eval
+**4.1 Настройка ноутбука**
+1. Kaggle → **Create → New Notebook**.
+2. Справа в **Settings**: Accelerator **GPU T4 x2** (используется одна), **Internet: On**.
+3. **Add-ons → Secrets** → добавь `HF_TOKEN` со своим read-токеном.
+4. **Add Input** → твой приватный Kaggle Dataset с папкой `v3`.
+
+**4.2 Ячейки ноутбука по порядку**
+
+```python
+!git clone https://github.com/akirykouski/clario-amd.git
+%cd clario-amd/train
+!pip install -q -U -r requirements-cuda.txt
+```
+```python
+from kaggle_secrets import UserSecretsClient
+import os
+os.environ["HF_TOKEN"] = UserSecretsClient().get_secret("HF_TOKEN")
+```
+```python
+# путь к датасету посмотри в правой панели (Input); обычно /kaggle/input/<имя-датасета>/v3
+!mkdir -p data && cp -r /kaggle/input/<имя-датасета>/v3 data/v3 && ls data/v3
+```
+```python
+!python eval.py --hf-model google/gemma-4-E4B-it --load-in-4bit --label smoke-base --limit 5
+!python train_rocm.py --model google/gemma-4-E4B-it --out out/smoke --epochs 0.05 --load-in-4bit --bsz 2 --grad-accum 4
 ```
 
-Что произойдёт по шагам. Лог пишется в `deploy/amd/logs/bootstrap-<время>.log`.
+Пробный прогон прошёл → основной:
 
-| Этап | Что делает | Сколько (оценка) | Как понять, что всё хорошо |
-|---|---|---|---|
-| core | Проверяет GPU и Docker, качает образ vLLM, поднимает **Gemma 4 31B** (первый раз качает ~62 ГБ весов) | 30–60 мин | В логе `vllm-big healthy`, smoke-тест прошёл |
-| `--lay` | `train/lay_expand.py`: бытовые формулировки для 800 самых частых терминов, с проверкой (число меняется через `LAY_TERMS=...`) | 10–20 мин | Есть `train/lay_lexicon.json` и `train/lay_lexicon.json.stats.json`, в нём `phrases_per_term` примерно 4–8 |
-| `--synth 3000` | `train/synth.py` генерирует 3000 принятых строк через 31B (английские симптомы формулирует по словарю), потом `prep.py` делит их | 30–60 мин | Есть `train/data/v3/train_sft.jsonl`, `val_sft.jsonl`, `test.jsonl` и `train/data/v3/SPLIT.md` |
-| `--train` | Собирает контейнер `train/Dockerfile.rocm` и учит LoRA r16 на **E4B**, 3 эпохи, bf16 | 30–90 мин | Есть `train/out/e4b-r16/adapter/adapter_config.json` и `train/out/e4b-r16/metrics.json` |
-| `--eval` | Поднимает E4B с адаптером и прогоняет тест для базы и для LoRA | ~15 мин | Есть `eval/results/extraction_base-e4b.json` и `extraction_ft-e4b-r16.json` |
-
-Повторный запуск **пропускает готовые этапы**. Если что-то упало посередине, исправь и запусти ту же команду ещё раз. `FORCE=1` переделывает всё заново.
-
-**Совет:** сначала сделай пробный запуск на 300 строк, чтобы убедиться, что весь стек работает, и только потом запускай 3000. Пробный запуск занимает минут 10 поверх core:
-
-```bash
-LAY_TERMS=100 deploy/amd/bootstrap.sh --lay --synth 300 --train --eval
-# всё прошло → удаляем пробные словарь, данные, адаптер и результаты eval и запускаем полный прогон
-rm -rf train/lay_lexicon.json train/lay_lexicon.json.stats.json train/data/synth train/data/v3 train/out/e4b-r16 eval/results/extraction_*e4b*.json
-deploy/amd/bootstrap.sh --lay --synth 3000 --train --eval
+```python
+!python eval.py --hf-model google/gemma-4-E4B-it --load-in-4bit --label base-e4b --confidence --limit 150
+!python train_rocm.py --model google/gemma-4-E4B-it --out out/e4b-r16 --epochs 2 --load-in-4bit --bsz 2 --grad-accum 8
+!python eval.py --hf-model google/gemma-4-E4B-it --adapter out/e4b-r16/adapter --load-in-4bit --label ft-e4b-r16 --confidence --limit 150
 ```
 
-Без удаления словарь, адаптер и результаты eval пропустятся как «уже готовые» после пробного запуска.
+`--limit 150`: на T4 генерация медленная, 150 тестовых записей хватит для сравнения. В README честно пишем `n=150`.
+
+**4.3 Сохранить результат:** сессия Kaggle исчезает после закрытия.
+
+```python
+!mkdir -p /kaggle/working/out && cp -r out/e4b-r16 /kaggle/working/out/ && cp -r ../eval/results /kaggle/working/results
+```
+
+Потом справа **Output** → скачать `out/e4b-r16` (адаптер) и `results`.
+
+Сессия Kaggle ограничена 12 часами. При обрыве `train_rocm.py` сохраняет чекпоинт каждую эпоху в `out/e4b-r16/checkpoint-*`.
 
 ---
 
-## 5. Как читать результаты
+## 5. Дополнительно: сравнение с Gemma 4 31B на AMD (с ноутбука, 5 минут)
 
-### 5.0 Словарь (`lay`)
+Сильная строка для слайда: «маленькая дообученная модель на устройстве против большой Gemma 4 31B на AMD». Запускается с любого компьютера через Token Factory, переменные `TF_API_KEY` и `TF_BASE_URL` см. в `docs/ENRICHMENT_RU.md`:
 
-```bash
-cat train/lay_lexicon.json.stats.json            # terms_with_phrases, phrases_per_term, reasons
-python3 -c "import json,random;d=json.load(open('train/lay_lexicon.json'));[print(k, d[k][:4]) for k in random.sample(sorted(d),8)]"
+```powershell
+cd clario-amd\train
+uv run --project ../backend python eval.py --base-url $env:TF_BASE_URL --api-key-env TF_API_KEY --model Gemma-4-31B-IT --label tf-gemma4-31b --backend amd-token-factory --confidence --concurrency 2 --limit 150
 ```
 
-- В `reasons`: `failed_round_trip` — фразы, которые модель не смогла сопоставить обратно с термином (это нормально, так отсеивается мусор), `clinical_word` и `clinical_label` — фразы с медицинскими словами.
-- Если `verified` меньше трети от `code_ok`, пришли файл со статистикой: значит, проверка слишком строгая или модель пишет слишком расплывчато.
-- Глазами просмотри 8 случайных терминов: фразы должны звучать как живые люди, а не как справочник.
+Лимиты ключа общие на команду: не запускай одновременно с генерацией данных.
 
-### 5.1 Данные (`synth`)
+---
 
-```bash
-cat train/data/synth/synth.jsonl.stats.json   # сколько принято и отброшено и почему
-cat train/data/v3/SPLIT.md                    # train/val/test, болезни не пересекаются
-```
+## 6. Как читать результаты
 
-Если отбрасывается больше ~50%, пришли файл со статистикой. Значит, модель плохо следует инструкции, и стоит смотреть промпт.
-
-### 5.2 Обучение (`train`)
-
-```bash
-cat train/out/e4b-r16/metrics.json   # train_wall_s, tokens_per_s, peak_mem_gb, train_loss
-```
-
-- **Loss должен падать** (`log_history` внутри файла).
-- Для E2B/E4B лосс порядка **13–15** считается нормальным (это особенность Gemma 4 по данным Unsloth). Для 26B/31B норма **1–3**.
-
-### 5.3 Сравнение моделей (`eval`), главное
-
-```bash
-python3 -c "import json;[print(l, {k: json.load(open(f'eval/results/extraction_{l}.json')).get(k) for k in ('entity_f1','hpo_id_accuracy','json_validity_rate','quote_grounding_rate','n')}) for l in ('base-e4b','ft-e4b-r16')]"
+```powershell
+cd clario-amd
+python -c "import json;[print(l, {k: json.load(open(f'eval/results/extraction_{l}.json')).get(k) for k in ('entity_f1','hpo_id_accuracy','negation_accuracy','json_validity_rate','quote_grounding_rate','n')}) for l in ('base-e4b','ft-e4b-r16','tf-gemma4-31b')]"
+python -c "import json;m=json.load(open('eval/results/train_e4b-r16.json'));print({k:m.get(k) for k in ('train_wall_s','train_loss','peak_mem_gb','gpu','precision')})"
 ```
 
 | Метрика | Что значит | Хотим |
 |---|---|---|
 | `entity_f1` | Насколько точно найдены симптомы | ft заметно выше base |
-| `hpo_id_accuracy` | Правильный ли ID в онтологии | ft выше base |
-| `json_validity_rate` | Доля ответов в правильном JSON | около 1.0 |
+| `hpo_id_accuracy` | Правильный ли ID термина | ft выше base |
+| `negation_accuracy` | «Температуры нет» не путается с температурой | высоко |
+| `json_validity_rate` | Ответ в правильном JSON | около 1.0 |
 | `quote_grounding_rate` | Цитата действительно есть в тексте | около 1.0 |
 
-**Правило решения.** Подключаем дообученную модель в демо, только если **ft лучше base** по F1 и HPO. Если нет, остаёмся на базовой Gemma 4 E4B, а результат честно показываем как есть.
+**Правило решения:** дообученную модель берём, только если она **лучше базы** по F1 и HPO. Если нет, честно показываем как есть.
 
-### 5.4 ⚠️ Если на выходе мусор
-
-Известная проблема Gemma 4 E2B/E4B: при выключенном кэше (`use_cache=False`) модель может отвечать бессмыслицей, см. `train/README.md`, раздел «Unsloth Gemma 4 gotchas». Если `json_validity_rate` у ft около 0, а у base нормальный, причина скорее всего здесь. Пришли лог, разберём.
+**Лосс при обучении:** для E4B по данным Unsloth нормально около 13–15, главное, чтобы он **падал** (`log_history` в `out/e4b-r16/metrics.json`).
 
 ---
 
-## 6. Обязательно: забрать результаты и удалить сервер
+## 7. Отдать результаты
 
-**С ноутбука** (не с сервера) скопировать:
-
-```bash
-scp -r root@<IP>:clario/eval/results       ./results-eval     # extraction_base-e4b.json, extraction_ft-e4b-r16.json, train_e4b-r16.json
-scp -r root@<IP>:clario/train/out/e4b-r16  ./e4b-r16          # адаптер + metrics.json
-scp    root@<IP>:clario/train/data/v3/SPLIT.md ./SPLIT.md
-scp    root@<IP>:clario/train/data/synth/synth.jsonl.stats.json ./synth-stats.json
-scp    root@<IP>:clario/train/lay_lexicon.json root@<IP>:clario/train/lay_lexicon.json.stats.json ./
-scp -r root@<IP>:clario/deploy/amd/logs    ./bootstrap-logs
-```
-
-**Адаптер сохранить на Hugging Face.** Он понадобится позже для демо, а сервер мы удалим:
-
-```bash
-# на сервере, пока он жив (токен должен иметь право записи; можно отдельный)
-pip install -U "huggingface_hub[cli]"   # если команды huggingface-cli нет
-huggingface-cli upload <твой-hf-аккаунт>/clario-extract-e4b-lora train/out/e4b-r16/adapter --private
-```
-
-**Словарь тоже нужен дальше.** Скопируй `train/lay_lexicon.json` и `train/lay_lexicon.json.stats.json` к себе, закоммить их в `train/` и положи копию для приложения:
-
-```bash
-cp train/lay_lexicon.json backend/clario/data/lay_lexicon_en.json   # приложение подмешивает фразы в поиск терминов HPO
-cd backend && uv run python -m pytest -q                            # должно остаться зелёным
-```
-
-Так «my knee is so itchy» будет находить правильный термин и в самом приложении, даже без дообученной модели. Если тесты бэкенда покраснели, не клади файл в `backend/` и напиши в чат.
-
-**В репозиторий закоммитить** только JSON-результаты: `eval/results/*.json` (эти маленькие файлы — источник всех цифр в README и на слайдах). Сами данные и адаптер в git **не кладём**: `train/data/` и `train/out/` и так в `.gitignore`.
-
-Потом:
-1. В панели AMD Developer Cloud → **Destroy droplet**. Не Power off, именно Destroy.
-2. Проверить в панели, что сервер исчез и списание остановилось.
-
----
-
-## 7. Вариант Б: вручную по шагам (если bootstrap упал и нужно разобраться)
-
-Подробно описано в `train/README.md`, раздел «MI300X droplet, step by step». Коротко:
-
-```bash
-# 1. контейнер для обучения
-cd train
-docker build -f Dockerfile.rocm -t clario-train .
-docker run -it --rm --device=/dev/kfd --device=/dev/dri --group-add video --ipc=host --shm-size 64G \
-  --security-opt seccomp=unconfined -v $PWD:/workspace/train -v $HOME/hf-cache:/workspace/hf-cache -e HF_TOKEN clario-train
-python -c "import torch;print(torch.__version__, torch.version.hip, torch.cuda.get_device_name(0))"   # должен показать MI300X
-
-# 2. генерация (нужен поднятый vLLM с Gemma 4 31B на :8000, его поднимает bootstrap core)
-python synth.py --base-url http://localhost:8000/v1 --model google/gemma-4-31B-it --api-key-env VLLM_API_KEY --n 3000 --concurrency 32
-python prep.py
-
-# 3. обучение
-python train_rocm.py --model google/gemma-4-E4B-it --out out/e4b-r16 --epochs 3 --bf16
-
-# 4. оценка (vLLM с адаптером)
-vllm serve google/gemma-4-E4B-it --enable-lora --max-lora-rank 16 --lora-modules clario-extract=out/e4b-r16/adapter --max-model-len 8192 --port 8001
-python eval.py --base-url http://localhost:8001/v1 --model google/gemma-4-E4B-it --label base-e4b --backend vllm-rocm-mi300x --confidence
-python eval.py --base-url http://localhost:8001/v1 --model clario-extract     --label ft-e4b-r16 --backend vllm-rocm-mi300x --confidence
-```
-
-`--confidence` просит модель вернуть уверенность. Из этого строится график «сколько терминов уходит врачу на проверку при допустимой ошибке 1/2/5%»: `python ../eval/review_curve.py`. Это сильная цифра для питча, если успеваем.
-
-**Если остаётся время и кредиты** (не обязательно):
-- **Больше данных:** `--synth 10000`.
-- **Модель побольше:** `--model google/gemma-4-26B-A4B-it` (MoE), см. шаг 7 в `train/README.md`.
-- **GRPO с наградой за калибровку** (`train_grpo.py`, шаг 9 в `train/README.md`). Это рискованно по времени.
+1. **В git** (маленькие JSON, источник всех цифр в README и на слайдах):
+   ```powershell
+   git add eval/results/extraction_base-e4b.json eval/results/extraction_ft-e4b-r16.json eval/results/train_e4b-r16.json
+   git add eval/results/extraction_tf-gemma4-31b.json     # если делал раздел 5
+   git commit -m "Fine-tune results: base vs LoRA (Gemma 4 E4B)"
+   git push
+   ```
+2. **Адаптер на Hugging Face** (в git **не кладём**, он большой):
+   ```powershell
+   huggingface-cli upload <твой-hf-аккаунт>/clario-extract-e4b-lora train/out/e4b-r16/adapter --private
+   ```
+   Для загрузки нужен токен с правом записи.
+3. **Скинь в чат:** три файла результатов и строчку «на чём учил» (видеокарта или Kaggle T4, время).
 
 ---
 
@@ -225,22 +180,20 @@ python eval.py --base-url http://localhost:8001/v1 --model clario-extract     --
 
 | Симптом | Что сделать |
 |---|---|
-| 401/403 при скачивании модели | Не принята лицензия Gemma на HF или не экспортирован `HF_TOKEN` |
-| vLLM падает на старте из-за attention | `export VLLM_ATTENTION_BACKEND=TRITON_ATTN` и перезапустить bootstrap |
-| Образ vLLM не запускает Gemma 4 | `export VLLM_IMAGE=vllm/vllm-openai-rocm:latest` |
-| Модель долго грузится, таймаут | `export WAIT_SECS=4000`; логи: `docker compose -f deploy/amd/docker-compose.yml logs vllm-big` |
-| vLLM не принимает LoRA-адаптер | Обучить с `--merge` и подать склеенную модель `train/out/e4b-r16/merged` (см. Troubleshooting в `deploy/amd/README.md`) |
-| Нехватка памяти GPU (OOM) | Убедиться, что `vllm-small` остановлен во время обучения (bootstrap делает это сам); уменьшить `--max-len` |
-| `json_validity_rate` у ft около 0 | См. раздел 5.4 (кэш у Gemma 4 E4B) |
+| 401/403 при скачивании модели | Не принята лицензия Gemma 4 E4B на HF или не выполнен вход (`huggingface-cli login` / `HF_TOKEN`) |
+| Ошибка «Gemma 4 / gemma4 не поддерживается» | `pip install -U transformers` (нужна свежая версия) |
+| Нехватка памяти (CUDA out of memory) | `--bsz 1 --grad-accum 16`; если не помогло, добавь `--max-len 1024` |
+| На Kaggle лосс стал `nan` | fp16 на T4 и Gemma иногда не дружат. Попробуй `--lr 1e-4`; если не помогло, учим на своей карте |
+| У ft `json_validity_rate` около 0, у base нормальный | Известная проблема Gemma 4 E4B с кэшем, см. `train/README.md` («Unsloth Gemma 4 gotchas»). Пришли лог |
+| `bitsandbytes` не ставится на Windows | `pip install -U bitsandbytes`; если не вышло, Kaggle или WSL |
+| Оценка идёт очень долго | `--limit 150` (и в README честно указать n) |
+
+## 9. Правила
+
+- **Только синтетические данные** из `data/v3`. Никаких реальных медданных.
+- **Токены только в переменных окружения или Kaggle Secrets**, не в коде и не в git.
+- **Любая цифра в README и на слайдах берётся из `eval/results/*.json`.**
 
 ---
 
-## 9. Правила (важно для судей)
-
-- **Только синтетические данные.** Никаких реальных медицинских данных.
-- **Обучающие данные генерирует только Gemma на нашем vLLM.** Claude используется лишь как строка сравнения в оценке, его ответы никогда не попадают в обучение (`synth.py` сам отказывается работать с эндпоинтами Anthropic).
-- **Токены и ключи только в переменных окружения**, никогда в файлах и в git.
-- **Любая цифра в README и на слайдах берётся из `eval/results/*.json`.** Нет файла, нет цифры.
-- **Сервер удалить сразу после копирования результатов.**
-
-После прогона пришли в чат пять файлов: `extraction_base-e4b.json`, `extraction_ft-e4b-r16.json`, `train_e4b-r16.json`, `synth-stats.json` и `lay_lexicon.json.stats.json`. По ним заполним README и слайды.
+*Если всё-таки дадут сервер AMD MI300X, тот же пайплайн запускается одной командой на нём: см. `deploy/amd/README.md` (`bootstrap.sh --lay --synth 3000 --train --eval`).*

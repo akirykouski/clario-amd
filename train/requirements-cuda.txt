@@ -1,0 +1,11 @@
+# Training and in-process eval on an NVIDIA GPU (own card or Kaggle). Install torch with CUDA first
+# (Kaggle already has it; locally: https://pytorch.org/get-started/locally/), then: pip install -r requirements-cuda.txt
+transformers>=5.0   # Gemma 4 needs a recent transformers
+peft
+trl
+accelerate
+datasets
+bitsandbytes>=0.45  # 4-bit QLoRA (--load-in-4bit); has Windows wheels
+huggingface_hub
+openai              # eval.py against an OpenAI-compatible API (Token Factory comparison row)
+numpy

@@ -245,6 +245,52 @@ def make_complete(base_url, model, key, max_tokens=1024, timeout=300, confidence
     return complete
 
 
+def make_complete_hf(model_id, adapter=None, load_in_4bit=False, max_tokens=1024, confidence=False):
+    """-> complete(diary) running the model in this process (transformers, one GPU), optionally with a LoRA adapter.
+    For a card or Kaggle notebook without an OpenAI-compatible server. Calls are serialised (one GPU)."""
+    import threading
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(adapter or model_id)
+    dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    kw = dict(torch_dtype=dtype, device_map={"": 0})
+    if load_in_4bit:
+        from transformers import BitsAndBytesConfig
+        kw["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                                                       bnb_4bit_compute_dtype=dtype, bnb_4bit_use_double_quant=True)
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_id, **kw)
+    except Exception:  # Gemma 4 card loads with AutoModelForMultimodalLM
+        from transformers import AutoModelForMultimodalLM
+        model = AutoModelForMultimodalLM.from_pretrained(model_id, **kw)
+    if adapter:
+        from peft import PeftModel
+        model = PeftModel.from_pretrained(model, adapter)
+    model.eval()
+    lock = threading.Lock()
+
+    def complete(diary):
+        enc = tok.apply_chat_template(build_messages(diary, confidence=confidence), add_generation_prompt=True,
+                                      return_tensors="pt", return_dict=True).to(model.device)
+        t0 = time.time()
+        with lock, torch.no_grad():
+            out = model.generate(**enc, max_new_tokens=max_tokens, do_sample=False, use_cache=True)
+        gen = out[0, enc["input_ids"].shape[1]:]
+        return tok.decode(gen, skip_special_tokens=True), time.time() - t0, int(gen.shape[0])
+
+    def samples(diary, n, temperature=0.7):
+        """n sampled answers (same signal as llm.samples in the app), generated in one batch on the GPU."""
+        enc = tok.apply_chat_template(build_messages(diary, confidence=confidence), add_generation_prompt=True,
+                                      return_tensors="pt", return_dict=True).to(model.device)
+        with lock, torch.no_grad():
+            out = model.generate(**enc, max_new_tokens=max_tokens, do_sample=True, temperature=temperature,
+                                 num_return_sequences=n, use_cache=True)
+        k = enc["input_ids"].shape[1]
+        return [tok.decode(o[k:], skip_special_tokens=True) for o in out]
+    complete.samples = samples
+    return complete
+
+
 def run_records(gold, complete, concurrency=4, sc_n=0):
     """Run complete(diary) over gold rows. Returns (records, wall_seconds).
     sc_n > 1: also draw sc_n samples per row and set every predicted entity's confidence to its self-consistency
@@ -317,6 +363,9 @@ def main(argv=None):
     ap.add_argument("--concurrency", type=int, default=4); ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--timeout", type=float, default=300); ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--out-dir", default=DEFAULT_OUT)
+    ap.add_argument("--hf-model", default="", help="run this HF model in-process instead of calling --base-url")
+    ap.add_argument("--adapter", default="", help="LoRA adapter dir for --hf-model")
+    ap.add_argument("--load-in-4bit", action="store_true", help="--hf-model in 4-bit (16 GB GPUs)")
     a = ap.parse_args(argv)
     gold = load_gold(a.data)
     if a.limit: gold = gold[:a.limit]
@@ -329,9 +378,15 @@ def main(argv=None):
         res = build_result(m, label, dataset, "gold-copy", "offline-dry-run", dry_run=True,
                            note="gold scored against itself, no model; checks the scorer only, not a model result")
     else:
-        if not (a.base_url and a.model): ap.error("--base-url and --model required")
-        key = os.environ.get(a.api_key_env, "") if a.api_key_env else "none"
-        complete = make_complete(a.base_url, a.model, key, a.max_tokens, a.timeout, a.confidence)
+        if a.hf_model:
+            complete = make_complete_hf(a.hf_model, a.adapter or None, a.load_in_4bit, a.max_tokens, a.confidence)
+            a.model = a.hf_model + (f"+{os.path.basename(os.path.normpath(a.adapter))}" if a.adapter else "")
+            a.backend = a.backend or ("transformers-4bit" if a.load_in_4bit else "transformers")
+            a.concurrency = 1
+        else:
+            if not (a.base_url and a.model): ap.error("--base-url and --model required (or --hf-model)")
+            key = os.environ.get(a.api_key_env, "") if a.api_key_env else "none"
+            complete = make_complete(a.base_url, a.model, key, a.max_tokens, a.timeout, a.confidence)
         recs, wall = run_records(gold, complete, a.concurrency, a.sc_n)
         m = score(recs); label = a.label
         lat = [r["dt"] for r in recs if r["err"] is None]
@@ -339,7 +394,7 @@ def main(argv=None):
                  tokens_per_s=sum(r["toks"] for r in recs) / wall if wall else 0.0,
                  wall_s=wall, errors=sum(r["err"] is not None for r in recs), concurrency=a.concurrency)
         res = build_result(m, label, dataset, a.model, a.backend or infer_backend(a.base_url), dry_run=False,
-                           confidence_prompt=a.confidence, base_url=a.base_url, sc_n=a.sc_n,
+                           confidence_prompt=a.confidence, base_url=a.base_url or None, sc_n=a.sc_n,
                            confidence_source=("self_consistency" if a.sc_n > 1 else "verbalized" if a.confidence else None))
         res["samples"] = [{"diary": r["diary"], "raw": r["raw"][:600], "err": r["err"]} for r in recs[:3]]
     with open(os.path.join(a.out_dir, f"extraction_{label}.json"), "w") as f: json.dump(res, f, indent=2)

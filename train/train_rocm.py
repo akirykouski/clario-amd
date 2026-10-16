@@ -1,6 +1,8 @@
-"""PEFT LoRA SFT (TRL) for Gemma 4 on ROCm / MI300X. NOT run locally (no GPU); run on the droplet.
+"""PEFT LoRA SFT (TRL) for Gemma 4. Runs on ROCm (MI300X, bf16) and on CUDA (a 16 GB card or Kaggle, 4-bit QLoRA).
 Trains on the extraction_v3 chat files written by prep.py (data/v3/*_sft.jsonl). Older-format files are refused.
-  python train_rocm.py --model google/gemma-4-E4B-it --out out/e4b-r16 --epochs 3
+  python train_rocm.py --model google/gemma-4-E4B-it --out out/e4b-r16 --epochs 3                      # big GPU, bf16
+  python train_rocm.py --model google/gemma-4-E4B-it --out out/e4b-r16 --epochs 2 --load-in-4bit --bsz 2 --grad-accum 8   # 16 GB
+Precision: --precision auto uses bf16 when the GPU supports it (MI300X, RTX 30xx+), else fp16 (Kaggle T4/P100).
 """
 import argparse, json, os, time
 
@@ -18,7 +20,9 @@ def main():
     ap.add_argument("--bsz", type=int, default=4); ap.add_argument("--grad-accum", type=int, default=4)
     ap.add_argument("--target-modules", default="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
                     help="comma list or 'all-linear'. For the MoE model, expert weights may be fused params that LoRA skips; attention+dense MLP still get adapted.")
-    ap.add_argument("--bf16", action="store_true", default=True)
+    ap.add_argument("--bf16", action="store_true", default=True, help=argparse.SUPPRESS)  # kept for old commands
+    ap.add_argument("--precision", default="auto", choices=["auto", "bf16", "fp16"])
+    ap.add_argument("--load-in-4bit", action="store_true", help="QLoRA: 4-bit NF4 base (bitsandbytes, CUDA) for 16 GB GPUs")
     ap.add_argument("--attn", default="sdpa", help="sdpa (default, safe on ROCm) | eager | flash_attention_2 if installed")
     ap.add_argument("--merge", action="store_true", help="also save merged bf16 weights for vLLM")
     ap.add_argument("--seed", type=int, default=13)
@@ -41,7 +45,20 @@ def main():
 
     os.makedirs(a.out, exist_ok=True)
     tok = AutoTokenizer.from_pretrained(a.model)
-    kw = dict(torch_dtype=torch.bfloat16, attn_implementation=a.attn)
+    bf16_ok = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    use_bf16 = a.precision == "bf16" or (a.precision == "auto" and bf16_ok)
+    dtype = torch.bfloat16 if use_bf16 else torch.float16
+    print(f"GPU {torch.cuda.get_device_name(0)}  precision {'bf16' if use_bf16 else 'fp16'}  4-bit {a.load_in_4bit}")
+    kw = dict(torch_dtype=dtype, attn_implementation=a.attn)
+    if a.load_in_4bit:
+        from transformers import BitsAndBytesConfig
+        kw["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                                                       bnb_4bit_compute_dtype=dtype, bnb_4bit_use_double_quant=True)
+        kw["device_map"] = {"": 0}
+        if a.merge:
+            print("note: --merge is skipped with --load-in-4bit (merging into a 4-bit base is lossy); "
+                  "use export.py merge on the bf16 base instead")
+            a.merge = False
     try:
         model = AutoModelForCausalLM.from_pretrained(a.model, **kw)
     except Exception as e:  # Gemma 4 card loads with AutoModelForMultimodalLM
@@ -49,6 +66,9 @@ def main():
         from transformers import AutoModelForMultimodalLM
         model = AutoModelForMultimodalLM.from_pretrained(a.model, **kw)
     model.config.use_cache = False  # E2B/E4B: KV-shared layers misbehave without cache in some versions; see README
+    if a.load_in_4bit:
+        from peft import prepare_model_for_kbit_training
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
 
     def conv(ex):  # prompt/completion => loss on the assistant JSON only
         m = ex["messages"]
@@ -74,7 +94,7 @@ def main():
     cb = Metrics()
     cfg = SFTConfig(output_dir=a.out, num_train_epochs=a.epochs, learning_rate=a.lr, lr_scheduler_type="cosine",
                     warmup_ratio=0.05, per_device_train_batch_size=a.bsz, gradient_accumulation_steps=a.grad_accum,
-                    bf16=a.bf16, max_length=a.max_len, logging_steps=5, save_strategy="epoch", save_total_limit=2,
+                    bf16=use_bf16, fp16=not use_bf16, max_length=a.max_len, logging_steps=5, save_strategy="epoch", save_total_limit=2,
                     eval_strategy="epoch" if ev is not None else "no", per_device_eval_batch_size=a.bsz,
                     gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False},
                     seed=a.seed, report_to="none", completion_only_loss=True)
@@ -90,7 +110,8 @@ def main():
     steps = sorted(cb.step_t)
     metrics = {
         "model": a.model, "gpu": torch.cuda.get_device_name(0), "torch": torch.__version__,
-        "hip": getattr(torch.version, "hip", None), "rank": a.rank, "alpha": a.alpha, "epochs": a.epochs,
+        "hip": getattr(torch.version, "hip", None), "cuda": torch.version.cuda, "precision": "bf16" if use_bf16 else "fp16",
+        "load_in_4bit": a.load_in_4bit, "rank": a.rank, "alpha": a.alpha, "epochs": a.epochs,
         "lr": a.lr, "max_len": a.max_len, "bsz": a.bsz, "grad_accum": a.grad_accum,
         "train_wall_s": wall, "train_loss": res.training_loss,
         "step_time_mean_s": sum(cb.step_t) / max(1, len(cb.step_t)),
@@ -99,7 +120,8 @@ def main():
         "peak_mem_gb": torch.cuda.max_memory_allocated() / 2**30,
         "log_history": trainer.state.log_history,
     }
-    metrics.update({"n": len(ds), "dataset": a.data, "backend": f"rocm-hip-{getattr(torch.version, 'hip', None)}",
+    hip = getattr(torch.version, "hip", None)
+    metrics.update({"n": len(ds), "dataset": a.data, "backend": f"rocm-hip-{hip}" if hip else f"cuda-{torch.version.cuda}",
                     "date": __import__("datetime").date.today().isoformat()})  # provenance, same fields as every eval/results file
     json.dump(metrics, open(os.path.join(a.out, "metrics.json"), "w"), indent=2)
     if a.results_dir:

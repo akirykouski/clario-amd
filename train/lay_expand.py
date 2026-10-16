@@ -185,7 +185,7 @@ async def run(a, client=None) -> dict:
         key = os.environ.get(a.api_key_env) if a.api_key_env else "EMPTY"
         if not key:
             sys.exit(f"set {a.api_key_env}")
-        client = AsyncOpenAI(base_url=a.base_url, api_key=key, timeout=120, max_retries=3)
+        client = AsyncOpenAI(base_url=a.base_url, api_key=key, timeout=180, max_retries=a.max_retries)
     sem = asyncio.Semaphore(a.concurrency)
     reasons: Counter = Counter()
     rng = random.Random(a.seed)
@@ -222,6 +222,7 @@ def main() -> None:
     ap.add_argument("--model", default="google/gemma-4-31B-it")
     ap.add_argument("--api-key-env", default="VLLM_API_KEY", help="'' for a vLLM server without a key")
     ap.add_argument("--concurrency", type=int, default=32)
+    ap.add_argument("--max-retries", type=int, default=3, help="retries with backoff on 429/5xx (shared-quota APIs: 8)")
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--fresh", action="store_true", help="ignore an existing lexicon file and start over")
     ap.add_argument("--offline", action="store_true", help="no model; deterministic phrases to test the pipeline")
