@@ -93,7 +93,8 @@ export function fmtNum(n: number, digits?: number): string {
 }
 /** A plain decimal string from the server ("5.4") shown in the UI language ("5,4"); any other text is returned as is. */
 export function fmtNumText(s: string): string {
-  return /^\s*-?\d+(\.\d+)?\s*$/.test(s) ? fmtNum(Number(s)) : s;
+  // Plain decimals inside text ("0.39 mg/dL") follow the locale; ratios such as "1:80" have no decimal point and stay.
+  return s.replace(/-?\d+\.\d+/g, (m) => fmtNum(Number(m)));
 }
 /** Dates in the current year read "2 Nov"; any other year adds it ("2 Nov 2025"), so a past date never looks like a future one. */
 export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }, forceNoYear = false): string {
