@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { api } from "../api";
 import type { ClinicKey, ShareResult } from "../types";
 import { daysAgo, fmtDate, today } from "../lib";
 import { ErrorBox } from "../components/ui";
+import { useHealth } from "../components/useHealth";
 import { useT } from "../i18n";
 
 const LS = "clario.clinic_url";
@@ -12,7 +13,11 @@ function lsSet(v: string) { try { localStorage.setItem(LS, v); } catch { /* igno
 
 export default function SharePage() {
   const { t } = useT();
+  const health = useHealth();
   const [url, setUrl] = useState(lsGet() || "http://localhost:8800");
+  const edited = useRef(false);
+  // The server's CLARIO_CLINIC_URL (demo instance) is the default until the person types another address.
+  useEffect(() => { if (health?.clinic_url && !edited.current) setUrl(health.clinic_url); }, [health?.clinic_url]);
   const [weeks, setWeeks] = useState(12);
   const [patterns, setPatterns] = useState(true);
   const [note, setNote] = useState("");
@@ -45,7 +50,7 @@ export default function SharePage() {
       <div>
         <label className="label" htmlFor="cu">{t("share.address")}</label>
         <div className="flex gap-2">
-          <input id="cu" className="input" inputMode="url" value={url} onChange={(e) => { setUrl(e.target.value); setKey(null); }} />
+          <input id="cu" className="input" inputMode="url" value={url} onChange={(e) => { edited.current = true; setUrl(e.target.value); setKey(null); }} />
           <button className="btn" onClick={checkKey} disabled={keyBusy || !url.trim()}>{keyBusy ? t("common.checking") : t("share.check")}</button>
         </div>
       </div>

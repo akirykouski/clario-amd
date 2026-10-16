@@ -81,6 +81,18 @@ def test_demo_to_patterns(unlocked):
     assert tl["terms"][0]["count"] >= tl["terms"][-1]["count"] and len(tl["days"]) == 19
 
 
+def test_timeline_days_carry_full_entries(unlocked):
+    """The page renders entries[].id and entries[].text: bare ids crashed it."""
+    from clario.models import Timeline
+    unlocked.post("/api/demo", json={"persona": "giulia"})
+    wait_extracted(unlocked)
+    tl = unlocked.get("/api/timeline").json()
+    Timeline.model_validate(tl)
+    for day in tl["days"]:
+        assert all(isinstance(e, dict) and e["id"] and isinstance(e["text"], str) and e["occurred_on"] == day["date"] for e in day["entries"])
+        assert all(set(t) == {"hpo_id", "label"} for t in day["terms"])
+
+
 def test_rejected_and_negated_terms_do_not_count(unlocked):
     unlocked.post("/api/entries", json={"text": "No fever. Knees ache. Mouth sore again. So tired."})
     e = wait_extracted(unlocked)[0]

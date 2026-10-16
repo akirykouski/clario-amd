@@ -105,8 +105,10 @@ def test_clinic_bulk_lab_decisions_one_log_row_per_lab(unlocked, clinic_server, 
 
 def test_brief_text_is_localized_and_does_not_double_the_label():
     from clario.brief import _times, fdate, lab_items, _note_text, _range_text, elide_it
-
-    assert fdate("2026-08-22", "en") == "22 Aug" and fdate("2026-08-22", "it") == "22 ago"
+    from datetime import date as _d
+    y = _d.today().year
+    assert fdate(f"{y}-08-22", "en") == "22 Aug" and fdate(f"{y}-08-22", "it") == "22 ago"
+    assert fdate(f"{y - 1}-11-02", "en") == f"2 Nov {y - 1}" and fdate(f"{y - 1}-11-02", "it") == f"2 nov {y - 1}"  # another year shows it
     assert elide_it("dal 8 ago al 11 set") == "dall'8 ago all'11 set"
     assert [_times(n, "en") for n in (1, 2, 3)] == ["once", "twice", "3 times"] and _times(2, "it") == "2 volte"
     assert _note_text("Domanda per la visita: è collegato?") == "è collegato?"

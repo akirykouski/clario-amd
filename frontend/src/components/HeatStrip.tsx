@@ -13,7 +13,7 @@ export function HeatStrip({ heat }: { heat: HeatModel }) {
     <div className="overflow-x-auto" role="table" aria-label={t("timeline.byWeek")}>
       <div className="inline-block min-w-full">
         <div role="row" className="flex items-end ml-[140px] gap-1 mb-1">
-          {heat.weeks.map((w) => <div role="columnheader" key={w} className="w-7 shrink-0 text-[10px] text-muted text-center">{fmtDate(w)}</div>)}
+          {heat.weeks.map((w) => <div role="columnheader" key={w} className="w-7 shrink-0 text-[10px] text-muted text-center">{fmtDate(w, undefined, true)}</div>)}
         </div>
         {heat.rows.map((r) => (
           <div role="row" key={r.hpo_id} className="flex items-center gap-1 mb-1">

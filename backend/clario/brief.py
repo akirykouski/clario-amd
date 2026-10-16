@@ -12,6 +12,7 @@ import json
 import re
 import uuid
 from collections import Counter
+from datetime import date
 
 from pydantic import BaseModel, Field
 
@@ -65,12 +66,12 @@ def elide_it(s: str) -> str:
 
 
 def fdate(iso: str, lang: str, year: bool = False) -> str:
-    """"22 Aug" / "22 ago" for an ISO date, the way the UI writes it. Anything that is not an ISO date is returned as is."""
+    """"22 Aug" / "22 ago" for an ISO date, the way the UI writes it, with the year when it is not the current one or when asked. Anything that is not an ISO date is returned as is."""
     m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", iso or "")
     if not m:
         return iso
     out = f"{int(m.group(3))} {_MONTHS['it' if lang == 'it' else 'en'][int(m.group(2)) - 1]}"
-    return f"{out} {m.group(1)}" if year else out
+    return f"{out} {m.group(1)}" if year or int(m.group(1)) != date.today().year else out
 
 
 def _span(ds: list[str], lang: str, year: bool = False) -> str:

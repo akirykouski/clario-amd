@@ -95,9 +95,16 @@ export function fmtNum(n: number, digits?: number): string {
 export function fmtNumText(s: string): string {
   return /^\s*-?\d+(\.\d+)?\s*$/.test(s) ? fmtNum(Number(s)) : s;
 }
-export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }): string {
+/** Dates in the current year read "2 Nov"; any other year adds it ("2 Nov 2025"), so a past date never looks like a future one. */
+export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }, forceNoYear = false): string {
   const d = new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
-  return isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat(locale(), opts).format(d);
+  if (isNaN(d.getTime())) return iso;
+  const o = { ...opts };
+  const named = o.dateStyle || o.timeStyle;
+  if (!named && !forceNoYear && o.day && o.month && (!o.year || o.year === "2-digit")) {
+    if (o.year === "2-digit" || d.getFullYear() !== new Date().getFullYear()) o.year = "numeric";
+  }
+  return new Intl.DateTimeFormat(locale(), o).format(d);
 }
 /** Lab units as they are printed on a report: "10^3/uL" -> "10³/µL", "ug/dL" -> "µg/dL". */
 export function prettyUnit(u: string): string {

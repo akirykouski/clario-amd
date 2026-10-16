@@ -32,9 +32,12 @@ def test_demo_arrives_reviewed_and_keeps_hedged_items_queued(unlocked, persona, 
     assert body["confirmed_terms"] >= 8 and body["patterns"] and body["to_check"] == 0
     log = unlocked.app.state.vault.all("correction_log")
     assert log and all(r["actor"] == "demo_seed" and r["action"] == "confirm" for r in log)
-    if persona == "giulia_it":
-        assert any(x.review == "needs_review" for x in ents)  # the hedged sentences still have work for the review step
-        assert unlocked.get("/api/review").json()["count"] >= 1
+    # both personas share the teaching structure: hedged sentences wait in the queue, a negation, a relative's condition
+    assert any(x.review == "needs_review" for x in ents)
+    assert unlocked.get("/api/review").json()["count"] >= 1
+    assert any(x.negated for x in ents)
+    assert any(x.family_history for x in ents)
+    assert body["patterns"][0]["signal"] == "strong"
 
 
 def test_demo_unreviewed_keeps_auto_and_counts_them(unlocked):

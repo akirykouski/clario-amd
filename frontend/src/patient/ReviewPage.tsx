@@ -57,6 +57,10 @@ export default function ReviewPage() {
     } catch (x) { setErr((x as Error).message); }
   };
 
+  const confirmGroup = async (rows: ReviewItem[]) => {
+    for (const i of rows) await act(i, "confirm");
+  };
+
   const confirmAuto = async () => {
     setErr(null);
     try { await api.confirmAuto(); setAutoDone(true); notifyReview(); } catch (x) { setErr((x as Error).message); }
@@ -88,6 +92,7 @@ export default function ReviewPage() {
                     {t("review.labGroup", { n: r.group.length })}
                     <ChevronDown size={18} aria-hidden className="shrink-0 transition-transform group-open:rotate-180" />
                   </summary>
+                  <button className="btn mt-2" data-testid="group-confirm-all" onClick={() => confirmGroup(r.group)}><Check size={16} aria-hidden /> {t("review.autoAll", { n: r.group.length })}</button>
                   <ul className="space-y-3 mt-2">
                     {r.group.map((i) => <ReviewCard key={`${i.kind}:${i.id}`} item={i} grouped onAct={(a, v) => act(i, a, v)} />)}
                   </ul>

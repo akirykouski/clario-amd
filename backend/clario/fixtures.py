@@ -43,6 +43,7 @@ PHRASES = [
     ("caviglie un po' gonfie", "Edema of the lower limbs", "HP:0010741"), ("mal di testa", "Headache", "HP:0002315"),
     ("pomeriggio di sole", "Sun exposure", None),
     ("il lupus", "Systemic lupus erythematosus", None, "finding"),
+    ("has lupus", "Systemic lupus erythematosus", None, "finding"),
 ]
 
 

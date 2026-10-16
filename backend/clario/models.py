@@ -69,6 +69,17 @@ class Evidence(BaseModel):
     count: int
 
 
+class TimelineDay(BaseModel):
+    date: str
+    entries: list[Entry]  # full entries, never bare ids: the page renders their text
+    terms: list[Term]
+
+
+class Timeline(BaseModel):
+    days: list[TimelineDay]
+    terms: list[Evidence]
+
+
 class Pattern(BaseModel):
     """A hedged pattern signal. Never a diagnosis."""
 
@@ -293,6 +304,7 @@ class Health(BaseModel):
     locked: bool | None = None
     ontology: dict = Field(default_factory=dict)
     demo_instance: bool = False
+    clinic_url: str | None = None
     review: ReviewPolicy | None = None
 
 

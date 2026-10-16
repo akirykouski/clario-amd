@@ -64,6 +64,16 @@ describe("language state", () => {
     expect(tn("privacy.verified", 3)).toMatch(/3 chiamate/);
     expect(fmtDate("2026-03-04", { month: "long" })).toBe("marzo");
   });
+  it("adds the year to a date outside the current year, localized", () => {
+    const y = new Date().getFullYear();
+    const past = `${y - 1}-11-02`;
+    expect(fmtDate(past)).toBe(`2 Nov ${y - 1}`);
+    expect(fmtDate(`${y}-11-02`)).toBe("2 Nov");
+    expect(fmtDate(past, { day: "numeric", month: "short", year: "2-digit" })).toBe(`2 Nov ${y - 1}`);
+    expect(fmtDate(past, undefined, true)).toBe("2 Nov");
+    setLang("it");
+    expect(fmtDate(past)).toBe(`2 nov ${y - 1}`);
+  });
   it("elides Italian day numbers and uses the decimal comma", () => {
     setLang("it");
     expect(t("share.range", { a: "11 marzo", b: "8 aprile" })).toBe("dall'11 marzo all'8 aprile");

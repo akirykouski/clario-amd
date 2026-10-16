@@ -86,6 +86,18 @@ def test_health_demo_flag(tmp_path, monkeypatch):
             assert c.get("/api/health").json()["demo_instance"] is True
 
 
+def test_clinic_url_preset_from_env_and_health(tmp_path, monkeypatch):
+    from clario.config import Settings
+    monkeypatch.setenv("CLARIO_CLINIC_URL", " https://clinic.example.org ")
+    assert Settings.from_env().clinic_url == "https://clinic.example.org"
+    monkeypatch.delenv("CLARIO_CLINIC_URL")
+    assert Settings.from_env().clinic_url is None
+    with TestClient(create_app(settings(tmp_path / "a"))) as c:
+        assert c.get("/api/health").json()["clinic_url"] is None
+    with TestClient(create_app(settings(tmp_path / "b", clinic_url="https://clinic.example.org"))) as c:
+        assert c.get("/api/health").json()["clinic_url"] == "https://clinic.example.org"
+
+
 def test_demo_and_gpu_env(monkeypatch):
     from clario.config import Settings
     monkeypatch.setenv("CLARIO_DEMO_INSTANCE", "1")

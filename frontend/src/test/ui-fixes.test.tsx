@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { api } from "../api";
 import { resetHealthCache } from "../components/useHealth";
@@ -42,6 +42,15 @@ describe("review queue", () => {
     expect(screen.getAllByTestId("review-group")).toHaveLength(1);
     await waitFor(() => expect(screen.getAllByText(/Sodium: 131/)).toHaveLength(1));
     expect(document.body.textContent).not.toMatch(/%/);
+  });
+
+  it("confirms the whole lab group with one button", async () => {
+    vi.spyOn(api, "review").mockResolvedValue({ items: [labItem(1), labItem(2), labItem(3), labItem(4)], count: 4 });
+    const act = vi.spyOn(api, "reviewAct").mockResolvedValue({ ok: true, count: 0 } as never);
+    render(<MemoryRouter><ReviewPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByTestId("group-confirm-all"));
+    await waitFor(() => expect(act).toHaveBeenCalledTimes(4));
+    expect(act.mock.calls.every((c) => c[2] === "confirm")).toBe(true);
   });
 
   it("keeps a few lab items as separate cards", async () => {

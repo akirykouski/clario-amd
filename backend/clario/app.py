@@ -34,7 +34,7 @@ from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
 from .knowledge import Ontology, fold
 from .llm import extract_json, make_llm
-from .models import AnswerResult, Brief, BriefDecisions, ClinicMetrics, DecisionCounts, Entity, Entry, LabResult, NextQuestion, ShareRequest, SharePackage, Term
+from .models import AnswerResult, Brief, BriefDecisions, ClinicMetrics, DecisionCounts, Entity, Entry, LabResult, NextQuestion, ShareRequest, SharePackage, Term, Timeline, TimelineDay
 from .next_question import as_ranked_patterns, next_question, template_question
 from .patterns import counts_as_evidence, evidence_from, patient_patterns, score_patterns
 from .review import ACTIONS, EntityReview, _snap, apply_entity_action, correction_record, register_review_kind
@@ -172,6 +172,7 @@ def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
                "llm": {"backend": llm.backend, "model": llm.model, "base_url_host": s.llm_host, "is_amd": llm.is_amd,
                        "pseudonymize": privacy.should_pseudonymize(s)},
                "demo_instance": s.demo_instance,
+               "clinic_url": s.clinic_url,
                "review": {"threshold": s.review_threshold, "source": s.review_source, "alpha": s.review_alpha,
                           "delta": s.review_delta, "calibration_n": s.review_calibration_n,
                           "calibration_status": s.review_calibration_status}}
@@ -453,17 +454,17 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return out
 
     @app.get("/api/timeline")
-    def timeline():
+    def timeline() -> Timeline:
         entries = all_entries()
-        days: dict[str, dict] = {}
+        days: dict[str, TimelineDay] = {}
         for e in entries:
-            d = days.setdefault(e.occurred_on, {"date": e.occurred_on, "entries": [], "terms": []})
-            d["entries"].append(e.id)
+            d = days.setdefault(e.occurred_on, TimelineDay(date=e.occurred_on, entries=[], terms=[]))
+            d.entries.append(e)
             for x in e.entities:
                 if counts_as_evidence(x):
-                    d["terms"].append({"hpo_id": x.hpo_id, "label": x.hpo_label or x.canonical})
+                    d.terms.append(Term(hpo_id=x.hpo_id, label=x.hpo_label or x.canonical))
         terms = sorted(evidence_from(entries, onto).values(), key=lambda v: -v.count)
-        return {"days": sorted(days.values(), key=lambda d: d["date"]), "terms": terms}
+        return Timeline(days=sorted(days.values(), key=lambda d: d.date), terms=terms)
 
     @app.get("/api/patterns")
     async def patterns(lang: str = "en"):

@@ -90,7 +90,7 @@ export interface Brief {
 export interface Health {
   ok: boolean; mode: "patient" | "clinic";
   llm: { backend?: string; model?: string; base_url_host?: string; is_amd?: boolean; pseudonymize?: boolean };
-  demo_instance?: boolean; locked?: boolean | null; ontology?: { terms?: number; diseases?: number };
+  demo_instance?: boolean; clinic_url?: string | null; locked?: boolean | null; ontology?: { terms?: number; diseases?: number };
 }
 
 export type PrivacyKind = "email" | "phone" | "codice_fiscale" | "iban" | "date" | "address" | "name";
