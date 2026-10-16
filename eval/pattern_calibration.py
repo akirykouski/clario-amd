@@ -9,8 +9,15 @@ Method (the standard simulation of the phenotype-ranking literature, Phenomizer 
   5. Optional negated term (probability 0.3): a feature of another disease that the true disease does not list.
   6. Run `clario.patterns.scored_diseases` and `shown_cards`, the code the app runs, on confirmed entries.
 
-Two independent simulations (different seeds, disjoint draws): the CALIBRATION run picks the tier cut-offs, the
-VALIDATION run reports every number in the result file with those cut-offs applied, so no number is in-sample.
+Two independent simulations (different seeds): the CALIBRATION run picks the tier cut-offs, the VALIDATION run
+reports every number in the result file with those cut-offs applied, so no number is in-sample. The validation run
+draws only from conditions (and condition families: subtypes of one name count as one) that the calibration run never
+drew, so no validation patient shares a condition with a calibration patient.
+
+A hit means the right condition family: subtypes of one condition ("... 16", "... 18") are one family. Strata get an
+equal share of patients, so the headline top-1/3/10 are stratum averages; the result file also carries the same
+numbers weighted by each stratum's share of the eligible conditions (`population_weighted`). Only the top-ranked
+condition can lead (every other card has a negative lead), so the patient sees at most one card.
 
 Pure CPU, deterministic for a seed, no model, no network. Run (about a minute on a laptop):
   python eval/pattern_calibration.py --n 1200 --out eval/results/pattern_calibration.json
@@ -119,10 +126,23 @@ def _one(i: int) -> dict:
     return {"disease": did, "stratum": key, "rank": rank, "cands": cands, **meta}
 
 
-def run_sim(onto: Ontology, n: int, seed: int, workers: int = 0) -> list[dict]:
-    """One record per simulated patient: the rank of the true disease and its top candidates (score, n_specific, hit)."""
+def families(onto: Ontology, disease_ids) -> set[str]:
+    return {P.display_name(onto.disease(d).name).lower() for d in disease_ids}
+
+
+def run_sim(onto: Ontology, n: int, seed: int, workers: int = 0, exclude: set[str] | None = None) -> list[dict]:
+    """One record per simulated patient: the rank of the true disease and its top candidates (score, n_specific, hit).
+
+    `exclude`: disease ids whose family is never drawn as the patient's condition (they may still be noise sources).
+    """
     st = strata(onto)
-    _CTX.update(onto=onto, st=st, names=sorted(st), pool=sorted(d for v in st.values() for d in v), seed=seed)
+    pool = sorted(d for v in st.values() for d in v)
+    if exclude:
+        banned = families(onto, exclude)
+        st = {k: [d for d in v if d not in exclude and P.display_name(onto.disease(d).name).lower() not in banned]
+              for k, v in st.items()}
+        st = {k: v for k, v in st.items() if v}
+    _CTX.update(onto=onto, st=st, names=sorted(st), pool=pool, seed=seed)
     workers = workers or min(8, os.cpu_count() or 1)
     if workers <= 1 or n < 50:
         return [_one(i) for i in range(n)]
@@ -131,7 +151,21 @@ def run_sim(onto: Ontology, n: int, seed: int, workers: int = 0) -> list[dict]:
 
 
 # ---------------------------------------------------------------- metrics
-def recall_metrics(recs: list[dict]) -> dict:
+def population_weighted(recs: list[dict], weights: dict[str, float]) -> dict:
+    """top-1/3/10 with every stratum weighted by its share of the eligible conditions, not by its share of patients."""
+    out = {}
+    for k in (1, 3, 10):
+        num = den = 0.0
+        for s, w in weights.items():
+            sub = [r["rank"] for r in recs if r["stratum"] == s]
+            if sub:
+                num += w * sum(1 for x in sub if 0 < x <= k) / len(sub)
+                den += w
+        out[f"top{k}"] = round(num / den, 4) if den else None
+    return out
+
+
+def recall_metrics(recs: list[dict], weights: dict[str, float] | None = None) -> dict:
     n = len(recs)
     ranks = [r["rank"] for r in recs]
 
@@ -149,7 +183,9 @@ def recall_metrics(recs: list[dict]) -> dict:
         sub = [r["rank"] for r in recs if r["stratum"] == s]
         by[s] = {"n": len(sub), "top1": round(sum(1 for x in sub if x == 1) / len(sub), 4),
                  "top10": round(sum(1 for x in sub if 0 < x <= 10) / len(sub), 4)}
-    return {"top1": at(1), "top3": at(3), "top10": at(10),
+    pw = {"population_weighted": population_weighted(recs, weights),
+          "stratum_weights": {k: round(v, 4) for k, v in sorted(weights.items())}} if weights else {}
+    return {"top1": at(1), "top3": at(3), "top10": at(10), **pw,
             "mrr": round(sum(1 / x for x in found) / n, 4), "median_rank_when_scored": statistics.median(found) if found else None,
             "rank_distribution": buckets, "by_stratum": by}
 
@@ -317,8 +353,12 @@ def main(argv: list[str] | None = None) -> dict:
     a = ap.parse_args(argv)
     t0 = time.time()
     onto = Ontology.load()
+    st = strata(onto)
+    total = sum(len(v) for v in st.values())
+    weights = {k: len(v) / total for k, v in st.items()}
     cal = run_sim(onto, 2 * a.n, a.seed)  # twice the validation size: the cut-offs are the noisy part
-    val = run_sim(onto, a.n, a.seed + 1)
+    cal_diseases = {r["disease"] for r in cal}
+    val = run_sim(onto, a.n, a.seed + 1, exclude=cal_diseases)  # conditions the calibration run never drew
     cuts = derive_cuts(cal)
     shipped = {"strong": P.STRONG_LEAD, "moderate": P.MODERATE_LEAD, "weak": P.WEAK_LEAD}
     res = {
@@ -331,13 +371,15 @@ def main(argv: list[str] | None = None) -> dict:
         "hardware": {"gpu_name": "none (CPU only, no model)", "gpu_count": 0, "vram_total_gb": None, "source": "none"},
         "date": date.today().isoformat(),
         "seed": a.seed,
-        "report": "validation run (seed+1): an independent draw from the one that chose the cut-offs, so no number here is in-sample",
-        "recall": recall_metrics(val),
+        "report": "validation run (seed+1): drawn only from condition families the calibration run never used, so no number here is in-sample",
+        "validation_excludes_calibration_conditions": {"calibration_conditions": len(cal_diseases),
+                                                       "families_excluded": len(families(onto, cal_diseases))},
+        "recall": recall_metrics(val, weights),
         "tiers": tier_metrics(val, cuts),
         "tiers_as_shipped": tier_metrics(val, shipped),
         "lead_table_validation": lead_table(val),
         "score_table_validation": score_table(val),
-        "calibration_run": {"n": len(cal), "seed": a.seed, "recall": recall_metrics(cal), "tiers": tier_metrics(cal, cuts)},
+        "calibration_run": {"n": len(cal), "seed": a.seed, "recall": recall_metrics(cal, weights), "tiers": tier_metrics(cal, cuts)},
         "thresholds": {"derived": cuts, "shipped": shipped, "match": cuts == shipped,
                        "rationale": rationale(cuts, tier_metrics(val, cuts), score_table(val)),
                        "strength_word_shown": all(v is not None for v in cuts.values())},

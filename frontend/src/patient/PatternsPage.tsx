@@ -71,7 +71,7 @@ function QuestionCard({ onAnswered, onSplits }: { onAnswered: () => Promise<bool
           <p className="text-sm text-muted">{q.why}</p>
           <div className="flex flex-wrap gap-2">
             {(["yes", "no", "unsure"] as Answer[]).map((a) => (
-              <button key={a} className={a === "yes" ? "btn btn-primary" : "btn"} disabled={state === "saving"} onClick={() => answer(a)}>
+              <button key={a} className="btn" disabled={state === "saving"} onClick={() => answer(a)}>
                 {a === "yes" ? t("patterns.yes") : a === "no" ? t("patterns.no") : t("patterns.unsure")}
               </button>
             ))}
@@ -109,12 +109,12 @@ export default function PatternsPage() {
   const ref = useReorderAnimation(order);
 
   async function afterAnswer(): Promise<boolean> {
-    const prev = pats.map((p) => p.card_id);
+    const prev = pats.map((p) => `${p.card_id}:${p.signal}`);
     const fresh = await api.patterns(lang);
-    const delta = reorderDelta(prev, fresh.patterns.map((p) => p.card_id));
-    setMoves(delta);
+    const next = fresh.patterns.map((p) => `${p.card_id}:${p.signal}`);
+    setMoves(reorderDelta(pats.map((p) => p.card_id), fresh.patterns.map((p) => p.card_id)));
     setData(fresh);
-    return Object.values(delta).some((d) => d !== 0);
+    return prev.join() !== next.join();
   }
 
   if (loading && !data) return <Loading />;
@@ -127,7 +127,9 @@ export default function PatternsPage() {
       </header>
       {data.confirmed_terms < 3 && (
         <Empty title={t("patterns.earlyTitle")}>
-          {tn("patterns.earlyText", data.confirmed_terms)}
+          {(data.to_check ?? 0) > 0
+            ? <>{tn("patterns.toCheck", data.to_check ?? 0)}{" "}<Link to="/review" className="underline underline-offset-4 whitespace-nowrap">{t("patterns.toCheckLink")}</Link></>
+            : tn("patterns.earlyText", data.confirmed_terms)}
         </Empty>
       )}
       {data.confirmed_terms >= 3 && data.patterns.length > 0 && <QuestionCard onAnswered={afterAnswer} onSplits={setRelated} />}
@@ -148,7 +150,7 @@ export default function PatternsPage() {
               <ul className="mt-1 space-y-1 text-[15px]">
                 {p.matched.map((m) => (
                   <li key={m.hpo_id}><TermName label={m.label} clinical={m.clinical} />: {span(m)}.{" "}
-                    {m.entry_ids.slice(0, 4).map((id, i) => <Link key={id} to={`/entry/${id}`} className="underline underline-offset-4 mr-1">{t("patterns.note")} {i + 1}</Link>)}
+                    {m.entry_ids.slice(0, 4).map((id, i) => <Link key={id} to={`/entry/${id}`} className="underline underline-offset-4 mr-2 whitespace-nowrap">{t("patterns.note")} {i + 1}</Link>)}
                   </li>
                 ))}
               </ul>

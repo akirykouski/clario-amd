@@ -6,7 +6,7 @@ import type { ReviewItem } from "../types";
 import { fmtNumText, notifyReview, splitQuotes } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
-import { entityName, termLabel, useT } from "../i18n";
+import { entityName, patientTermLine, useT } from "../i18n";
 import { isOfflineBackend, useHealth } from "../components/useHealth";
 import { labName, qualText, refText } from "./LabsPage";
 import { TermFix } from "./EntryPage";
@@ -38,13 +38,15 @@ function rowsOf(items: ReviewItem[]): Row[] {
 }
 
 export default function ReviewPage() {
-  const { t } = useT();
+  const { t, tn } = useT();
   const { data, error, loading, reload } = useAsync(() => api.review(), []);
   const [gone, setGone] = useState<Set<string>>(new Set());
   const [err, setErr] = useState<string | null>(null);
+  const [autoDone, setAutoDone] = useState(false);
   if (loading && !data) return <Loading />;
   if (error || !data) return <ErrorBox error={error ?? t("review.loadError")} retry={reload} />;
   const items = data.items.filter((i) => !gone.has(`${i.kind}:${i.id}`));
+  const autoLeft = autoDone ? 0 : data.auto ?? 0;
 
   const act = async (i: ReviewItem, action: "confirm" | "correct" | "reject", value?: string) => {
     setErr(null);
@@ -55,6 +57,11 @@ export default function ReviewPage() {
     } catch (x) { setErr((x as Error).message); }
   };
 
+  const confirmAuto = async () => {
+    setErr(null);
+    try { await api.confirmAuto(); setAutoDone(true); notifyReview(); } catch (x) { setErr((x as Error).message); }
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -62,7 +69,13 @@ export default function ReviewPage() {
         <p className="text-muted mt-1">{t("review.intro")}</p>
       </div>
       {err && <p role="alert" className="text-strong text-sm">{err}</p>}
-      {items.length === 0 ? (
+      {autoLeft > 0 && (
+        <section className="card space-y-2" data-testid="auto-terms">
+          <p>{tn("review.auto", autoLeft)}</p>
+          <button className="btn" onClick={confirmAuto}><Check size={16} aria-hidden /> {t("review.autoAll", { n: autoLeft })}</button>
+        </section>
+      )}
+      {items.length === 0 && autoLeft === 0 ? (
         <Empty title={t("review.emptyTitle")}>{t("review.emptyText")}<Link className="underline" to="/">{t("review.back")}</Link></Empty>
       ) : (
         <ul className="space-y-3" aria-label={t("review.listAria")}>
@@ -112,7 +125,7 @@ function ReviewCard({ item, onAct, grouped = false }: { item: ReviewItem; groupe
       <p className="text-sm text-muted">
         {lab
           ? [range && t("labs.printedRange", { range }), qual ? "" : item.flag === "high" ? t("labs.high") : item.flag === "low" ? t("labs.low") : "", item.page ? t("review.page", { n: item.page }) : ""].filter(Boolean).join(" · ")
-          : item.value ? `${termLabel(item.value, item.hpo_label ?? "")} (${item.value})` : t("entryPage.noCode")}
+          : patientTermLine(item.value, item.hpo_label ?? "", termName) ?? ""}
         {item.family_history && t("review.relative")}
       </p>
       {!grouped && <div className="mt-2"><ConfidenceBar value={item.confidence} /></div>}

@@ -1,274 +1,310 @@
 {
   "n": 1200,
   "dataset": "simulated patients from the shipped HPO/Orphanet annotations (knowledge.json.gz, 12820 diseases), k=3..8 terms frequency weighted, 30% moved to an ancestor, 1-2 noise terms, 30% with one negated term; synthetic, no real patients",
-  "model": "clario-patterns 3a5a1c9",
+  "model": "clario-patterns 4395c2b",
   "backend": "cpu",
+  "hardware": {
+    "gpu_name": "none (CPU only, no model)",
+    "gpu_count": 0,
+    "vram_total_gb": null,
+    "source": "none"
+  },
   "date": "2026-10-16",
   "seed": 20261016,
-  "report": "validation run (seed+1): an independent draw from the one that chose the cut-offs, so no number here is in-sample",
+  "report": "validation run (seed+1): drawn only from condition families the calibration run never used, so no number here is in-sample",
+  "validation_excludes_calibration_conditions": {
+    "calibration_conditions": 2088,
+    "families_excluded": 1807
+  },
   "recall": {
-    "top1": 0.5117,
-    "top3": 0.6758,
-    "top10": 0.7942,
-    "mrr": 0.609,
-    "median_rank_when_scored": 1.0,
+    "top1": 0.4967,
+    "top3": 0.645,
+    "top10": 0.7683,
+    "population_weighted": {
+      "top1": 0.4744,
+      "top3": 0.6303,
+      "top10": 0.7585
+    },
+    "stratum_weights": {
+      "large/freq": 0.2122,
+      "large/nofreq": 0.1262,
+      "medium/freq": 0.1584,
+      "medium/nofreq": 0.1704,
+      "small/freq": 0.0491,
+      "small/nofreq": 0.2836
+    },
+    "mrr": 0.5881,
+    "median_rank_when_scored": 1,
     "rank_distribution": {
-      "1": 614,
-      "2": 129,
-      "3": 68,
-      "4-5": 69,
-      "6-10": 73,
-      "11-20": 45,
-      ">20": 32,
-      "not_scored": 170
+      "1": 596,
+      "2": 115,
+      "3": 63,
+      "4-5": 74,
+      "6-10": 74,
+      "11-20": 43,
+      ">20": 30,
+      "not_scored": 205
     },
     "by_stratum": {
       "large/freq": {
         "n": 200,
-        "top1": 0.48,
-        "top10": 0.745
+        "top1": 0.465,
+        "top10": 0.74
       },
       "large/nofreq": {
         "n": 200,
-        "top1": 0.49,
-        "top10": 0.745
+        "top1": 0.525,
+        "top10": 0.725
       },
       "medium/freq": {
         "n": 200,
-        "top1": 0.525,
-        "top10": 0.82
+        "top1": 0.53,
+        "top10": 0.79
       },
       "medium/nofreq": {
         "n": 200,
-        "top1": 0.475,
-        "top10": 0.75
+        "top1": 0.485,
+        "top10": 0.74
       },
       "small/freq": {
         "n": 200,
-        "top1": 0.635,
-        "top10": 0.875
+        "top1": 0.57,
+        "top10": 0.85
       },
       "small/nofreq": {
         "n": 200,
-        "top1": 0.465,
-        "top10": 0.83
+        "top1": 0.405,
+        "top10": 0.765
       }
     }
   },
   "tiers": {
     "cards_shown": {
-      "strong": 421,
-      "moderate": 379,
-      "weak": 204
+      "strong": 408,
+      "moderate": 371,
+      "weak": 210
     },
     "precision": {
-      "strong": 0.8527,
-      "moderate": 0.4248,
-      "weak": 0.2843
+      "strong": 0.8235,
+      "moderate": 0.4447,
+      "weak": 0.281
     },
     "precision_ci95": {
       "strong": [
-        0.8157,
-        0.8834
+        0.7836,
+        0.8575
       ],
       "moderate": [
-        0.376,
-        0.4751
+        0.395,
+        0.4956
       ],
       "weak": [
-        0.2268,
-        0.3498
+        0.2245,
+        0.3453
       ]
     },
     "true_in_card": {
-      "strong": 359,
-      "moderate": 161,
-      "weak": 58
+      "strong": 336,
+      "moderate": 165,
+      "weak": 59
     },
     "patients_by_top_tier": {
-      "strong": 421,
-      "moderate": 379,
-      "weak": 204,
-      "none": 196
+      "strong": 408,
+      "moderate": 371,
+      "weak": 210,
+      "none": 211
     },
-    "true_disease_on_screen": 0.4817
+    "true_disease_on_screen": 0.4667
   },
   "tiers_as_shipped": {
     "cards_shown": {
-      "strong": 421,
-      "moderate": 379,
-      "weak": 204
+      "strong": 408,
+      "moderate": 371,
+      "weak": 210
     },
     "precision": {
-      "strong": 0.8527,
-      "moderate": 0.4248,
-      "weak": 0.2843
+      "strong": 0.8235,
+      "moderate": 0.4447,
+      "weak": 0.281
     },
     "precision_ci95": {
       "strong": [
-        0.8157,
-        0.8834
+        0.7836,
+        0.8575
       ],
       "moderate": [
-        0.376,
-        0.4751
+        0.395,
+        0.4956
       ],
       "weak": [
-        0.2268,
-        0.3498
+        0.2245,
+        0.3453
       ]
     },
     "true_in_card": {
-      "strong": 359,
-      "moderate": 161,
-      "weak": 58
+      "strong": 336,
+      "moderate": 165,
+      "weak": 59
     },
     "patients_by_top_tier": {
-      "strong": 421,
-      "moderate": 379,
-      "weak": 204,
-      "none": 196
+      "strong": 408,
+      "moderate": 371,
+      "weak": 210,
+      "none": 211
     },
-    "true_disease_on_screen": 0.4817
+    "true_disease_on_screen": 0.4667
   },
   "lead_table_validation": [
     {
       "lead_from": -1.0,
       "lead_to": -0.05,
-      "cards": 654,
-      "precision": 0.0703
+      "cards": 10,
+      "precision": 0.1
     },
     {
       "lead_from": -0.05,
       "lead_to": 0.0,
-      "cards": 484,
-      "precision": 0.1715
+      "cards": 22,
+      "precision": 0.1364
     },
     {
       "lead_from": 0.0,
       "lead_to": 0.03,
-      "cards": 394,
-      "precision": 0.2513
+      "cards": 378,
+      "precision": 0.2407
     },
     {
       "lead_from": 0.03,
       "lead_to": 0.07,
-      "cards": 247,
-      "precision": 0.4008
+      "cards": 232,
+      "precision": 0.3879
     },
     {
       "lead_from": 0.07,
       "lead_to": 0.1,
-      "cards": 132,
-      "precision": 0.4697
+      "cards": 139,
+      "precision": 0.5396
     },
     {
       "lead_from": 0.1,
       "lead_to": 0.15,
-      "cards": 165,
-      "precision": 0.7636
+      "cards": 146,
+      "precision": 0.6986
     },
     {
       "lead_from": 0.15,
       "lead_to": 0.25,
-      "cards": 164,
-      "precision": 0.872
+      "cards": 184,
+      "precision": 0.8641
     },
     {
       "lead_from": 0.25,
       "lead_to": 2.0,
-      "cards": 92,
-      "precision": 0.9783
+      "cards": 78,
+      "precision": 0.9615
     }
   ],
   "score_table_validation": [
     {
       "score_from": 0.2,
       "score_to": 0.3,
-      "cards": 151,
-      "precision": 0.0861
+      "cards": 23,
+      "precision": 0.2609
     },
     {
       "score_from": 0.3,
       "score_to": 0.4,
-      "cards": 510,
-      "precision": 0.2137
+      "cards": 160,
+      "precision": 0.4625
     },
     {
       "score_from": 0.4,
       "score_to": 0.5,
-      "cards": 747,
-      "precision": 0.332
+      "cards": 365,
+      "precision": 0.4959
     },
     {
       "score_from": 0.5,
       "score_to": 0.6,
-      "cards": 534,
-      "precision": 0.3839
+      "cards": 348,
+      "precision": 0.5172
     },
     {
       "score_from": 0.6,
       "score_to": 0.7,
-      "cards": 248,
-      "precision": 0.4758
+      "cards": 187,
+      "precision": 0.5348
     },
     {
       "score_from": 0.7,
       "score_to": 0.8,
-      "cards": 112,
-      "precision": 0.4107
+      "cards": 82,
+      "precision": 0.5732
     },
     {
       "score_from": 0.8,
       "score_to": 2.0,
-      "cards": 30,
-      "precision": 0.3
+      "cards": 24,
+      "precision": 0.3333
     }
   ],
   "calibration_run": {
     "n": 2400,
     "seed": 20261016,
     "recall": {
-      "top1": 0.5042,
+      "top1": 0.5012,
       "top3": 0.6596,
-      "top10": 0.7875,
-      "mrr": 0.5991,
+      "top10": 0.7858,
+      "population_weighted": {
+        "top1": 0.4828,
+        "top3": 0.6467,
+        "top10": 0.7779
+      },
+      "stratum_weights": {
+        "large/freq": 0.2122,
+        "large/nofreq": 0.1262,
+        "medium/freq": 0.1584,
+        "medium/nofreq": 0.1704,
+        "small/freq": 0.0491,
+        "small/nofreq": 0.2836
+      },
+      "mrr": 0.5975,
       "median_rank_when_scored": 1.0,
       "rank_distribution": {
-        "1": 1210,
-        "2": 242,
-        "3": 131,
-        "4-5": 136,
-        "6-10": 171,
-        "11-20": 86,
+        "1": 1203,
+        "2": 248,
+        "3": 132,
+        "4-5": 135,
+        "6-10": 168,
+        "11-20": 90,
         ">20": 58,
         "not_scored": 366
       },
       "by_stratum": {
         "large/freq": {
           "n": 400,
-          "top1": 0.445,
-          "top10": 0.7175
+          "top1": 0.44,
+          "top10": 0.71
         },
         "large/nofreq": {
           "n": 400,
-          "top1": 0.5,
-          "top10": 0.8
+          "top1": 0.4975,
+          "top10": 0.7975
         },
         "medium/freq": {
           "n": 400,
-          "top1": 0.5425,
-          "top10": 0.7975
+          "top1": 0.5375,
+          "top10": 0.795
         },
         "medium/nofreq": {
           "n": 400,
-          "top1": 0.445,
+          "top1": 0.4425,
           "top10": 0.765
         },
         "small/freq": {
           "n": 400,
-          "top1": 0.6125,
-          "top10": 0.8375
+          "top1": 0.61,
+          "top10": 0.84
         },
         "small/nofreq": {
           "n": 400,
@@ -279,41 +315,41 @@
     },
     "tiers": {
       "cards_shown": {
-        "strong": 806,
-        "moderate": 827,
-        "weak": 416
+        "strong": 805,
+        "moderate": 834,
+        "weak": 411
       },
       "precision": {
-        "strong": 0.8337,
-        "moderate": 0.4353,
-        "weak": 0.2981
+        "strong": 0.8323,
+        "moderate": 0.4329,
+        "weak": 0.3017
       },
       "precision_ci95": {
         "strong": [
-          0.8065,
-          0.8579
+          0.8049,
+          0.8565
         ],
         "moderate": [
-          0.4019,
-          0.4693
+          0.3996,
+          0.4667
         ],
         "weak": [
-          0.2561,
-          0.3437
+          0.2593,
+          0.3477
         ]
       },
       "true_in_card": {
-        "strong": 672,
-        "moderate": 360,
+        "strong": 670,
+        "moderate": 361,
         "weak": 124
       },
       "patients_by_top_tier": {
-        "strong": 806,
-        "moderate": 827,
-        "weak": 416,
-        "none": 351
+        "strong": 805,
+        "moderate": 834,
+        "weak": 411,
+        "none": 350
       },
-      "true_disease_on_screen": 0.4817
+      "true_disease_on_screen": 0.4813
     }
   },
   "thresholds": {
@@ -328,7 +364,7 @@
       "weak": 0.01
     },
     "match": true,
-    "rationale": "The raw score is a weak tier signal: held-out precision per 0.1 score band peaks at 0.48 and falls again at the top bands, so no score cut-off reaches the strong target (score_table_validation). The lead (the card's score minus the best other condition's score) does separate (lead_table_validation), so tiers are bands of lead. Targets (share of cards in the tier that are the simulated condition): strong >= 80%, moderate >= 40%, weak >= 25%. Each cut-off is the lowest lead that reaches its target plus 3 points on the calibration run (twice the size of the held-out run), so the held-out numbers are not tuned. Cut-offs: strong lead >= 0.1, moderate lead >= 0.03, weak lead >= 0.01; a lower lead is not shown. No card below score 0.2 or with fewer than 3 specific terms. Held-out precision: strong 0.85, moderate 0.42, weak 0.28. Every tier has a cut-off that meets its target, so the strength word stays in the patient UI.",
+    "rationale": "The raw score is a weak tier signal: held-out precision per 0.1 score band peaks at 0.57 and falls again at the top bands, so no score cut-off reaches the strong target (score_table_validation). The lead (the card's score minus the best other condition's score) does separate (lead_table_validation), so tiers are bands of lead. Targets (share of cards in the tier that are the simulated condition): strong >= 80%, moderate >= 40%, weak >= 25%. Each cut-off is the lowest lead that reaches its target plus 3 points on the calibration run (twice the size of the held-out run), so the held-out numbers are not tuned. Cut-offs: strong lead >= 0.1, moderate lead >= 0.03, weak lead >= 0.01; a lower lead is not shown. No card below score 0.2 or with fewer than 3 specific terms. Held-out precision: strong 0.82, moderate 0.44, weak 0.28. Every tier has a cut-off that meets its target, so the strength word stays in the patient UI.",
     "strength_word_shown": true
   },
   "targets": {
@@ -338,11 +374,5 @@
   },
   "slack": 0.03,
   "min_support": 40,
-  "seconds": 65.3,
-  "hardware": {
-    "gpu_name": "none (CPU only, no model)",
-    "gpu_count": 0,
-    "vram_total_gb": null,
-    "source": "none"
-  }
+  "seconds": 32.9
 }

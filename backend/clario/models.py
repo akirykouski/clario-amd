@@ -81,6 +81,7 @@ class Pattern(BaseModel):
     rationale: str = Field(description="Hedged text, passed the hedge validator")
     rationale_source: Literal["model", "template"] = "template"
     neutral_label: str = Field("", description="Evidence-first title without a disease name: the strongest matched features")
+    card_id: str = Field("", description="The id the patient app shows for this card; the signal equals the patient's")
 
 
 class PatientTerm(BaseModel):

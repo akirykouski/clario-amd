@@ -6,7 +6,7 @@ import type { Entity, Entry, Term } from "../types";
 import { flagNote, notifyReview, splitQuotes } from "../lib";
 import { ErrorBox, Loading, Spinner } from "../components/ui";
 import { useAsync } from "../components/useAsync";
-import { entityName, getLang, termLabel, useT } from "../i18n";
+import { entityName, getLang, patientTermLine, useT } from "../i18n";
 import { useLiveEntry } from "./EntryCard";
 import { CloudSaw } from "./CloudSaw";
 
@@ -61,7 +61,7 @@ function EntityRow({ e, onPatch }: { e: Entity; onPatch: (b: Parameters<typeof a
   const { t } = useT();
   const [fixing, setFixing] = useState(false);
   const decided = e.review === "confirmed" || e.review === "corrected";
-  const label = e.hpo_label ? termLabel(e.hpo_id, e.hpo_label) : "";
+  const line = patientTermLine(e.hpo_id, e.hpo_label ?? "", entityName(e));
   return (
     <li className="card" style={e.review === "rejected" ? { opacity: 0.6 } : undefined}>
       <p className="text-sm text-muted">{t("entryPage.youWrote")} <mark className="quote text-ink">{e.quote}</mark></p>
@@ -71,7 +71,7 @@ function EntityRow({ e, onPatch }: { e: Entity; onPatch: (b: Parameters<typeof a
           {t("entryPage.unsure")}<Link className="underline" to="/review">{t("entryPage.openReview")}</Link>
         </p>
       )}
-      <p className="text-sm text-muted">{e.hpo_id ? `${label} (${e.hpo_id})` : t("entryPage.noCode")}</p>
+      {(line || !e.hpo_id) && <p className="text-sm text-muted">{line ?? t("entryPage.noCode")}</p>}
       {(e.onset_hint || e.severity !== null) && (
         <p className="text-sm text-muted">
           {e.onset_hint && t("entryPage.onset", { hint: e.onset_hint })}{e.onset_hint && e.severity !== null && " · "}{e.severity !== null && t("entryPage.severity", { n: e.severity })}

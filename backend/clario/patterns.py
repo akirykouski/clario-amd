@@ -23,7 +23,7 @@ MIN_TERMS = 3
 NO_FLOOR = 0.7  # one 'no' cuts a score by at most 30%, so a single answer cannot drop a moderate card below weak
 MIN_SPECIFIC = 3  # a card needs this many matched terms that are not everyday symptoms
 MAX_PATTERNS = 3  # clinic package
-PATIENT_CARDS = 2  # patient screen
+PATIENT_CARDS = 1  # patient screen: only the top condition can lead (every other card has a negative lead), so one card
 SPECIFIC = 0.6  # a disease term counts as a match only if it keeps >= 60% of the patient term's IC
 COMMON = 0.5  # "not recorded yet" lists only features present in MORE than half of described cases
 # Frequency weights in the shipped knowledge (backend/scripts/build_knowledge.py): 1.0 means an explicit "Obligate" or
@@ -96,7 +96,7 @@ def annotated_freq(onto: Ontology, disease, feature: str, floor: float = 0.02) -
 def negation_factor(onto: Ontology, negated: set[str], disease) -> float:
     """Likelihood of the 'no' answers under a disease (softened so one answer never erases a pattern)."""
     f = 1.0
-    for n in negated:
+    for n in sorted(negated):
         f *= max(NO_FLOOR, 1.0 - 0.85 * annotated_freq(onto, disease, n))
     return f
 
@@ -229,7 +229,7 @@ def scored_diseases(entries: list[Entry], onto: Ontology, ev: dict[str, Evidence
     """Every candidate condition, best score first, one per family. The score counts close matches only."""
     ev = evidence_from(entries, onto) if ev is None else ev
     patient = {p for p in ev if onto.label(p) is not None}
-    denom = sum(onto.ic(p) for p in patient)
+    denom = sum(onto.ic(p) for p in sorted(patient))
     if not patient or denom <= 0:
         return []
     negated = negated_ids(entries)
@@ -242,7 +242,7 @@ def scored_diseases(entries: list[Entry], onto: Ontology, ev: dict[str, Evidence
         ids = [p for p, _ in hits]
         spec = [p for p in ids if not is_generic(onto, p)]
         out.append(Scored(disease, display_name(disease.name), round(score, 4), ids, spec, None))
-    out.sort(key=lambda s: -s.score)
+    out.sort(key=lambda s: (-s.score, s.disease.id))
     seen: set[str] = set()
     deduped = []
     for s in out:  # subtypes of one condition ("... 16", "... 18") are one family: keep the best
@@ -258,12 +258,17 @@ def scored_diseases(entries: list[Entry], onto: Ontology, ev: dict[str, Evidence
 
 def shown_cards(scored: list[Scored], limit: int) -> list[Scored]:
     """Cards worth showing: enough specific evidence, strongest signal first."""
-    cards = sorted((s for s in scored if s.signal), key=lambda s: (_RANK[s.signal], -s.score))  # type: ignore[index]
+    cards = sorted((s for s in scored if s.signal), key=lambda s: (_RANK[s.signal], -s.score, s.disease.id))  # type: ignore[index]
     return cards[:limit]
 
 
-def score_patterns(entries: list[Entry], onto: Ontology, limit: int = MAX_PATTERNS) -> list[Pattern]:
-    """Clinic package: cards with condition names. Weak ones are included and marked weak."""
+def score_patterns(entries: list[Entry], onto: Ontology, limit: int = MAX_PATTERNS,
+                   within: set[str] | None = None) -> list[Pattern]:
+    """Clinic package: cards with condition names. Weak ones are included and marked weak.
+
+    Scored on every counted entry, exactly as the patient screen is, so the card and its signal are the ones the patient
+    saw. `within` (entry ids of the shared period) only trims which notes the evidence points at.
+    """
     ev = evidence_from(entries, onto)
     if len(ev) < MIN_TERMS:
         return []
@@ -271,10 +276,14 @@ def score_patterns(entries: list[Entry], onto: Ontology, limit: int = MAX_PATTER
     out = []
     for s in shown_cards(scored_diseases(entries, onto, ev), limit):
         matched = sorted((ev[p] for p in s.matched_ids if p in ev), key=lambda e: (-e.count, e.hpo_id))
+        if within is not None:
+            matched = [m.model_copy(update={"entry_ids": [i for i in m.entry_ids if i in within],
+                                            "count": sum(1 for i in m.entry_ids if i in within)}) for m in matched]
+            matched = [m for m in matched if m.count]
         out.append(Pattern(disease_id=s.disease.id, disease_name=s.name, signal=s.signal,  # type: ignore[arg-type]
                            score=round(s.score, 3), matched=matched, missing=missing_terms(onto, s.disease, patient),
                            rationale=template_rationale(s.name, matched),
-                           neutral_label=neutral_label([m.label for m in matched])))
+                           neutral_label=neutral_label([m.label for m in matched]), card_id=s.card_id))
     return out
 
 
@@ -290,6 +299,8 @@ def patient_pattern(onto: Ontology, scored: Scored, ev: dict[str, Evidence], pat
                     lay: dict[str, list[str]] | None = None) -> PatientPattern:
     """The card as the patient sees it: opaque id, features in everyday words (clinical name as subtext), no condition."""
     def clinical(hid: str, label: str) -> str | None:
+        if lang == "it":
+            return None  # never an English clinical name next to an Italian patient's own words
         name = onto.label(hid) or hid
         return name if name.strip().lower() != label.strip().lower() else None
 

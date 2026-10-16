@@ -51,6 +51,6 @@ describe("patterns page", () => {
     await waitFor(() => expect(titles()).toEqual(["Joint pain, stiffness", "Fatigue, rash"]));
     expect(answer).toHaveBeenCalledWith(expect.objectContaining({ feature_id: "HP:9", answer: "yes" }));
     expect(screen.getByText("Moved up")).toBeInTheDocument();
-    expect(screen.getByRole("status").textContent).toMatch(/order of the patterns changed/);
+    expect(screen.getByRole("status").textContent).toMatch(/pattern on screen changed/);
   });
 });

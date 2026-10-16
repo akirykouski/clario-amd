@@ -1,17 +1,23 @@
 import { Loader2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useT } from "../i18n";
 import type { Signal } from "../types";
 
-const sigColor: Record<Signal, string> = { weak: "var(--weak)", moderate: "var(--moderate)", strong: "var(--strong)" };
+// Tier colours stay clear of the red that marks a high lab value.
+const sigColor: Record<Signal, string> = { weak: "var(--weak)", moderate: "var(--moderate)", strong: "var(--accent)" };
 
 export function SignalPill({ signal }: { signal: Signal }) {
   const { t } = useT();
+  const [open, setOpen] = useState(false);
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm font-bold"
-      style={{ color: sigColor[signal], borderColor: sigColor[signal] }}>
-      <span aria-hidden className="inline-block w-2 h-2 rounded-full" style={{ background: sigColor[signal] }} />
-      {t(`signal.${signal}`)}
+    <span className="relative inline-block">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm font-bold min-h-[32px]"
+        style={{ color: sigColor[signal], borderColor: sigColor[signal] }}>
+        <span aria-hidden className="inline-block w-2 h-2 rounded-full" style={{ background: sigColor[signal] }} />
+        {t(`signal.${signal}`)}
+      </button>
+      {open && <span role="note" className="card absolute right-0 top-full z-10 mt-1 block w-64 text-sm font-normal text-ink shadow-lg">{t(`signal.explain.${signal}`)}</span>}
     </span>
   );
 }

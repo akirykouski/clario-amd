@@ -63,7 +63,7 @@ def test_family_history_and_negation_never_count_toward_patterns(unlocked):
     assert re.search(r"[a-z]", top["neutral_label"]) and "rash" not in top["neutral_label"].lower()
     assert any("farfalla" in p["neutral_label"].lower() for p in pats["patterns"])
     malar = next(m for m in top["matched"] if m["hpo_id"] == "HP:0025300")  # which term sorts first depends on note counts
-    assert malar["label"] == "Arrossamento a farfalla sul viso" and malar["clinical"] == "Malar rash"
+    assert malar["label"] == "Arrossamento a farfalla sul viso" and malar["clinical"] is None  # no English clinical name next to Italian words
     en = unlocked.get("/api/patterns").json()
     assert "red rash" in en["patterns"][0]["neutral_label"].lower() and en["note"].startswith("Patterns worth")
     assert "lupus" not in json.dumps(en).lower()

@@ -62,14 +62,14 @@ def test_grounding_drops_invented_quotes_and_wrong_codes():
 
 
 def test_demo_to_patterns(unlocked):
-    assert unlocked.post("/api/demo", json={"persona": "giulia"}).json()["entries"] == 19
+    assert unlocked.post("/api/demo", json={"persona": "giulia", "reviewed": False}).json()["entries"] == 19
     entries = wait_extracted(unlocked)
     assert all(e["extraction"] == "done" for e in entries)
     assert unlocked.get("/api/patterns").json()["patterns"] == []  # nothing confirmed yet
     confirm_all(unlocked)
     body = unlocked.get("/api/patterns").json()
     pats = body["patterns"]
-    assert pats and body["confirmed_terms"] >= 8 and len(pats) <= 2
+    assert pats and body["confirmed_terms"] >= 8 and len(pats) <= 1
     assert "Not a diagnosis" in body["note"]
     for p in pats:
         assert p["signal"] in ("weak", "moderate", "strong") and p["card_id"].startswith("c_")

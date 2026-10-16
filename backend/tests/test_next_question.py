@@ -48,7 +48,10 @@ def entry(*items: tuple[int, bool], eid="e1") -> Entry:
     return Entry(id=eid, created_at="2026-01-01T00:00:00Z", occurred_on="2026-01-01", text="x", entities=ents)
 
 
-def test_discriminating_feature_beats_shared_and_red_flag_is_never_asked():
+def test_discriminating_feature_beats_shared_and_red_flag_is_never_asked(monkeypatch):
+    import clario.next_question as nq
+
+    monkeypatch.setattr(nq, "PATIENT_CARDS", 2)  # the app shows one card; the split logic still serves two
     onto = toy()
     es = [entry((1, False), (2, False), (3, False))]
     cs = choose(onto, es, LAY, min_terms=3)
@@ -134,7 +137,7 @@ def test_real_ontology_never_asks_red_flags_or_names():
 
 
 def test_api_question_and_answer_reorders_and_is_traceable(unlocked):
-    unlocked.post("/api/demo", json={"persona": "giulia"})
+    unlocked.post("/api/demo", json={"persona": "giulia", "reviewed": False})
     wait_extracted(unlocked)
     assert unlocked.get("/api/patterns/next-question").json() is None  # nothing confirmed yet
     confirm_all(unlocked)
@@ -142,7 +145,7 @@ def test_api_question_and_answer_reorders_and_is_traceable(unlocked):
     assert q and q["question"].endswith("?") and q["ig"] > 0
     n_before = len(unlocked.get("/api/entries").json())
     r = unlocked.post("/api/patterns/answer", json={"feature_id": q["feature_id"], "answer": "yes"}).json()
-    assert 1 <= len(r["before"]) <= 2 and 1 <= len(r["after"]) <= 2 and r["entry_id"]  # the cards on screen
+    assert len(r["before"]) <= 1 and len(r["after"]) <= 1 and r["entry_id"]  # the cards on screen
     assert all("label" in x and "disease_name" not in x and "disease_id" not in x for x in r["after"])
     entries = unlocked.get("/api/entries").json()
     assert len(entries) == n_before + 1

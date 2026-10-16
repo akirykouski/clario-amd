@@ -67,6 +67,16 @@ export function termLabel(hpoId: string | null | undefined, fallback: string): s
   return current === "it" && hpoId && hpoIt[hpoId] ? hpoIt[hpoId] : fallback;
 }
 
+/** Second line under a term for the patient: everyday label, never the HPO code. In Italian only when we have an
+ * Italian name (never the English clinical label). Null when it would repeat the name already shown. */
+export function patientTermLine(hpoId: string | null | undefined, label: string, shown: string): string | null {
+  if (!hpoId) return null;
+  const line = current === "it" ? hpoIt[hpoId] : (LAY_EN[hpoId] ?? label);
+  if (!line) return null;
+  const norm = (x: string) => x.replace(/^(not |no |non |niente )/i, "").trim().toLowerCase();
+  return norm(line) === norm(shown) ? null : line;
+}
+
 /** Name of an extracted entity for the patient. In Italian, a term with no Italian name and no ontology code
  * (a trigger, a relative's condition) is shown as the patient's own words instead of an English clinical name. */
 export function entityName(x: { hpo_id: string | null; canonical: string; quote?: string | null }): string {

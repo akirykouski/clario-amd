@@ -4,7 +4,7 @@ import { buildHeat, fmtDate } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { HeatStrip } from "../components/HeatStrip";
-import { termLabel, useT } from "../i18n";
+import { entryText, termLabel, useT } from "../i18n";
 
 export default function TimelinePage() {
   const { t } = useT();
@@ -23,10 +23,10 @@ export default function TimelinePage() {
       </section>
       <section aria-labelledby="dy"><h2 id="dy" className="text-xl mb-2">{t("timeline.days")}</h2>
         <ol className="space-y-3">
-          {data.days.map((d) => (
+          {data.days.filter((d) => d.entries.some((e) => e.text.trim())).map((d) => (
             <li key={d.date} className="card">
               <p className="font-bold">{fmtDate(d.date, { weekday: "long", day: "numeric", month: "long" })}</p>
-              {d.entries.map((e) => <p key={e.id} className="text-[15px] mt-1 line-clamp-2"><Link to={`/entry/${e.id}`} className="underline underline-offset-4">{e.text}</Link></p>)}
+              {d.entries.filter((e) => e.text.trim()).map((e) => <p key={e.id} className="text-[15px] mt-1 line-clamp-2"><Link to={`/entry/${e.id}`} className="underline underline-offset-4">{entryText(e.text)}</Link></p>)}
               <div className="mt-2 flex flex-wrap gap-1.5">{d.terms.map((x) => <span key={x.hpo_id} className="chip">{termLabel(x.hpo_id, x.label)}</span>)}</div>
             </li>
           ))}

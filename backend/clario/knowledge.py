@@ -201,6 +201,12 @@ class Ontology:
         top = heapq.nlargest(k, best.items(), key=lambda kv: (kv[1], self._ic.get(kv[0], 0)))
         return [Term(hpo_id=t, label=self._label[t]) for t, _ in top]
 
+    def search_scored(self, q: str, k: int = 10) -> list[tuple[Term, float]]:
+        """Like `search`, with the match score (1.0 exact label, lower for partial word overlap)."""
+        best = self._score_candidates(q)
+        top = heapq.nlargest(k, best.items(), key=lambda kv: (kv[1], self._ic.get(kv[0], 0)))
+        return [(Term(hpo_id=t, label=self._label[t]), round(s, 4)) for t, s in top]
+
     def best_match(self, text: str) -> tuple[Term, float] | None:
         best = self._score_candidates(text)
         if not best:
@@ -240,7 +246,7 @@ class Ontology:
     def _mica_map(self, p: str) -> dict[str, float]:
         """disease-term q (descendant-or-self of an informative ancestor of p) -> IC of MICA(p, q)."""
         m: dict[str, float] = {}
-        for a in sorted(self._ancestors(p) | {p}, key=lambda x: self._ic[x]):
+        for a in sorted(self._ancestors(p) | {p}, key=lambda x: (self._ic[x], x)):
             ia = self._ic[a]
             if ia < CAND_IC and a != p:
                 continue
@@ -249,13 +255,15 @@ class Ontology:
         return m
 
     def top_diseases(self, patient_hpo: set[str], k: int = 10) -> list[tuple[Disease, float, list]]:
-        pts = [p for p in patient_hpo if p in self._label]
+        pts = sorted(p for p in patient_hpo if p in self._label)  # sorted: float sums and ties must not follow set order
         denom = sum(self._ic[p] for p in pts)
         if not pts or denom <= 0:
             return []
         best: dict[str, dict[str, tuple[float, str]]] = defaultdict(dict)  # disease -> p -> (v, q)
         for p in pts:
-            for q, ia in self._mica_map(p).items():
+            mica = self._mica_map(p)
+            for q in sorted(mica):
+                ia = mica[q]
                 for d, w in self._direct.get(q, ()):
                     v = ia * w
                     cur = best[d.id].get(p)
@@ -263,13 +271,13 @@ class Ontology:
                         best[d.id][p] = (v, q)
         scored = []
         for did, pm in best.items():
-            s = sum(v for v, _ in pm.values()) / denom
+            s = sum(v for _, (v, _q) in sorted(pm.items())) / denom
             scored.append((s, did))
         top = heapq.nlargest(k, scored)
         res = []
         for s, did in top:
-            matches = [(p, q, v) for p, (v, q) in best[did].items()]
-            matches.sort(key=lambda x: -x[2])
+            matches = [(p, q, v) for p, (v, q) in sorted(best[did].items())]
+            matches.sort(key=lambda x: (-x[2], x[0]))
             res.append((self._diseases[did], min(1.0, s), matches))
         return res
 

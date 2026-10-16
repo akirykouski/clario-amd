@@ -21,7 +21,7 @@ export interface ReviewItem {
   // lab rows only
   flag?: LabFlag | null; page?: number; batch_id?: string; unit?: string; ref_low?: number | null; ref_high?: number | null;
 }
-export interface ReviewQueue { items: ReviewItem[]; count: number }
+export interface ReviewQueue { items: ReviewItem[]; count: number; auto?: number }
 export type ReviewAction = "confirm" | "correct" | "reject";
 
 export interface Entry {
@@ -36,7 +36,7 @@ export interface Evidence {
 export interface Pattern {
   disease_id: string; disease_name: string; signal: Signal; score: number;
   matched: Evidence[]; missing: Term[]; rationale: string; rationale_source: "model" | "template";
-  neutral_label: string;
+  neutral_label: string; card_id?: string;
 }
 
 /** A term as the patient reads it: everyday words first, the clinical (HPO) name as subtext. */
@@ -107,7 +107,7 @@ export interface SafetyNotice { level: "emergency" | "advice"; message: string; 
 export interface VaultState { initialized: boolean; locked: boolean }
 export interface TimelineDay { date: string; entries: Entry[]; terms: Term[] }
 export interface Timeline { days: TimelineDay[]; terms: Evidence[] }
-export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms: number; note: string }
+export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms: number; to_check?: number; note: string }
 export interface ShareResult {
   package_id: string; clinic_url: string; expires_at: string; qr_payload: string; entities: number; entries: number;
   mentions?: number; terms?: number; labs?: number;  // entities = mentions: patient terms only, no negated, no family history

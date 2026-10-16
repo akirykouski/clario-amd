@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FileUp } from "lucide-react";
 import { api } from "../api";
-import { fmtDate, fmtNum, notifyReview } from "../lib";
+import { fmtDate, fmtNum, notifyReview, prettyUnit } from "../lib";
 import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { isOfflineBackend, useHealth } from "../components/useHealth";
@@ -117,7 +117,7 @@ export function LabRow({ v, unit, onAct }: { v: LabValue; unit: string; onAct: (
 }
 
 export default function LabsPage() {
-  const { t, lang } = useT();
+  const { t, tn, lang } = useT();
   const { data, error, loading, reload, setData } = useAsync(() => api.labs(), []);
   const [err, setErr] = useState<string | null>(null);
   if (loading && !data) return <Loading />;
@@ -127,6 +127,25 @@ export default function LabsPage() {
     setErr(null);
     try { await api.patchLab(id, b); setData(await api.labs()); notifyReview(); } catch (e) { setErr((e as Error).message); }
   };
+
+  const byName = (x: LabTest, y: LabTest) => labName(x.test_name, lang).main.localeCompare(labName(y.test_name, lang).main, lang);
+  const tests = [...data.tests].sort(byName);
+  const needsLook = (x: LabTest) => x.out_of_range || x.values.some((v) => v.review === "needs_review");
+  const attention = tests.filter(needsLook), calm = tests.filter((x) => !needsLook(x));
+  const card = (x: LabTest) => { const nm = labName(x.test_name, lang); const unit = prettyUnit(x.unit); return (
+            <article key={x.test_key} className="card space-y-2" aria-label={nm.main}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-xl">{nm.main}{nm.printed && <span className="ml-2 text-sm font-sans text-muted">{nm.printed}</span>}</h2>
+                  <p className="text-sm text-muted">{unit}{unit && refText(x) ? ", " : ""}{refText(x) && t("labs.printedRange", { range: refText(x) })}</p>
+                </div>
+                <Spark values={x.values} />
+              </div>
+              <ul className="divide-y divide-line">
+                {x.values.map((v) => <LabRow key={v.id} v={v} unit={unit} onAct={act} />)}
+              </ul>
+            </article>
+  ); };
 
   return (
     <div className="space-y-5">
@@ -142,24 +161,17 @@ export default function LabsPage() {
         <Empty title={t("labs.emptyTitle")}>{t("labs.emptyText")}</Empty>
       ) : (
         <>
-          <p className="text-sm text-muted" data-testid="lab-summary">
+          <p className="text-lg font-bold" data-testid="lab-summary">
             {t("labs.summary", { n: data.n_results, tests: data.tests.length, out: data.out_of_range })}
-            {data.needs_review > 0 && t("labs.summaryReview", { review: data.needs_review })}
+            {data.needs_review > 0 && <span className="font-normal">{t("labs.summaryReview", { review: data.needs_review })}</span>}
           </p>
-          {data.tests.map((x) => { const nm = labName(x.test_name, lang); return (
-            <article key={x.test_key} className="card space-y-2" aria-label={nm.main}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="text-xl">{nm.main}{nm.printed && <span className="ml-2 text-sm font-sans text-muted">{nm.printed}</span>}</h2>
-                  <p className="text-sm text-muted">{x.unit}{x.unit && refText(x) ? ", " : ""}{refText(x) && t("labs.printedRange", { range: refText(x) })}</p>
-                </div>
-                <Spark values={x.values} />
-              </div>
-              <ul className="divide-y divide-line">
-                {x.values.map((v) => <LabRow key={v.id} v={v} unit={x.unit} onAct={act} />)}
-              </ul>
-            </article>
-          ); })}
+          {attention.map(card)}
+          {calm.length > 0 && (
+            <details className="card" data-testid="labs-in-range">
+              <summary className="cursor-pointer min-h-[44px] flex items-center font-bold">{tn("labs.inRange", calm.length)}</summary>
+              <div className="space-y-3 mt-2">{calm.map(card)}</div>
+            </details>
+          )}
         </>
       )}
     </div>

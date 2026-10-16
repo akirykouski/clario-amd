@@ -33,7 +33,7 @@ export default function PatientApp() {
   const open0 = !!vault && vault.initialized && !vault.locked;
   useEffect(() => {
     if (!open0) return;
-    const load = () => api.review().then((r) => setToReview(r.count)).catch(() => {});
+    const load = () => api.review().then((r) => setToReview(r.count + (r.auto ?? 0))).catch(() => {});
     load();  // on mount; after that only when something says the queue changed (extraction done, a decision, an import)
     window.addEventListener(REVIEW_EVENT, load);
     return () => window.removeEventListener(REVIEW_EVENT, load);

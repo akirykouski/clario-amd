@@ -7,6 +7,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from datetime import date, timedelta
@@ -31,12 +32,12 @@ from . import documents as docs
 from .demo import DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_entries
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
-from .knowledge import Ontology
+from .knowledge import Ontology, fold
 from .llm import extract_json, make_llm
 from .models import AnswerResult, Brief, BriefDecisions, ClinicMetrics, DecisionCounts, Entity, Entry, LabResult, NextQuestion, ShareRequest, SharePackage, Term
 from .next_question import as_ranked_patterns, next_question, template_question
 from .patterns import counts_as_evidence, evidence_from, patient_patterns, score_patterns
-from .review import ACTIONS, EntityReview, apply_entity_action, correction_record, register_review_kind
+from .review import ACTIONS, EntityReview, _snap, apply_entity_action, correction_record, register_review_kind
 from .safety import check_entry
 from .vault import BadPassphrase, Locked, Vault
 
@@ -77,6 +78,7 @@ class AnswerIn(BaseModel):
 
 class DemoIn(BaseModel):
     persona: str = "giulia"
+    reviewed: bool = True  # the demo diary arrives read through once: terms the model was sure of are confirmed (hedged ones stay in the queue)
 
 
 class InboxIn(BaseModel):
@@ -229,7 +231,26 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return sorted((Entry.model_validate(d) for d in vault.all("entry")),
                       key=lambda e: (e.occurred_on, e.created_at), reverse=True)
 
-    async def run_extraction(eid: str) -> Entry | None:
+    def confirm_auto(entry: Entry, actor: str) -> int:
+        """auto -> confirmed on every entity of the entry, one correction_log record each. needs_review stays queued."""
+        n = 0
+        for i, x in enumerate(entry.entities):
+            if x.review != "auto":
+                continue
+            new = x.model_copy(update={"review": "confirmed"})
+            entry.entities[i] = new
+            rid, rec = correction_record("entity", x.id, "confirm", {
+                "entry_id": entry.id, "source_excerpt": x.quote, "before": _snap(x), "after": _snap(new), "actor": actor})
+            vault.put("correction_log", rid, rec)
+            n += 1
+        return n
+
+    def auto_terms(entries: list[Entry]) -> int:
+        """Distinct terms the model was sure of that nobody has confirmed yet (they count for nothing until then)."""
+        return len({x.hpo_id for e in entries for x in e.entities
+                    if x.review == "auto" and x.hpo_id and not x.negated and not x.family_history})
+
+    async def run_extraction(eid: str, confirm_as: str | None = None) -> Entry | None:
         try:
             e = load(eid)
         except Locked:
@@ -247,6 +268,8 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             cur.entities = keep + [x for x in ents if (x.hpo_id, x.quote.lower()) not in
                                    {(k.hpo_id, k.quote.lower()) for k in keep}]
             cur.extraction = status
+            if confirm_as:
+                confirm_auto(cur, confirm_as)
             return save(cur)
         return None
 
@@ -308,6 +331,26 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         vault.delete(eid)
         return {"ok": True}
 
+    @app.post("/api/confirm-auto")
+    def confirm_every_auto():
+        """Confirm every term the model was sure of, in all notes. Hedged ones stay in the review list."""
+        n = 0
+        for e in all_entries():
+            k = confirm_auto(e, "patient")
+            if k:
+                save(e)
+                n += k
+        return {"confirmed": n}
+
+    @app.post("/api/entries/{eid}/confirm-all")
+    def confirm_all(eid: str):
+        """"All correct": confirm every term the model was sure of in this note. Hedged ones stay in the review list."""
+        e = load(eid)
+        n = confirm_auto(e, "patient")
+        if n:
+            save(e)
+        return {"confirmed": n, "entry": e}
+
     @app.post("/api/entries/{eid}/extract")
     async def re_extract(eid: str) -> Entry:
         load(eid)
@@ -344,7 +387,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
     @app.get("/api/review")
     def review_queue():
         items = [i for k in app.state.review_kinds.values() for i in k.items()]
-        return {"items": items, "count": len(items)}
+        return {"items": items, "count": len(items), "auto": auto_terms(all_entries())}
 
     @app.post("/api/review/{kind}/{item_id}")
     def review_act(kind: str, item_id: str, body: ReviewAction):
@@ -365,16 +408,39 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 
     @app.get("/api/terms/search")
     def term_search(q: str = "", lang: str = "en"):
-        """Ontology lookup. In Italian the plain Italian names we ship are searched first (labels in Italian)."""
+        """Ontology lookup. In Italian the plain Italian names we ship come first (best match first, at most 3);
+        English ontology hits only fill the list when they are a close match, so an Italian phrase never returns
+        unrelated English terms."""
         if not q.strip():
             return []
-        out = onto.search(q, 10)
-        if norm_lang(lang) == "it":
-            low = q.strip().lower()
-            mine = [Term(hpo_id=h, label=lab) for h, lab in hpo_it().items() if low in lab.lower() and onto.exists(h)]
-            out = mine + [Term(hpo_id=x.hpo_id, label=term_label(x.hpo_id, x.label, "it")) for x in out
-                          if x.hpo_id not in {m.hpo_id for m in mine}]
-        return out[:10]
+        if norm_lang(lang) != "it":
+            return onto.search(q, 10)
+        low = fold(q.strip())
+        words = [w for w in re.split(r"\W+", low) if w]
+        mine: list[tuple[float, int, Term]] = []
+        for h, lab in hpo_it().items():
+            fl = fold(lab)
+            if not onto.exists(h):
+                continue
+            if fl == low:
+                sc = 1.0
+            elif fl.startswith(low):
+                sc = 0.9
+            elif low in fl:
+                sc = 0.8
+            elif words and all(any(lw.startswith(w) for lw in re.split(r"\W+", fl)) for w in words):
+                sc = 0.7
+            else:
+                continue
+            mine.append((sc, len(lab), Term(hpo_id=h, label=lab)))
+        mine.sort(key=lambda r: (-r[0], r[1], r[2].hpo_id))
+        out = [m[2] for m in mine][:3]
+        if len(out) < 3:
+            have = {x.hpo_id for x in out}
+            for x, sc in onto.search_scored(q, 6):
+                if sc >= 0.8 and x.hpo_id not in have and len(out) < 3:
+                    out.append(Term(hpo_id=x.hpo_id, label=term_label(x.hpo_id, x.label, "it")))
+        return out
 
     @app.get("/api/timeline")
     def timeline():
@@ -391,15 +457,15 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 
     @app.get("/api/patterns")
     async def patterns(lang: str = "en"):
-        """Cards for the patient: at most two, titled by the features recorded, in everyday words. No condition names."""
+        """Cards for the patient: at most one, titled by the features recorded, in everyday words. No condition names."""
         lang = norm_lang(lang)
 
         def compute():  # vault reads and scoring are CPU work: keep them off the event loop
             entries = all_entries()
-            return len(evidence_from(entries, onto)), patient_patterns(entries, onto, lang)
+            return len(evidence_from(entries, onto)), patient_patterns(entries, onto, lang), auto_terms(entries)
 
-        n_terms, pats = await asyncio.to_thread(compute)
-        return {"patterns": pats, "confirmed_terms": n_terms, "note": PATTERNS_NOTE[lang][1 if n_terms < 3 else 0 if pats else 2]}
+        n_terms, pats, to_check = await asyncio.to_thread(compute)
+        return {"patterns": pats, "confirmed_terms": n_terms, "to_check": to_check, "note": PATTERNS_NOTE[lang][1 if n_terms < 3 else 0 if pats else 2]}
 
     doc_routes.register(app, s, vault, llm, spawn, gpu_reader)
     asked: dict[str, str] = {}  # feature_id -> question text last shown (so the diary entry quotes what was asked)
@@ -447,7 +513,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         n = 0
         for day, text, mood in persona_entries(body.persona):
             e = save(Entry(id=f"e_{uuid.uuid4().hex[:10]}", created_at=now_iso(), occurred_on=day, text=text, mood=mood))
-            spawn(run_extraction(e.id))
+            spawn(run_extraction(e.id, "demo_seed" if body.reviewed else None))
             n += 1
         return {"ok": True, "entries": n, "persona": body.persona, "lang": PERSONA_LANG[body.persona]}
 
@@ -485,8 +551,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         entries = all_entries()
         pats = []
         if body.include_patterns:
-            chosen = [e for e in entries if body.since <= e.occurred_on <= body.until]
-            pats = score_patterns(chosen, onto)
+            pats = score_patterns(entries, onto, within={e.id for e in entries if body.since <= e.occurred_on <= body.until})
         labs = [LabResult.model_validate(d) for d in vault.all("lab")]
         batch_entry = {d["batch_id"]: d["entry_id"] for d in vault.all("docbatch")}
         pkg = sharing.build_package(entries, body.since, body.until, sharing.alias(str(s.data_dir.resolve())),

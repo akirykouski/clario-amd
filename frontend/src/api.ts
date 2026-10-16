@@ -65,7 +65,9 @@ export const api = {
   nextQuestion: (lang: string) => request<NextQuestion | null>("GET", "/patterns/next-question", { params: { lang } }),
   answerQuestion: (b: { feature_id: string; answer: Answer; question?: string; lang?: string }) =>
     request<AnswerResult>("POST", "/patterns/answer", { body: b }),
-  demo: (persona: Persona = "giulia") => request<{ ok: boolean; entries: number; persona: Persona; lang: string }>("POST", "/demo", { body: { persona } }),
+  demo: (persona: Persona = "giulia") => request<{ ok: boolean; entries: number; persona: Persona; lang: string }>("POST", "/demo", { body: { persona, reviewed: true } }),
+  confirmAllInEntry: (id: string) => request<{ confirmed: number; entry: Entry }>("POST", `/entries/${encodeURIComponent(id)}/confirm-all`),
+  confirmAuto: () => request<{ confirmed: number }>("POST", "/confirm-auto"),
   demoDocuments: () => request<BatchStarted>("POST", "/demo/documents"),
   share: (b: ShareRequest) => request<ShareResult>("POST", "/share", { body: b }),
   clinicKey: (url?: string) => request<ClinicKey>("GET", "/clinic/key", { params: { url } }),

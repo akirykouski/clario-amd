@@ -13,7 +13,7 @@ function lsSet(v: string) { try { localStorage.setItem(LS, v); } catch { /* igno
 export default function SharePage() {
   const { t } = useT();
   const [url, setUrl] = useState(lsGet() || "http://localhost:8800");
-  const [weeks, setWeeks] = useState(8);
+  const [weeks, setWeeks] = useState(12);
   const [patterns, setPatterns] = useState(true);
   const [note, setNote] = useState("");
   const [hours, setHours] = useState(72);

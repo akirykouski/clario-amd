@@ -123,14 +123,15 @@ Throughput on the MI300X, Gemma 4 31B on vLLM, to be measured by `bootstrap.sh -
 
 Training on the MI300X (to be measured by `bootstrap.sh --train`): wall time `{{train.e4b-r16.train_wall_s}}`, tokens/s `{{train.e4b-r16.tokens_per_s_est}}`, peak memory GB `{{train.e4b-r16.peak_mem_gb}}`, from `eval/results/train_e4b-r16.json` (fields n, dataset, model, backend, date, train_wall_s, tokens_per_s_est, peak_mem_gb; a copy of `train/out/e4b-r16/metrics.json`).
 
-Patterns engine, CPU only, no model. 1,200 simulated patients (frequency-weighted terms from a stratified set of the shipped disease annotations, imprecise terms, noise terms, negation) through the app's scorer. Source: `eval/results/pattern_calibration.json`, written by `python eval/pattern_calibration.py` (about a minute on 8 cores). The tier cut-offs come from a separate, larger calibration run, the numbers below from an independent held-out run.
+Patterns engine, CPU only, no model. 1,200 simulated patients (frequency-weighted terms from a stratified set of the shipped disease annotations, imprecise terms, noise terms, negation) through the app's scorer. Source: `eval/results/pattern_calibration.json`, written by `python eval/pattern_calibration.py` (about a minute on 8 cores). The tier cut-offs come from a separate, larger calibration run, the numbers below from a held-out run that draws only condition families the calibration run never used. A hit is the right condition family (subtypes of one condition count as one). The patient sees at most one card, because only the top-ranked condition can lead.
 
 | Measure | Value |
 |---|---|
-| True condition ranked 1st / in the top 3 / in the top 10 | 51% / 68% / 79% |
-| Strong card is the simulated condition | 85% (95% interval 82 to 89) |
-| Moderate card is the simulated condition | 42% (37 to 47) |
-| Weak card is the simulated condition | 28% (23 to 35) |
+| True condition family ranked 1st / in the top 3 / in the top 10, equal share per stratum | 50% / 65% / 77% |
+| Same, weighted by each stratum's share of the eligible conditions | 47% / 63% / 76% |
+| Strong card is the simulated condition family | 82% (95% interval 78 to 86) |
+| Moderate card is the simulated condition family | 44% (40 to 50) |
+| Weak card is the simulated condition family | 28% (22 to 35) |
 
 The simulated patients are not real people, and the annotations describe typical presentations, so these numbers measure how well the scorer reads the knowledge it ships. How it does in a clinic is untested. Tiers are set by how far the top card leads the next condition, because the raw score alone never reaches 80% precision.
 

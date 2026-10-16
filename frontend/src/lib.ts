@@ -99,6 +99,13 @@ export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: "
   const d = new Date(iso.length === 10 ? iso + "T00:00:00" : iso);
   return isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat(locale(), opts).format(d);
 }
+/** Lab units as they are printed on a report: "10^3/uL" -> "10³/µL", "ug/dL" -> "µg/dL". */
+export function prettyUnit(u: string): string {
+  const sup: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return u.replace(/10\^(\d+)/g, (_, d: string) => "10" + [...d].map((c) => sup[c]).join(""))
+    .replace(/\bu(?=[A-Za-z]{1,2}\b|L\b)/g, "µ").replace(/\bmcg\b/g, "µg");
+}
+
 export function today(): string {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
