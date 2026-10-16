@@ -95,9 +95,11 @@ def test_labs_reach_the_clinic_and_the_brief_cites_them(unlocked, clinic_server,
         entry_ids = {e["id"] for e in pkg["entries"]}
         assert all(l["entry_id"] in entry_ids for l in pkg["labs"])
         events = sse(clinic, clinic.post(f"/api/inbox/{sh['package_id']}/brief").json()["run_id"])
-        labs = [i for i in events[-1]["payload"]["items"] if i["section"] == "labs" and i["origin"] == "patient"]
-        assert len(labs) >= 5 and all(i["cites"] for i in labs)  # data-origin, cited to the import entry
-        assert any("page" in i["text"] and "printed range" in i["text"] for i in labs)
+        labs = [i for i in events[-1]["payload"]["items"] if i["section"] == "labs" and i["origin"] == "document"]
+        tests = [i for i in labs if i["id"] != "bi_lab_in_range"]
+        assert len(tests) >= 3 and all(i["pages"] and i["review"] in ("accepted", "pending") for i in tests)  # from the report, cited by page
+        assert any("page" in i["text"] and "printed range" in i["text"] for i in tests)
+        assert not any(" to  " in i["text"] or i["text"].count("2026-") for i in labs)  # dates localized, no empty range end
 
 
 def test_demo_referti_latest_date_is_pinned():

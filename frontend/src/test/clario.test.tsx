@@ -75,7 +75,7 @@ describe("finalize button", () => {
   it("is disabled while any item is pending", () => {
     render(<FinalizeButton items={[item("a", "accepted"), item("b", "pending")]} onClick={() => {}} />);
     expect(screen.getByRole("button", { name: /finalize/i })).toBeDisabled();
-    expect(screen.getByText(/1 item still need review/)).toBeInTheDocument();
+    expect(screen.getByText(/1 item still needs review/)).toBeInTheDocument();
   });
   it("is enabled once all are reviewed", () => {
     render(<FinalizeButton items={[item("a", "accepted"), item("b", "rejected"), item("c", "edited")]} onClick={() => {}} />);

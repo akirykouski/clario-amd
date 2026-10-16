@@ -50,9 +50,9 @@ describe("clinic package page", () => {
     // one history per test, oldest to newest: the earlier positive stays visible next to the later negative
     const ana = within(labs).getAllByTestId("lab-test").find((x) => x.textContent?.includes("ANA")) as HTMLElement;
     const vals = within(ana).getAllByRole("listitem").map((x) => x.textContent ?? "");
-    expect(vals[0]).toContain("Positivo 1:160");
-    expect(vals[0]).toContain("Positive");
-    expect(vals[1]).toContain("Negativo");
+    expect(vals[0]).toContain("Positive 1:160");  // one statement, not a value plus a second "Positive" chip
+    expect(vals[0].match(/Positive/g)).toHaveLength(1);
+    expect(vals[1]).toContain("Negative");
     // lab names follow the UI language: Glucose in English
     expect(within(labs).getAllByText("Glucose").length).toBeGreaterThan(0);
     expect(within(labs).queryByText("Glicemia")).toBeNull();

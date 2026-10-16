@@ -45,7 +45,7 @@ export function RunChips({ model, backend, tokensPerS, latencyMs }: { model?: st
 
 export function FinalizeButton({ items, onClick, busy, pendingLabs = 0 }: { items: BriefItem[]; onClick: () => void; busy?: boolean; pendingLabs?: number }) {
   const { t } = useT();
-  const pending = items.filter((i) => i.review === "pending").length;
+  const pending = items.filter((i) => i.review === "pending" && i.origin === "ai").length;
   return (
     <div>
       <button className="btn btn-primary" onClick={onClick} disabled={!canFinalize(items) || pendingLabs > 0 || busy}>{t("brief.finalize")}</button>
@@ -135,7 +135,7 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
                   return (
                     <section key={s} aria-label={t(sectionTitle(s))}>
                       <h3 className="text-lg mb-1">{t(sectionTitle(s))}</h3>
-                      <ul className="space-y-2">{items.map((it) => <ItemRow key={it.id} it={it} locked={shown.finalized} onReview={review} />)}</ul>
+                      <ul className="space-y-2">{items.map((it) => <ItemRow key={it.id} it={it} pkg={pkg} locked={shown.finalized} onReview={review} />)}</ul>
                     </section>
                   );
                 })}
@@ -174,7 +174,7 @@ function PatientCopy({ pkg, view }: { pkg: SharePackage; view: Brief | null }) {
         return (
           <section key={s} aria-label={t(sectionTitle(s))}>
             <h3 className="text-lg mb-1">{t(sectionTitle(s))}</h3>
-            <ul className="space-y-2">{items.map((it) => <li key={it.id} className="card text-[15px]">{it.text}</li>)}</ul>
+            <ul className="space-y-2">{items.map((it) => <li key={it.id} className="card text-[15px]">{noteLabel(it, true) && <span className="block text-sm font-bold text-muted">{t(noteLabel(it, true) as Key)}</span>}{it.text}</li>)}</ul>
           </section>
         );
       })}
@@ -185,35 +185,77 @@ function PatientCopy({ pkg, view }: { pkg: SharePackage; view: Brief | null }) {
   );
 }
 
-function ItemRow({ it, locked, onReview }: { it: BriefItem; locked: boolean; onReview: (it: BriefItem, r: BriefItem["review"], text?: string) => void }) {
+/** The patient's own question has no label in its text: the UI says whose words these are. */
+const noteLabel = (it: BriefItem, own = false): Key | null => (it.kind === "patient_note" ? (own ? "brief.patientNoteOwn" : "brief.patientNote") : null);
+
+function FlagReason({ it, pkg }: { it: BriefItem; pkg: SharePackage }) {
+  const { t } = useT();
+  const date = (id: string) => pkg.entries.find((e) => e.id === id)?.occurred_on;
+  const cited = it.cites.map((c, i) => { const d = date(c); return d ? `${t("brief.entryN", { n: i + 1 })}, ${fmtDate(d)}` : t("brief.entryN", { n: i + 1 }); }).join("; ");
+  const term = `"${it.flag_term ?? ""}"`;
+  const dates = [...new Set((it.flag_entries ?? []).map(date).filter((d): d is string => !!d))].sort().slice(0, 3).map((d) => fmtDate(d)).join(", ");
+  return (
+    <p className="mt-2 text-sm" role="note" data-testid="flag-reason">
+      {t("brief.flagWhy", { term, cited })} {dates ? t("brief.flagWhere", { term, dates }) : t("brief.flagNowhere")}
+    </p>
+  );
+}
+
+function ItemRow({ it, pkg, locked, onReview }: { it: BriefItem; pkg: SharePackage; locked: boolean; onReview: (it: BriefItem, r: BriefItem["review"], text?: string) => void }) {
   const { t } = useT();
   const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [text, setText] = useState(it.text);
   const ai = it.origin === "ai";
+  const flagged = it.flag === "citation_mismatch";
   const tone = it.review === "accepted" || it.review === "edited" ? "var(--accent)" : it.review === "rejected" ? "var(--line)" : "var(--moderate)";
+  const origin = ai ? t("brief.aiDraft") : it.origin === "document" ? t("brief.fromDocuments") : it.from_question ? t("brief.askedByApp") : t("brief.fromPatient");
+  const lead = noteLabel(it);
+  if (ai && !locked && it.review !== "pending" && !editing) {  // decided: one line and an Undo
+    return (
+      <li className="card text-[15px] py-2 flex items-center gap-2" style={{ borderLeft: `4px solid ${tone}` }} data-testid="item-decided">
+        <span className="chip text-xs shrink-0">{t(`brief.review.${it.review}`)}</span>
+        <span className={`truncate min-w-0 flex-1 ${it.review === "rejected" ? "line-through text-muted" : ""}`} title={it.text}>{it.text}</span>
+        <button className="btn shrink-0" onClick={() => onReview(it, "pending")}>{t("brief.undo")}</button>
+      </li>
+    );
+  }
   return (
-    <li className="card text-[15px]" style={{ borderLeft: `4px solid ${tone}`, opacity: it.review === "rejected" ? 0.6 : 1 }}>
+    <li className="card text-[15px]" style={{ borderLeft: `4px solid ${tone}`, opacity: it.review === "rejected" ? 0.6 : 1, background: flagged && it.review === "pending" ? "var(--amber-bg)" : undefined }}>
       {editing ? (
         <div>
           <label htmlFor={`t-${it.id}`} className="label">{t("brief.editItem")}</label>
           <textarea id={`t-${it.id}`} className="input min-h-[90px]" value={text} onChange={(e) => setText(e.target.value)} />
           <div className="flex gap-2 mt-2">
-            <button className="btn btn-primary" onClick={() => { onReview(it, "edited", text); setEditing(false); }} disabled={!text.trim()}>{t("brief.saveEdit")}</button>
+            <button className="btn btn-primary" onClick={() => { onReview(it, "edited", text); setEditing(false); setConfirming(false); }} disabled={!text.trim()}>{t("brief.saveEdit")}</button>
             <button className="btn" onClick={() => { setText(it.text); setEditing(false); }}>{t("common.cancel")}</button>
           </div>
         </div>
       ) : (
         <>
+          {lead && <p className="text-sm font-bold text-muted">{t(lead)}</p>}
           <p className={it.review === "rejected" ? "line-through" : ""}>{it.text}</p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="chip text-xs">{ai ? t("brief.aiDraft") : t("brief.fromPatient")}</span>
+            <span className="chip text-xs">{origin}</span>
             <span className="chip text-xs">{t(`brief.review.${it.review}`)}</span>
-            {it.flag === "citation_mismatch" && <span className="chip text-xs" style={{ borderColor: "var(--strong)", color: "var(--strong)" }} role="note">{t("brief.flagged")}</span>}
+            {flagged && <span className="chip text-xs" style={{ borderColor: "var(--moderate)", color: "var(--ink)", background: "var(--amber-bg)" }} role="note">{t("brief.flagged")}</span>}
             {it.cites.map((c, i) => <button key={c} className="chip hover:border-accent" onClick={() => jumpTo(c)} aria-label={t("brief.goTo", { n: i + 1 })}>{t("brief.entryN", { n: i + 1 })}</button>)}
+            {(it.pages ?? []).map((p) => <span key={`p${p}`} className="chip text-xs">{t("brief.reportPage", { n: p })}</span>)}
           </div>
-          {ai && !locked && (
+          {flagged && it.review === "pending" && <FlagReason it={it} pkg={pkg} />}
+          {ai && !locked && confirming && (
+            <div className="mt-2 space-y-2" data-testid="flag-confirm">
+              <p className="text-sm font-bold">{t("brief.flagConfirm")}</p>
+              <div className="flex gap-2 flex-wrap">
+                <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} aria-hidden /> {t("brief.edit")}</button>
+                <button className="btn" onClick={() => { setConfirming(false); onReview(it, "accepted"); }}><Check size={16} aria-hidden /> {t("brief.acceptAnyway")}</button>
+                <button className="btn" onClick={() => setConfirming(false)}>{t("common.cancel")}</button>
+              </div>
+            </div>
+          )}
+          {ai && !locked && !confirming && (
             <div className="mt-2 flex gap-2 flex-wrap">
-              <button className="btn" onClick={() => onReview(it, "accepted")} aria-pressed={it.review === "accepted"}><Check size={16} aria-hidden /> {t("brief.accept")}</button>
+              <button className="btn" onClick={() => (flagged ? setConfirming(true) : onReview(it, "accepted"))} aria-pressed={it.review === "accepted"}><Check size={16} aria-hidden /> {t("brief.accept")}</button>
               <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} aria-hidden /> {t("brief.edit")}</button>
               <button className="btn" onClick={() => onReview(it, "rejected")} aria-pressed={it.review === "rejected"}><X size={16} aria-hidden /> {t("brief.reject")}</button>
             </div>
@@ -227,7 +269,7 @@ function ItemRow({ it, locked, onReview }: { it: BriefItem; locked: boolean; onR
 function PrintBrief({ pkg, brief }: { pkg: SharePackage; brief: Brief }) {
   const { t } = useT();
   const kept = brief.items.filter((i) => i.review === "accepted" || i.review === "edited" || i.origin === "patient");
-  const label = (id: string) => { const e = pkg.entries.find((x) => x.id === id); return e ? e.occurred_on : id; };
+  const label = (id: string) => { const e = pkg.entries.find((x) => x.id === id); return e ? fmtDate(e.occurred_on) : id; };
   return (
     <div className="print-only">
       <h1 style={{ fontSize: "20pt" }}>{t("brief.printTitle", { alias: pkg.patient_alias })}</h1>
@@ -238,7 +280,7 @@ function PrintBrief({ pkg, brief }: { pkg: SharePackage; brief: Brief }) {
         return (
           <section key={s} style={{ marginTop: "10pt" }}>
             <h2 style={{ fontSize: "14pt" }}>{t(sectionTitle(s))}</h2>
-            <ul>{items.map((i) => <li key={i.id}>{i.text}{i.cites.length > 0 && <em> ({i.cites.map(label).join(", ")})</em>}</li>)}</ul>
+            <ul>{items.map((i) => <li key={i.id}>{noteLabel(i) ? `${t(noteLabel(i) as Key)}: ` : ""}{i.text}{i.cites.length > 0 && <em> ({i.cites.map(label).join(", ")})</em>}</li>)}</ul>
           </section>
         );
       })}

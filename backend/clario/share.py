@@ -64,7 +64,7 @@ LAB_NAMES_EN = {
     "proteineurinarie": "Urine protein", "sodio": "Sodium", "pcr": "CRP", "mcv": "MCV", "c3": "C3", "c4": "C4",
     "glicemia": "Glucose", "emoglobina": "Hemoglobin", "antidsdna": "Anti-dsDNA", "neutrofili": "Neutrophils",
     "ematocrito": "Hematocrit", "ft3": "FT3", "tsh": "TSH", "ves": "ESR", "potassio": "Potassium", "ana": "ANA",
-    "alt": "ALT", "creatinina": "Creatinine", "piastrine": "Platelets", "vitamina d": "Vitamin D", "vitamind": "Vitamin D",
+    "alt": "ALT", "creatinina": "Creatinine", "piastrine": "Platelets", "vitamina d": "Vitamin D", "vitamind": "Vitamin D", "vitaminad": "Vitamin D",
     "colesterolototale": "Total cholesterol", "sideremia": "Serum iron", "globulibianchi": "White blood cells",
     "globulirossi": "Red blood cells", "azotemia": "Blood urea nitrogen", "linfociti": "Lymphocytes",
 }
@@ -102,7 +102,7 @@ def build_package(entries: list[Entry], since: str, until: str, patient_alias: s
         shared_entities += [SharedEntity(entry_id=e.id, occurred_on=e.occurred_on, type=x.type, quote=x.quote,
                                          canonical=x.canonical, hpo_id=x.hpo_id, negated=x.negated,
                                          family_history=x.family_history, severity=x.severity, onset_hint=x.onset_hint,
-                                         reviewed=x.review in COUNTED) for x in confirmed]
+                                         reviewed=x.review in COUNTED, from_question="from_question" in x.flags) for x in confirmed]
         slim.append(e.model_copy(update={"entities": confirmed}))
     created = datetime.now(timezone.utc)
     return SharePackage(package_id=f"pkg_{uuid.uuid4().hex[:12]}", patient_alias=patient_alias,

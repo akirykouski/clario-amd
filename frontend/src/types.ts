@@ -54,7 +54,7 @@ export interface ShareRequest {
 
 export interface SharedEntity {
   entry_id: string; occurred_on: string; type: EntityType; quote: string; canonical: string;
-  hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; onset_hint?: string | null; reviewed: boolean;
+  hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; onset_hint?: string | null; reviewed: boolean; from_question?: boolean;
 }
 
 export interface SharedLab {
@@ -73,7 +73,8 @@ export type BriefReview = "pending" | "accepted" | "rejected" | "edited";
 
 export interface BriefItem {
   id: string; section: BriefSection; text: string; cites: string[];
-  origin: "patient" | "ai"; review: BriefReview; flag?: "citation_mismatch" | null;
+  origin: "patient" | "ai" | "document"; review: BriefReview; flag?: "citation_mismatch" | null;
+  flag_term?: string | null; flag_entries?: string[]; kind?: "patient_note" | null; pages?: number[]; from_question?: boolean;
 }
 
 export type Persona = "giulia" | "giulia_it";
