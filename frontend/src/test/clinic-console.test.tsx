@@ -73,7 +73,7 @@ describe("brief item origin chips", () => {
     expect(screen.getByText("Dai referti")).toBeInTheDocument();
     expect(screen.getByText("referto p.2")).toBeInTheDocument();
     expect(screen.getByText("Chiesto dall'app")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Sintesi per la visita" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Riepilogo per la visita" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Vai alla nota citata 1" })).toBeInTheDocument();
   });
 });

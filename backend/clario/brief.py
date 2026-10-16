@@ -92,24 +92,25 @@ def _times(n: int, lang: str) -> str:
 _LAB_FLAG = {"en": {"low": "low", "high": "high", "normal": "in range"}, "it": {"low": "basso", "high": "alto", "normal": "nella norma"}}
 
 
-def _num(n: float) -> str:
-    return f"{n:g}"
+def _num(n: float, lang: str = "en") -> str:
+    s = f"{n:g}"
+    return s.replace(".", ",") if lang == "it" else s
 
 
 def _range_text(lo: float | None, hi: float | None, lang: str) -> str:
     """Printed reference range: both ends, only an upper end, or only a lower end."""
     it = lang == "it"
     if lo is not None and hi is not None:
-        return f"valori di riferimento da {_num(lo)} a {_num(hi)}" if it else f"printed range {_num(lo)} to {_num(hi)}"
+        return f"valori di riferimento da {_num(lo, lang)} a {_num(hi, lang)}" if it else f"printed range {_num(lo, lang)} to {_num(hi, lang)}"
     if hi is not None:
-        return f"valori di riferimento fino a {_num(hi)}" if it else f"printed range up to {_num(hi)}"
+        return f"valori di riferimento fino a {_num(hi, lang)}" if it else f"printed range up to {_num(hi, lang)}"
     if lo is not None:
-        return f"valori di riferimento da {_num(lo)}" if it else f"printed range from {_num(lo)}"
+        return f"valori di riferimento da {_num(lo, lang)}" if it else f"printed range from {_num(lo, lang)}"
     return ""
 
 
-def _lab_value(r) -> str:
-    return r.value_text or (_num(r.value_numeric) if r.value_numeric is not None else "?")
+def _lab_value(r, lang: str = "en") -> str:
+    return r.value_text or (_num(r.value_numeric, lang) if r.value_numeric is not None else "?")
 
 
 def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
@@ -134,7 +135,7 @@ def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         parts = []
         for r in rows:
             flag = f", {_LAB_FLAG[lang][r.flag]}" if r.flag else ""
-            parts.append(f"{(_lab_value(r) + ' ' + r.unit).strip()}{flag} ({fdate(r.date, lang, year)}, {'pagina' if it else 'page'} {r.page})")
+            parts.append(f"{(_lab_value(r, lang) + ' ' + r.unit).strip()}{flag} ({fdate(r.date, lang, year)}, {'pagina' if it else 'page'} {r.page})")
         rng = next((r for r in rows if r.ref_low is not None or r.ref_high is not None), None)
         rtxt = f"; {_range_text(rng.ref_low, rng.ref_high, lang)}" if rng else ""
         mark = f" ({LAB_PENDING[lang]})" if pending else ""

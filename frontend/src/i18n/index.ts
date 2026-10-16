@@ -79,7 +79,8 @@ export function patientTermLine(hpoId: string | null | undefined, label: string,
 
 /** Name of an extracted entity for the patient. In Italian, a term with no Italian name and no ontology code
  * (a trigger, a relative's condition) is shown as the patient's own words instead of an English clinical name. */
-export function entityName(x: { hpo_id: string | null; canonical: string; quote?: string | null }): string {
+export function entityName(x: { hpo_id: string | null; canonical: string; quote?: string | null; family_history?: boolean }): string {
+  if (x.family_history && x.quote) return x.quote;
   if (current === "it" && !x.hpo_id && x.quote) return x.quote;
   return termLabel(x.hpo_id, x.canonical);
 }

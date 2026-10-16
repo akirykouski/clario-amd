@@ -17,7 +17,7 @@ export function SignalPill({ signal }: { signal: Signal }) {
         <span aria-hidden className="inline-block w-2 h-2 rounded-full" style={{ background: sigColor[signal] }} />
         {t(`signal.${signal}`)}
       </button>
-      {open && <span role="note" className="card absolute right-0 top-full z-10 mt-1 block w-64 text-sm font-normal text-ink shadow-lg">{t(`signal.explain.${signal}`)}</span>}
+      {open && <span role="note" className="card absolute left-0 top-full z-10 mt-1 block w-64 max-w-[calc(100vw-2rem)] text-sm font-normal text-ink shadow-lg">{t(`signal.explain.${signal}`)}</span>}
     </span>
   );
 }

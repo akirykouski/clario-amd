@@ -216,7 +216,7 @@ function LabsHistory({ pkg, onPackage }: { pkg: SharePackage; onPackage: (p: Sha
                   <span className="font-bold text-base">{name(rows[0])}</span>
                   <span className="font-bold" style={latest.abnormal ? { color: "var(--strong)" } : undefined}>{value(latest)}</span>
                   {f && <span className="chip text-xs" style={latest.abnormal ? { borderColor: "var(--strong)", color: "var(--strong)" } : undefined}>{f}</span>}
-                  <span className="text-muted ml-auto">{rows.some((l) => l.decision) ? t("pkg.lab.decided", { n: rows.filter((l) => l.decision).length }) : t("pkg.lab.checked")}</span>
+                  <span className="text-muted ml-auto">{rows.some((l) => l.decision) ? tn("pkg.lab.decided", rows.filter((l) => l.decision).length) : t("pkg.lab.checked")}</span>
                 </summary>
                 <div className="mt-1">
                   {rng && <p className="text-muted">{t("pkg.lab.range")} {rng}</p>}

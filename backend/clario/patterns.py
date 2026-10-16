@@ -178,6 +178,16 @@ def has_frequency_info(disease: Disease) -> bool:
     return ok
 
 
+# Lay-equivalent terms the ontology files apart: a patient who wrote "joint pain" has told us about her joints.
+SAME_AS_RECORDED = {"HP:0001369": frozenset({"HP:0002829", "HP:0001386"})}  # Arthritis <- Arthralgia, Joint swelling
+
+
+def _parents(onto: Ontology, hid: str) -> set[str]:
+    """Direct parents: ancestors that are not an ancestor of another ancestor."""
+    anc = onto.ancestors(hid) - {hid}
+    return {a for a in anc if not any(a in onto.ancestors(b) for b in anc if b != a)}
+
+
 def missing_terms(onto: Ontology, disease, patient: set[str], k: int = 5, lay: dict[str, list[str]] | None = None) -> list[Term]:
     """Common features of the condition, in body systems the patient already wrote about, not yet recorded.
 
@@ -193,6 +203,10 @@ def missing_terms(onto: Ontology, disease, patient: set[str], k: int = 5, lay: d
         if w <= COMMON or not (onto.systems(hid) & systems) or is_generic(onto, hid):
             continue
         if any(close(onto, p, hid) or hid in onto.ancestors(p) for p in patient):
+            continue
+        # A sibling of something she recorded (joint swelling vs arthritis) would paraphrase her own words back to her.
+        sib = {a for a in _parents(onto, hid) if not is_generic(onto, a)}
+        if any(sib & onto.ancestors(p) for p in patient) or (hid in SAME_AS_RECORDED and SAME_AS_RECORDED[hid] & patient):
             continue
         if not patient_noticeable(onto, hid, lay):
             continue
