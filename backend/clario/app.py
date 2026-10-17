@@ -706,7 +706,8 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         n_terms = len(evidence_from(entries, onto))
         note = "" if conds else ("Not enough specific findings yet to suggest conditions." if lang != "it"
                                  else "Non ci sono ancora abbastanza elementi specifici per suggerire condizioni.")
-        return Differential(conditions=conds, question=q, answers=d["answers"], n_terms=n_terms, note=note)
+        systems = clinic_ddx.organ_systems(onto, entries, lang)  # which organ systems the counted findings span
+        return Differential(conditions=conds, systems=systems, question=q, answers=d["answers"], n_terms=n_terms, note=note)
 
     def purge(pid: str) -> None:
         with contextlib.suppress(FileNotFoundError):

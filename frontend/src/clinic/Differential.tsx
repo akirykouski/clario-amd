@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, ExternalLink, FlaskConical, HelpCircle, RotateCcw, Sparkles } from "lucide-react";
 import { api } from "../api";
-import type { Answer, Condition, Differential as Ddx } from "../types";
+import type { Answer, Condition, Differential as Ddx, OrganSystem } from "../types";
 import { ErrorBox, SignalPill, Spinner } from "../components/ui";
-import { useT } from "../i18n";
+import { useT, type Key } from "../i18n";
 
 const pct = (f: number | null) => (f === null ? null : `${Math.round(f * 100)}%`);
 
@@ -50,6 +50,7 @@ export function Differential({ pid, version }: { pid: string; version: number })
       </div>
       {err && <ErrorBox error={err} />}
       {!ddx && !err && <Spinner label={t("common.loading")} />}
+      {ddx && (ddx.systems?.length ?? 0) > 0 && <SystemsRow systems={ddx.systems as OrganSystem[]} />}
       {ddx && ddx.conditions.length === 0 && <p className="text-muted">{ddx.note}</p>}
       {ddx && ddx.conditions.length > 0 && (
         <ol className="space-y-3">
@@ -144,5 +145,47 @@ function ConditionCard({ c, move }: { c: Condition; move?: number | "new" }) {
         </div>
       )}
     </li>
+  );
+}
+
+/** Which organ systems the recorded findings span, computed in code (backend `clinic_ddx.organ_systems`). Each chip shows
+ * how many findings sit in that system; hover lists them, a tap opens them under the row. */
+function SystemsRow({ systems }: { systems: OrganSystem[] }) {
+  const { t, tn } = useT();
+  const [open, setOpen] = useState<string | null>(null);
+  const name = (key: string) => t(`ddx.org.${key}` as Key);
+  const shown = systems.find((s) => s.key === open);
+  return (
+    <div className="space-y-2" data-testid="ddx-systems">
+      <p className="text-xs font-bold uppercase tracking-wide text-muted">{tn("ddx.systems", systems.length)}</p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {systems.map((s, i) => (
+          <span key={s.key} className="inline-flex items-center gap-1.5">
+            {i > 0 && <span aria-hidden className="text-muted">·</span>}
+            <button type="button" className="chip text-sm font-bold" aria-pressed={open === s.key} data-testid="ddx-system"
+              title={s.findings.map((f) => f.label).join(", ")} aria-label={t("ddx.systemFindings", { system: name(s.key), n: s.count })}
+              onClick={() => setOpen(open === s.key ? null : s.key)}
+              style={open === s.key ? { borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 10%, transparent)" } : undefined}>
+              {name(s.key)}<span className="text-muted tabular-nums">{s.count}</span>
+            </button>
+          </span>
+        ))}
+      </div>
+      {shown && (
+        <ul className="flex flex-wrap gap-1.5" data-testid="ddx-system-findings" aria-label={name(shown.key)}>
+          {shown.findings.map((f) => (
+            <li key={f.hpo_id} className="chip text-sm">
+              {f.label}{f.count > 1 && <span className="text-muted text-xs">×{f.count}</span>}
+              {f.labs > 0 && (
+                <span className="text-xs text-muted inline-flex items-center gap-0.5" title={t("ddx.fromLabsTitle", { n: f.labs })}>
+                  <FlaskConical size={11} aria-hidden />{t("ddx.fromLabs")}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-muted">{t("ddx.systemsNote")}</p>
+    </div>
   );
 }

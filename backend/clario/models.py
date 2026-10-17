@@ -540,8 +540,25 @@ class ClinicAnswer(BaseModel):
     at: str
 
 
+class SystemFinding(BaseModel):
+    hpo_id: str
+    label: str
+    count: int = Field(0, description="Notes that record the finding")
+    labs: int = Field(0, description="Lab dates with a counted abnormal result behind the finding")
+
+
+class OrganSystem(BaseModel):
+    """One organ system the patient's current findings touch, for the row above the conditions. Computed in code."""
+
+    key: str = Field(description="clinic_ddx.SYSTEM_ORDER key: skin, joints, kidney, blood, immune, ...")
+    count: int = Field(description="Distinct findings in this system")
+    findings: list[SystemFinding]
+
+
 class Differential(BaseModel):
     conditions: list[Condition]
+    systems: list[OrganSystem] = Field(default_factory=list, description="Organ systems the counted findings span, most "
+                                                                         "findings first; general symptoms left out")
     question: ClinicQuestion | None = None
     answers: list[ClinicAnswer] = Field(default_factory=list)
     n_terms: int = 0

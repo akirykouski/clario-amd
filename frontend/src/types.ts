@@ -250,7 +250,10 @@ export interface Condition {
 }
 export interface ClinicQuestion { feature_id: string; label: string; question: string; ig: number; freq_by: { name: string; freq: number | null }[] }
 export interface ClinicAnswer { feature_id: string; label: string; answer: Answer; at: string }
-export interface Differential { conditions: Condition[]; question: ClinicQuestion | null; answers: ClinicAnswer[]; n_terms: number; note: string }
+/** One organ system the counted findings touch (`count` = distinct findings), for the row above the conditions. */
+export interface SystemFinding { hpo_id: string; label: string; count: number; labs: number }
+export interface OrganSystem { key: string; count: number; findings: SystemFinding[] }
+export interface Differential { conditions: Condition[]; systems?: OrganSystem[]; question: ClinicQuestion | null; answers: ClinicAnswer[]; n_terms: number; note: string }
 export type TermDecision = "confirmed" | "rejected" | "corrected" | "pending";
 /** A term the clinician replaced: the id and label it had (`from`, null when it had no id) and the one picked (`to`). */
 export interface TermCorrection { from: string | null; from_label: string; to: string; label: string; at: string }

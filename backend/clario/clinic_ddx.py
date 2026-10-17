@@ -16,8 +16,8 @@ import numpy as np
 from .documents import compute_flag, is_off, test_key
 from .i18n import disease_name, term_label
 from .knowledge import Ontology
-from .models import (ClinicQuestion, Condition, ConditionFeature, Entity, Entry, SharedEntity, SharedLab, SharePackage,
-                     Term)
+from .models import (ClinicQuestion, Condition, ConditionFeature, Entity, Entry, OrganSystem, SharedEntity, SharedLab,
+                     SharePackage, SystemFinding, Term)
 from .next_question import EPS, FLOOR, MIN_PF, expected_gain
 from .patterns import (DEFAULT_FREQ, MIN_TERMS, annotated_freq, evidence_from, has_frequency_info, is_generic,
                        negated_ids, scored_diseases)
@@ -87,6 +87,16 @@ LAB_RULES: tuple[LabRule, ...] = (
     LabRule("HP:0011227", "high", ("pcr", "crp", "proteinacreattiva", "creactiveprotein")),  # Elevated circulating C-reactive protein concentration
 )
 _BY_NAME = {n: r for r in LAB_RULES for n in r.names}
+# The organ system each lab-derived feature belongs to, by the test behind it (the specialty.py lab table splits the same
+# tests into blood counts, immunology and kidney function). HPO files some of these where a reader would not look:
+# elevated creatinine under metabolism, the complement and antibody results under blood.
+LAB_SYSTEMS: dict[str, str] = {
+    "HP:0001903": "blood", "HP:0001882": "blood", "HP:0001888": "blood", "HP:0001873": "blood",  # Hb, WBC, lymphocytes, PLT
+    "HP:0003565": "blood", "HP:0011227": "blood",  # ESR, CRP: blood markers of inflammation
+    "HP:0005421": "immune", "HP:0045042": "immune", "HP:0004431": "immune",  # complement C3, C4, total
+    "HP:0003493": "immune", "HP:0020151": "immune",  # ANA, anti-dsDNA
+    "HP:0003259": "kidney", "HP:0000093": "kidney",  # creatinine, proteinuria
+}
 LAB_ENTRY = "clinic_labs"  # prefix of the entries that carry lab-derived features
 _NEGATIVE = re.compile(r"\b(negativ|non\s*reattiv|non\s*rilevat|not\s*detected|non[- ]?reactive|assent|absent)", re.I)
 _POSITIVE = re.compile(r"\b(positiv|reattiv|reactive|detected|rilevat|presen)|^\s*\+{1,4}\s*$", re.I)
@@ -198,6 +208,29 @@ def with_lab_fixes(pkg: SharePackage, fixes: dict[str, dict]) -> SharePackage:
         flag = compute_flag(new.value_numeric, new.ref_low, new.ref_high, text=new.value_text)
         labs.append(new.model_copy(update={"flag": flag, "abnormal": is_off(flag)}))
     return pkg.model_copy(update={"labs": labs})
+
+
+# Not organ systems: general symptoms (fatigue, fever) and terms HPO does not place. Left out of the row.
+NOT_ORGANS = ("general", "other")
+
+
+def organ_systems(onto: Ontology, entries: list[Entry], lang: str = "en") -> list[OrganSystem]:
+    """Which organ systems the patient's current findings span (skin, joints, kidney, blood ...), each with the findings
+    behind it. The same evidence the ranking scores: negated, family-history, past-history and rejected terms are out,
+    and a lab result counts only once it passed the code checks or the clinician confirmed it (`with_labs`). A feature
+    that came from a lab is placed by its test (`LAB_SYSTEMS`), a note term by its HPO branch (`system_key`)."""
+    by_sys: dict[str, list[SystemFinding]] = {}
+    for hid, ev in evidence_from(entries, onto).items():
+        labs = _lab_count(ev.entry_ids)
+        key = LAB_SYSTEMS.get(hid) if labs and hid in LAB_SYSTEMS else system_key(onto, hid)
+        if key in NOT_ORGANS:
+            continue
+        by_sys.setdefault(key, []).append(SystemFinding(hpo_id=hid, label=term_label(hid, onto.label(hid) or hid, lang),
+                                                        count=_note_count(ev.entry_ids), labs=labs))
+    order = {k: i for i, k in enumerate(dict.fromkeys(SYSTEM_ORDER))}
+    out = [OrganSystem(key=k, count=len(f), findings=sorted(f, key=lambda x: (-(x.count + x.labs), x.label)))
+           for k, f in by_sys.items()]
+    return sorted(out, key=lambda o: (-o.count, order.get(o.key, 99)))
 
 
 def _note_count(entry_ids: list[str]) -> int:
