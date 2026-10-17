@@ -1,38 +1,66 @@
-# Demo video script (about 4:25)
+# Demo video script
 
-| # | Time | Screen (route) | Action | Voice-over | On-screen caption |
-|---|---|---|---|---|---|
-How many of those stories have you scrolled past on social media this year? Probably more than you can remember. These aren't outliers. There are 300 million people living right now in the world with a rare disease. Half of them are children. And the average time for a diagnosis is over 5 years, 10 if you are a teenager. But here is what's cruel about this. An answer is usually already there. It lieas in the photos, voice memos, notes. Rare diseases hide in plain side. One symptom looks like a flu, the other like stress. The pattern is there. It just has to be seen all at once.
+**[Вступление]**
 
-| 1 | 0:00 to 0:12 | Cover image, then patient app Today (`/`) | Title card cut to Today, demo banner visible | "Giulia has had joint pain, a rash after sun and mouth sores for ten weeks. She is about to see a specialist and remembers the last three days." | "Clario. A private diary that ends in a signed brief" |
-| 2 | 0:12 to 0:30 | Today (`/`): "How was today?" | Type: "I remembered I had knee surgery 5 years ago. My knees ache today and the mouth sore is back." Tap "Save note" | "She writes the way she talks. The diary stays on her device, in a vault locked with her passphrase." | "Encrypted on the device. No recovery by design" |
-| 3 | 0:30 to 0:55 | Entry page (`/entry/:id`), "What we understood" | Show the terms, each with its quote. The knee surgery shows as past history ("From the past, about 5 years ago. Not counted as something happening now."). Tap "Not right" on one term, "Fix term" on another | "Each clinical term quotes her exact words. A term with no quote is dropped. Something from years ago is kept as past history, not as today's symptom. She taps "Not right" on anything wrong." | "Every term quotes the patient's words" |
-| 4 | 0:55 to 1:05 | Entry page | Point at a term with a dashed outline (the model was unsure) | "Where the model is unsure, the term is marked. It still counts, and her clinician sees the mark." | "Uncertain items go to the clinician, marked" |
-| 5 | 1:05 to 1:25 | Today, then Import documents (`/import`), then Labs (`/labs`) | Open "Demo data (synthetic)", tap "Import the 3 sample referti". The import page says "Sample results, read earlier on AMD Token Factory and checked. Nothing was read now." Cut to "Lab history" | "Her three lab reports go in. In the demo they were read earlier by MinerU on AMD Token Factory, so nothing is read now. The values land in her lab history, and flags are recomputed in code from the printed range." | "OCR: MinerU2.5-Pro on AMD Token Factory, 48 of 48 rows, `eval/results/documents_tf-mineru-table.json`" |
-| 6 | 1:25 to 1:40 | To discuss (`/patterns`) | Answer "No" on "A question that could help your clinician". Then the pattern card: neutral title, signal pill (tap it for the plain explainer), "What you recorded", "Not recorded yet" | "Patterns appear as weak, moderate or strong, with the evidence. No condition name, no percentage. And one yes-or-no question, the one that best tells the patterns apart." | "Signals for the visit. Not a diagnosis" |
-| 7 | 1:40 to 1:55 | Share (`/share`) | The clinic address is preset. Tap "Check", show the key fingerprint. "12 weeks" is selected. Type a note for the clinician, tap "Send to clinic". Show the QR and the counts | "She sends twelve weeks to her clinic. The package is sealed to the clinic's key and expires." | "Sealed to the clinic. Expires in 3 days" |
-| 8 | 1:55 to 2:05 | What left this device (`/privacy`) | Show the call list and the chain check | "Every model call is listed here, in a hash chain she can verify. Before text reaches a remote model, rules replace names and other direct identifiers. On our synthetic test set that misses 10.8% of identifiers." | "10.8% of identifiers missed, strictly held out, synthetic test half, n = 712, `eval/results/pii_leak.json`" |
-| 9 | 2:05 to 2:25 | Clinic Inbox (`/`), then the package (`/p/:id`) | Open the package. In the box "N items need your check" (unsure terms and lab readings): the Sodium reading (stored 141) shows "Why: not printed like this on the page" and the printed row; tap "Correct", type 147. Do the same for Hemoglobin (stored 1.1, type 11.0) | "At the clinic, two lab values failed a code check: the reading does not match the printed page. The doctor sees the printed row and corrects them. Until then, they count for nothing." | "OCR values checked by the clinician" |
-| 10 | 2:25 to 2:55 | Brief panel (clinic) | Under "Specialty" pick "Rheumatology". Tap "Generate brief". The PDF opens, watermarked "AI draft, not reviewed", with the model chip "Gemma 4 31B · AMD Token Factory" and the line "Model input sent pseudonymised: names, contacts, ids and dates replaced." Tap "Edit and sign": delete the line the citation warning points at, change one word in another, type the name, tap "Sign". The signed PDF opens with "Reviewed and signed by", the date, the model and AMD Token Factory | "Gemma 4 31B on AMD drafts the brief from pseudonymised data. It is a draft, and the PDF says so. The code flags a line whose cited notes do not support it; I delete it, edit one, and sign. Only the signed PDF carries a name." | "AI draft, then the clinician edits and signs" |
-| 11 | 2:55 to 3:05 | Patient app, Share | Tick "Get a second opinion". The line "On file: an earlier opinion (GP, ...)" appears. Tap "Send for a second opinion" | "Her GP said fibromyalgia and stress. Ibuprofen for two weeks did nothing. She asks a new doctor." | "Second opinion" |
-| 12 | 3:05 to 3:35 | Clinic Inbox, the package marked "Second opinion" | Banner: "Second opinion: the previous doctor's conclusions are hidden so they don't influence you." Point at "Already tried": ibuprofen, 2 weeks, "No effect". "Compare with the previous opinion" is locked ("Opens after you sign your brief"). Generate the brief, "Edit and sign", "Sign". Tap "Compare with the previous opinion" | "The new doctor sees the facts: the notes, the labs, what was tried and with what effect. Not the previous conclusions. Only after signing their own brief can they compare." | "Facts travel. Conclusions wait until the new doctor signs" |
-| 13 | 3:35 to 3:45 | Comparison | Show "Previous opinion" (GP: fibromyalgia) next to "Your opinion" and the line with the points where the two opinions differ | "Now both opinions sit side by side, with the differences marked." | "Side by side, after signing" |
-| 14 | 3:45 to 4:05 | Patient Share ("Show a doctor in the room") and a second window as the doctor's phone (`/doctor/:code`) | Patient taps "Start". Doctor's window: type "Maria", "Rossi", "Milano", tap "Look up", then "This is me" on "Rossi Maria, Ordine di Milano, Albo medici chirurghi". Patient taps "Confirm, this is my doctor". The doctor's window opens "Previous opinion"; the patient screen says it never shows the opinion | "A doctor with no contract with us finds their own name on the public register. Giulia sees that name and confirms. The earlier conclusions open in that doctor's tab, for this visit only. Her own app never shows them." | "Demo register with synthetic doctors. In a pilot a person checks Albo Unico" |
-| 15 | 4:05 to 4:25 | Results slide, then cover | Entity F1 table | "We fine-tuned Gemma 4 E4B on data Gemma 4 31B wrote for us on AMD Token Factory. On synthetic test diaries of diseases it never saw, it scores 0.63 entity F1. On the same 100 rows, DeepSeek-V4-Flash scores 0.40 and Gemma 4 31B 0.05, zero-shot on our format. Clario organises. Clinicians decide." | "Entity F1, synthetic test set held out by disease: fine-tuned E4B 0.63 (300 rows) and 0.60 (100 rows); DeepSeek-V4-Flash 0.40, Jev 0.32, Gemma 4 31B 0.05 (100 rows). `eval/RESULTS.md`" |
+How many of those stories have you scrolled past on social media this year? Probably more than you can remember. These aren't outliers. There are 300 million people living right now in the world with a rare disease. Half of them are children. And the average time for a diagnosis is over 5 years, 10 if you are a teenager. But here is what's cruel about this. An answer is usually already there. It lies in the photos, voice memos, notes. Rare diseases hide in plain sight. One symptom looks like a flu, the other like stress. The pattern is there. It just has to be seen all at once.
 
-## Where each number comes from
+---
 
-| Number | File |
-|---|---|
-| 48 of 48 rows (scene 5) | `eval/results/documents_tf-mineru-table.json` (`n_rows`, `row_recall`) |
-| 10.8%, n = 712 (scene 8) | `eval/results/pii_leak.json`, test half, strictly held out |
-| 0.63, 0.60, 0.40, 0.32, 0.05 (scene 14) | `eval/results/extraction_ft-e4b.json`, `extraction_ft-e4b-test100.json`, `extraction_tf-deepseek-v4-flash-test100.json`, `extraction_jev-test100.json`, `extraction_tf-gemma-4-31b-it-test100.json` (`entity_f1`) |
+**[Главный экран, ввод пароля]**
 
-## Recording notes
+This is Giulia. For two months she's had a rash, aching joints and mouth sores, and nobody has connected them yet. Clario is her private health diary. It opens only with her passphrase, and everything inside stays encrypted on her own device.
 
-1. Import the 3 sample referti before sharing (scene 5 before scene 7). With them, the code-computed ranking puts SLE first for the clinic and for the second doctor; without them the diary alone ranks it second (`backend/clario/data/demo/LABELS.md`).
-2. The demo diary and the sample referti are precomputed (drafted by Gemma 4 31B on AMD Token Factory and reviewed by hand, see `LABELS.md`). The note typed in scene 2 goes through the live patient model. The brief in scenes 10 and 12 is a live Gemma 4 31B call on Token Factory and takes about a minute; cut the wait.
-3. The two misread lab values (Sodium, Hemoglobin) are deliberate demo misreads stored in the sample data, so the clinician check always shows. Say "failed a code check", not "the OCR got it wrong live".
-4. Do not type real health information. Use the demo persona.
-5. Never show a condition name on the patient screens. The clinic console shows them in the conditions to consider, the brief and the comparison; narrate them as "conditions worth discussing".
-6. Export as .mp4 (H.264), captions burned in, voice-over under 140 words per minute. If the video must be shorter, trim scenes 4, 6 and 8 first.
+**[Пишет или надиктовывает заметку: симптомы и то, что хочет спросить у врача]**
+
+She writes the way she talks. How today went, what hurts, what she wants to ask her doctor. No forms, no medical words.
+
+Gemma 4 reads the note and turns her words into clinical terms. "My cheeks went red" becomes "malar rash", and each term keeps the exact words it came from, so nothing is invented. Before any text reaches the model, her name and phone number are replaced on her device.
+
+**[Timeline]**
+
+Over weeks, a picture builds. Her symptoms are grouped by body system, week by week. Skin, joints and mouth flare up together in September. That's the kind of link that gets lost between three different appointments.
+
+**[To discuss]**
+
+Giulia has a new appointment coming up. Here, Clario shows her what's worth bringing up: symptoms that tend to appear together, with the notes behind them. It never names a disease, and it never tells her what she has. It also suggests one question to raise with the doctor, the one that would help most.
+
+**[Labs]**
+
+Her paper lab reports are here too. The pages were read by MinerU running on AMD Token Factory, and every out-of-range flag is checked in code against the printed reference range. A pile of paper becomes a lab history she can follow.
+
+**[Share, проходим всё]**
+
+Before the visit, she decides what to share: which weeks, a note for her doctor, and how long the link lives. The package is sealed with her clinic's key, so only that clinic can open it, and it expires after a few days. Everything she didn't choose never leaves her laptop. She can also see every call to a model, in a log she can check herself.
+
+---
+
+**[Клиника, Patient at a glance]**
+
+Now the doctor. One screen in plain words, no codes: who Giulia is, what keeps coming back, what's new, which labs are out of range, and the question she wrote down for this visit.
+
+**[Что уже было сделано]**
+
+The doctor also sees what's already been tried. Ibuprofen for two weeks, no effect. Which tests were done, and what they showed. No more starting from zero.
+
+**[Suggestions]**
+
+Then the hard part. Findings from skin, joints, kidneys and blood can belong to one picture, and no single specialist sees them all. Clario ranks conditions worth considering against published rare disease data, shows what matches and what's missing, and suggests the one question that would best tell them apart. The doctor answers, and the list updates. The doctor decides, not the software.
+
+**[Generate brief]**
+
+One click, and Gemma 4 31B, running on AMD Token Factory, drafts a one-page brief from pseudonymised data. It's marked as an AI draft. Every line points back to Giulia's own notes, and code flags any line that her notes don't support. The doctor edits it and signs. Only then is it final.
+
+---
+
+**[Финал: под капотом, поверх слайда]**
+
+Under the hood, Clario runs on Gemma 4 from end to end. We used Gemma 4 31B on AMD Token Factory to generate almost three thousand synthetic patient diaries, and published them as an open dataset. On that data we fine-tuned the small Gemma 4 E4B. On diseases it never saw in training, it scores 0.69 F1, against 0.47 for Gemma 4 31B and 0.36 for the model before fine-tuning. A model six times smaller beats the big one, and it's small enough to run offline, on the patient's own laptop.
+
+Clario organises the evidence. The doctor decides.
+
+---
+
+**Перед записью проверь:**
+- **Модель в заметке.** Если деплой запущен с `PATIENT_LLM=modal`, заметку читает наш дообученный E4B, и можно сказать «Our fine-tuned Gemma 4 reads the note».
+- **Ibuprofen.** Строка про ибупрофен нужна только если в клинике виден блок «Already tried». Он показывается у пакета второго мнения; если его не будет в кадре, этот абзац выкидываем.
+- **Цифры в финале.** Они из `eval/results`: одни и те же 100 отложенных синтетических записей, F1 посчитан после проверки HPO-кодов (`extraction_ft-e4b-vllm-test100.json`, `extraction_tf-gemma-4-31b-it-test100.json`, `extraction_base-e4b-test100.json`). «В шесть раз меньше»: 31B против примерно 4–5 млрд параметров у E4B.
