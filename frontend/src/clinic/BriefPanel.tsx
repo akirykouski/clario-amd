@@ -93,7 +93,9 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
     api.brief(pkg.package_id, { audience: "patient", lang }).then(setPatientCopy).catch((x: Error) => setErr(x.message));
   }, [signed, copy, lang, pkg.package_id]);
 
-  const pdfUrl = api.briefPdfUrl(pkg.package_id, { specialty: signed ? undefined : specialtyOf(focus), v: String(rev) });
+  const view = { specialty: signed ? undefined : specialtyOf(focus), v: String(rev) };
+  const pdfUrl = api.briefPdfUrl(pkg.package_id, view);
+  const pngUrl = api.briefPngUrl(pkg.package_id, view);
   const modelLabel = state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.clinicModel");
 
   return (
@@ -130,7 +132,7 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
       {shown && !signed && !editing && (
         <div className="space-y-3" data-testid="brief-draft">
           <SpecialtySelect value={focus} onChange={setFocus} />
-          <PdfView url={pdfUrl} badge={t("brief.aiDraftBadge")} />
+          <PdfView url={pdfUrl} image={pngUrl} badge={t("brief.aiDraftBadge")} />
           <div className="flex gap-2 flex-wrap items-center">
             <button className="btn btn-primary" onClick={() => setEditing(true)}><PenLine size={16} aria-hidden /> {t("brief.editSign")}</button>
             <a className="btn" href={pdfUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden /> {t("brief.openPdf")}</a>
@@ -159,7 +161,7 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
                 {t("brief.signedBy", { name: shown.signed_by ?? "?", date: fmtDate(shown.finalized_at ?? "", { day: "numeric", month: "short", year: "numeric" }) })}
                 {shown.specialty ? ` · ${t(`brief.specialty.${shown.specialty}` as Key)}` : ""}
               </p>
-              <PdfView url={pdfUrl} />
+              <PdfView url={pdfUrl} image={pngUrl} />
               <DecisionLine counts={countDecisions(shown.items)} seconds={shown.review_seconds} />
               <div className="flex gap-2 flex-wrap">
                 <a className="btn btn-primary" href={pdfUrl} target="_blank" rel="noreferrer"><FileText size={16} aria-hidden /> {t("brief.openSignedPdf")}</a>
@@ -173,12 +175,27 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
   );
 }
 
-function PdfView({ url, badge }: { url: string; badge?: string }) {
+/**
+ * The brief as a page: a PNG the clinic server renders from the same PDF, so it looks the same in every browser
+ * (an embedded PDF opens the browser's own viewer, dark in Chrome). Clicking the page opens the PDF itself.
+ */
+function PdfView({ url, image, badge }: { url: string; image: string; badge?: string }) {
   const { t } = useT();
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  useEffect(() => setState("loading"), [image]);
   return (
-    <div className="relative">
-      {badge && <span className="chip text-xs absolute top-2 left-2 z-10" style={{ borderColor: "var(--moderate)", background: "var(--amber-bg)", color: "var(--ink)" }} data-testid="draft-badge">{badge}</span>}
-      <iframe title={t("brief.pdfTitle")} src={url} className="w-full rounded-lg border border-line bg-panel" style={{ height: "min(78vh, 900px)" }} />
+    <div className="relative rounded-[18px] p-3 overflow-auto" data-testid="brief-page"
+      style={{ maxHeight: "min(78vh, 900px)", background: "rgba(20, 50, 58, 0.05)", border: "1px solid var(--glass-rim)" }}>
+      {badge && <div className="mb-3"><span className="chip text-xs" style={{ borderColor: "var(--moderate)", background: "var(--amber-bg)", color: "var(--ink)" }} data-testid="draft-badge">{badge}</span></div>}
+      {state === "loading" && <div className="absolute inset-x-0 top-16 grid place-items-center"><Spinner label={t("common.loading")} /></div>}
+      {state === "error"
+        ? <p className="p-6 text-sm text-muted">{t("brief.pageFailed")} <a className="text-accent underline underline-offset-4" href={url} target="_blank" rel="noreferrer">{t("brief.openPdf")}</a></p>
+        : <a href={url} target="_blank" rel="noreferrer" title={t("brief.openPdf")} className="block">
+            <img src={image} alt={t("brief.pdfTitle")} onLoad={() => setState("ready")} onError={() => setState("error")}
+              className="block w-full h-auto bg-white rounded-md transition-opacity duration-200"
+              style={{ aspectRatio: state === "ready" ? undefined : "210 / 297", opacity: state === "ready" ? 1 : 0,
+                       boxShadow: "0 1px 2px rgba(20, 50, 58, 0.10), 0 12px 28px -14px rgba(20, 50, 58, 0.35)" }} />
+          </a>}
     </div>
   );
 }

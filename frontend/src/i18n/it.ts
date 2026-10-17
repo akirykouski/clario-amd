@@ -383,6 +383,7 @@ export const it: Record<Key, string> = {
   "brief.aiDraftBadge": "Bozza IA, non rivista",
   "brief.pdfTitle": "PDF del riepilogo",
   "brief.openPdf": "Apri il PDF",
+  "brief.pageFailed": "L'anteprima della pagina non si è caricata.",
   "brief.editSign": "Modifica e firma",
   "brief.signName": "Rivisto e firmato da",
   "brief.sign": "Firma",

@@ -174,3 +174,30 @@ def render(b: PdfBrief) -> bytes:
 
 def page_count(data: bytes) -> int:
     return len(re.findall(rb"/Type\s*/Page(?!s)", data))
+
+
+def to_png(data: bytes, width: int = 1240) -> bytes:
+    """The PDF's pages as one PNG, stacked top to bottom, for an in-page preview that looks the same in every browser
+    (an embedded PDF opens the browser's own viewer, dark in Chrome)."""
+    import io
+
+    import pypdfium2 as pdfium
+    from PIL import Image
+
+    pdf = pdfium.PdfDocument(data)
+    try:
+        pages = []
+        for i in range(len(pdf)):
+            pg = pdf[i]
+            pages.append(pg.render(scale=width / pg.get_size()[0]).to_pil().convert("RGB"))
+    finally:
+        pdf.close()
+    gap = 24 if len(pages) > 1 else 0
+    out = Image.new("RGB", (width, sum(p.height for p in pages) + gap * (len(pages) - 1)), (233, 236, 240))
+    y = 0
+    for p in pages:
+        out.paste(p, (0, y))
+        y += p.height + gap
+    buf = io.BytesIO()
+    out.save(buf, "PNG", optimize=True)
+    return buf.getvalue()

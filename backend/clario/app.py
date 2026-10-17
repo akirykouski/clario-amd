@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from . import brief as briefing
+from . import brief_pdf as brief_pdf_mod
 from . import clinic_ddx
 from . import overview as overview_mod
 from . import privacy
@@ -1146,18 +1147,26 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             fh.write(row.model_dump_json() + "\n")
         return b
 
+    def brief_pdf_bytes(pid: str, specialty: str | None) -> tuple[bytes, bool]:
+        pkg, b, shown, _pending = draft_view(pid, specialty)
+        if b.finalized:
+            return briefing.to_pdf(pkg, b, b.text or "", b.lang, b.specialty), True
+        return briefing.to_pdf(pkg, b, briefing.brief_text(pkg, shown, b.lang), b.lang, specialty), False
+
     @app.get("/api/inbox/{pid}/brief.pdf")
     def brief_pdf(pid: str, specialty: str | None = None):
         """One-page PDF: the AI draft (watermarked "AI draft, not reviewed", for `specialty`) until signed, then the
         signed brief with the clinician's name, date and the model provenance."""
-        pkg, b, shown, _pending = draft_view(pid, specialty)
-        if b.finalized:
-            data = briefing.to_pdf(pkg, b, b.text or "", b.lang, b.specialty)
-        else:
-            data = briefing.to_pdf(pkg, b, briefing.brief_text(pkg, shown, b.lang), b.lang, specialty)
-        name = f"clario-brief-{pid}-{'signed' if b.finalized else 'draft'}.pdf"
+        data, signed = brief_pdf_bytes(pid, specialty)
+        name = f"clario-brief-{pid}-{'signed' if signed else 'draft'}.pdf"
         return Response(data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{name}"',
                                                                       "Cache-Control": "no-store"})
+
+    @app.get("/api/inbox/{pid}/brief.png")
+    def brief_png(pid: str, specialty: str | None = None):
+        """The same PDF as one PNG image, for the preview in the console."""
+        data, _signed = brief_pdf_bytes(pid, specialty)
+        return Response(brief_pdf_mod.to_png(data), media_type="image/png", headers={"Cache-Control": "no-store"})
 
     @app.post("/api/inbox/{pid}/brief/preview.pdf")
     def brief_preview(pid: str, body: BriefTextIn):

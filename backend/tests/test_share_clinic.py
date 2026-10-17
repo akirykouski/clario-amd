@@ -49,6 +49,8 @@ def test_share_draft_edit_sign(unlocked, clinic_server, tmp_path):
         pdf = clinic.get(f"/api/inbox/{pid}/brief.pdf")
         assert pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf" and pdf.content[:5] == b"%PDF-"
         assert page_count(pdf.content) == 1 and "draft" in pdf.headers["content-disposition"]
+        png = clinic.get(f"/api/inbox/{pid}/brief.png")  # the same page as an image for the in-console preview
+        assert png.status_code == 200 and png.headers["content-type"] == "image/png" and png.content[:8] == b"\x89PNG\r\n\x1a\n"
 
         # "Edit and sign": plain text with the sections kept, code checks as warnings
         t = clinic.get(f"/api/inbox/{pid}/brief/text").json()

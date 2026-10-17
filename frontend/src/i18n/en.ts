@@ -382,6 +382,7 @@ export const en = {
   "brief.aiDraftBadge": "AI draft, not reviewed",
   "brief.pdfTitle": "Brief PDF",
   "brief.openPdf": "Open PDF",
+  "brief.pageFailed": "The page preview did not load.",
   "brief.editSign": "Edit and sign",
   "brief.signName": "Reviewed and signed by",
   "brief.sign": "Sign",

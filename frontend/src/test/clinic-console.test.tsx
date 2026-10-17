@@ -44,10 +44,13 @@ describe("brief: generate, PDF, edit and sign", () => {
 
   it("opens the draft as a PDF marked as an unreviewed AI draft", () => {
     renderPanel([ai("a")]);
-    const frame = screen.getByTitle("Brief PDF");
-    expect(frame.getAttribute("src")).toMatch(/^\/api\/inbox\/pkg_1\/brief\.pdf\?v=\d+$/);
+    // the page is a PNG of the same PDF (Chrome's embedded viewer is dark); clicking it opens the PDF
+    const page = screen.getByAltText("Brief PDF");
+    expect(page.getAttribute("src")).toMatch(/^\/api\/inbox\/pkg_1\/brief\.png\?v=\d+$/);
+    const pdf = page.getAttribute("src")!.replace("brief.png", "brief.pdf");
+    expect(page.closest("a")).toHaveAttribute("href", pdf);
     expect(screen.getByTestId("draft-badge")).toHaveTextContent("AI draft, not reviewed");
-    expect(screen.getByRole("link", { name: "Open PDF" })).toHaveAttribute("href", frame.getAttribute("src"));
+    expect(screen.getByRole("link", { name: "Open PDF" })).toHaveAttribute("href", pdf);
     expect(screen.queryByRole("button", { name: /^Accept$/ })).toBeNull();  // no per-line review any more
   });
 

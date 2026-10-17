@@ -33,9 +33,9 @@ describe("specialty focus", () => {
     render(<MemoryRouter><BriefPanel pkg={pkg} brief={brief} setBrief={vi.fn()} /></MemoryRouter>);
     const select = screen.getByLabelText("Specialty") as HTMLSelectElement;
     expect(select.value).toBe("general");
-    expect(screen.getByTitle("Brief PDF").getAttribute("src")).not.toContain("specialty");
+    expect(screen.getByAltText("Brief PDF").getAttribute("src")).not.toContain("specialty");
     fireEvent.change(select, { target: { value: "rheumatology" } });
-    expect(screen.getByTitle("Brief PDF").getAttribute("src")).toContain("specialty=rheumatology");
+    expect(screen.getByAltText("Brief PDF").getAttribute("src")).toContain("specialty=rheumatology");
     fireEvent.click(screen.getByRole("button", { name: "Edit and sign" }));
     await screen.findByTestId("brief-editor");
     expect(text).toHaveBeenCalledWith("pkg_1", "rheumatology");
@@ -50,7 +50,7 @@ describe("specialty focus", () => {
     render(<MemoryRouter><BriefPanel pkg={pkg} brief={brief} setBrief={vi.fn()} /></MemoryRouter>);
     fireEvent.change(screen.getByLabelText("Specialità"), { target: { value: "nephrology" } });
     expect(screen.getByRole("option", { name: "Nefrologia" })).toBeInTheDocument();
-    expect(screen.getByTitle("PDF del riepilogo").getAttribute("src")).toContain("specialty=nephrology");
+    expect(screen.getByAltText("PDF del riepilogo").getAttribute("src")).toContain("specialty=nephrology");
     expect(screen.getByRole("button", { name: "Modifica e firma" })).toBeInTheDocument();
   });
 });
