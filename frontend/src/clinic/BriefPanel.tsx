@@ -10,7 +10,7 @@ import { useRun } from "./useRun";
 import { DecisionLine } from "./Metrics";
 import { tokenFactoryLabel } from "../components/compute";
 
-const SECTIONS: BriefSection[] = ["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"];
+const SECTIONS: BriefSection[] = ["summary", "timeline", "symptoms", "negatives", "findings", "labs", "medications", "patterns", "questions"];
 const sectionTitle = (s: BriefSection) => `brief.section.${s}` as Key;
 
 export type Focus = "general" | Specialty;

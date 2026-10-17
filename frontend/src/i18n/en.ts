@@ -341,6 +341,8 @@ export const en = {
   "brief.section.summary": "Summary",
   "brief.section.timeline": "Timeline",
   "brief.section.symptoms": "Symptoms",
+  "brief.section.negatives": "Pertinent negatives",
+  "brief.section.findings": "Findings this visit",
   "brief.section.labs": "Labs",
   "brief.section.medications": "Medications",
   "brief.section.patterns": "Patterns worth discussing",

@@ -342,6 +342,8 @@ export const it: Record<Key, string> = {
   "brief.section.summary": "Riepilogo",
   "brief.section.timeline": "Cronologia",
   "brief.section.symptoms": "Sintomi",
+  "brief.section.negatives": "Negatività rilevanti",
+  "brief.section.findings": "Rilievi di questa visita",
   "brief.section.labs": "Esami",
   "brief.section.medications": "Farmaci",
   "brief.section.patterns": "Schemi da valutare",

@@ -111,7 +111,7 @@ export interface Comparison {
   rows: CompareRow[]; disagreements: number; since_previous: string[];
 }
 
-export type BriefSection = "summary" | "timeline" | "symptoms" | "labs" | "medications" | "patterns" | "questions";
+export type BriefSection = "summary" | "timeline" | "symptoms" | "negatives" | "findings" | "labs" | "medications" | "patterns" | "questions";
 export type BriefReview = "pending" | "accepted" | "rejected" | "edited";
 
 export interface BriefItem {

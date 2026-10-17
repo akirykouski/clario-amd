@@ -933,7 +933,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             return
         pkg = decided(open_pkg(pid), drop_rejected=True)
         kept = [i for i in b.items if i.origin == "ai" or (i.origin == "document" and i.section != "labs")]
-        save_brief(b.model_copy(update={"items": specialty.tag(pkg, briefing.patient_items(pkg, b.lang) + kept, onto)}))
+        save_brief(b.model_copy(update={"items": specialty.tag(pkg, briefing.patient_items(pkg, b.lang, onto) + kept, onto)}))
 
     @app.get("/api/inbox/{pid}/terms/{ent_id}/candidates")
     def term_candidates(pid: str, ent_id: str, lang: str = "en") -> list[Term]:
@@ -1006,7 +1006,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
                     await runs.emit(rid, "draft", "Drafting brief", min(0.9, 0.1 + n / 600), backend=llm.backend,
                                     model=llm.model, tokens=n, tokens_per_s=round(n / el, 1) if el else None)
             parsed = briefing.DraftOut.model_validate(extract_json(text))
-            items = specialty.tag(pkg, briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed, lang), onto)
+            items = specialty.tag(pkg, briefing.patient_items(pkg, lang, onto) + briefing.check_ai_items(pkg, parsed, lang), onto)
             b = save_brief(Brief(package_id=pkg.package_id, items=items, model=llm.model, backend=llm.backend,
                                  stats=stats.as_dict() if stats else {}, lang=lang,  # type: ignore[arg-type]
                                  pseudonymized=pseudo, model_remote=remote))
@@ -1021,7 +1021,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         """The demo persona's unchanged package: the draft generated live once and stored (demo_brief.py), served at once."""
         try:
             parsed = demo_brief.draft_out(rec, pkg)
-            items = specialty.tag(pkg, briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed, lang), onto)
+            items = specialty.tag(pkg, briefing.patient_items(pkg, lang, onto) + briefing.check_ai_items(pkg, parsed, lang), onto)
             b = save_brief(Brief(package_id=pkg.package_id, items=items, model=rec["model"], backend=rec["backend"],
                                  stats=rec.get("stats") or {}, lang=lang,  # type: ignore[arg-type]
                                  pseudonymized=rec.get("pseudonymized"), model_remote=rec.get("model_remote"),
@@ -1059,7 +1059,13 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     def get_brief(pid: str, audience: str | None = None, lang: str | None = None) -> Brief:
         pkg, b, aud, lg = view(pid, audience, lang)
         out = briefing.render_brief(pkg, b, aud, lg, onto)
-        return specialty.tag_brief(pkg, out, onto) if aud == "clinician" else out
+        if aud != "clinician":
+            return out
+        return specialty.tag_brief(pkg, briefing.with_findings(out, findings(pid, lg)), onto)
+
+    def findings(pid: str, lang: str) -> list:
+        """This visit's findings from the clinician's decisions (answers, replaced or rejected terms, labs set aside)."""
+        return briefing.finding_items(open_pkg(pid), load_decisions(pid), lang, onto)
 
     def draft_view(pid: str, specialty_: str | None) -> tuple[SharePackage, Brief, list, int]:
         """The unsigned brief as the editor and the draft PDF see it: lab lines rebuilt from the clinic's decisions,
@@ -1068,7 +1074,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         b = load_brief(pid)
         if not b:
             raise HTTPException(404, "No brief yet")
-        b = specialty.tag_brief(pkg, briefing.with_labs(b, pkg, b.lang), onto)
+        b = specialty.tag_brief(pkg, briefing.with_findings(briefing.with_labs(b, pkg, b.lang), findings(pid, b.lang)), onto)
         pending = sum(1 for l in pkg.labs if lab_needs_check(l))
         return pkg, b, briefing.shown_items(pkg, b, specialty_), pending
 

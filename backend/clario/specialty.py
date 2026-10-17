@@ -95,12 +95,12 @@ def tag_brief(pkg: SharePackage, brief: Brief, onto: Ontology) -> Brief:
 
 
 # Section order per specialty: what that clinic reads first. General practice keeps the default order.
-SECTION_ORDER = ("summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions")
+SECTION_ORDER = ("summary", "timeline", "symptoms", "negatives", "findings", "labs", "medications", "patterns", "questions")
 FOCUS_SECTIONS: dict[str, tuple[str, ...]] = {
-    "rheumatology": ("summary", "symptoms", "labs", "patterns", "timeline", "medications", "questions"),
-    "nephrology": ("summary", "labs", "symptoms", "medications", "timeline", "patterns", "questions"),
+    "rheumatology": ("summary", "symptoms", "negatives", "findings", "labs", "patterns", "timeline", "medications", "questions"),
+    "nephrology": ("summary", "labs", "symptoms", "negatives", "findings", "medications", "timeline", "patterns", "questions"),
 }
-ALWAYS = ("summary", "medications", "questions")  # every specialty sees these in full
+ALWAYS = ("summary", "findings", "medications", "questions")  # every specialty sees these in full
 LABELS = {"en": {"general": "General practice", "rheumatology": "Rheumatology", "nephrology": "Nephrology"},
           "it": {"general": "Medicina generale", "rheumatology": "Reumatologia", "nephrology": "Nefrologia"}}
 

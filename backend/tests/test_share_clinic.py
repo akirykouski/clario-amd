@@ -103,7 +103,7 @@ def test_share_edit_sign_cards(unlocked, clinic_server, tmp_path):
         sse(clinic, clinic.post(f"/api/inbox/{pid}/brief").json()["run_id"])
         t = clinic.get(f"/api/inbox/{pid}/brief/text").json()
         items = t["items"]
-        assert [s["key"] for s in t["sections"]] == ["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"]
+        assert [s["key"] for s in t["sections"]] == ["summary", "timeline", "symptoms", "negatives", "findings", "labs", "medications", "patterns", "questions"]
         assert [i["id"] for i in items] and all(set(i) >= {"id", "section", "text", "cites", "origin"} for i in items)
         cit = next(w for w in t["warnings"] if w["kind"] == "citation")
         flagged = items[cit["item"]]
