@@ -10,6 +10,18 @@ from urllib.parse import urlparse
 
 DEFAULT_LOCAL_BASE = "http://localhost:11434/v1"  # Ollama's OpenAI-compatible API
 
+# AMD Token Factory: hosted, OpenAI-compatible, Gemma 4 on AMD. Detected from the LLM_BASE_URL host, or forced with
+# LLM_BACKEND=token-factory. Model ids are case-sensitive. The key is shared by the team (20 RPM, 8 in flight).
+TOKEN_FACTORY_HOST = "developer.amd.com.cn"
+TOKEN_FACTORY_MODEL = "Gemma-4-31B-IT"
+TOKEN_FACTORY_CONCURRENCY = 4  # default parallel requests; the gateway allows 8 per key, shared with batch jobs
+TOKEN_FACTORY_MAX_CONCURRENCY = 8
+
+
+def is_token_factory_url(base_url: str) -> bool:
+    host = (urlparse(base_url).hostname or "").lower()
+    return host == TOKEN_FACTORY_HOST or host.endswith("." + TOKEN_FACTORY_HOST)
+
 
 def _flag(v: str | None, default: bool | None = None) -> bool | None:
     """Boolean env var: unset or empty -> `default`; else 1/true/yes/on."""
@@ -61,7 +73,8 @@ class Settings:
     llm_base_url: str = DEFAULT_LOCAL_BASE
     llm_api_key: str = "ollama"
     llm_model: str = "gemma4:e4b"
-    llm_is_amd: bool = False
+    llm_is_amd: bool = False  # LLM_IS_AMD=1: our own vLLM on an AMD Instinct GPU
+    llm_provider: str | None = None  # LLM_BACKEND: "token-factory" forces AMD Token Factory; unset = detect by host
     llm_concurrency: int = 8
     offline: bool = False
     data_dir: Path = Path.home() / ".clario"
@@ -70,7 +83,7 @@ class Settings:
     auto_lock_minutes: int = 15
     pseudonymize: bool | None = None  # None = auto: on in patient mode when the model is remote
     llm_vision_model: str | None = None
-    doc_concurrency: int | None = None  # None = 4 local, 32 remote (so vLLM can batch)
+    doc_concurrency: int | None = None  # None = 4 local, 32 remote (so vLLM can batch), LLM_CONCURRENCY on Token Factory
     doc_samples: int = 3  # self-consistency samples per page when the client supports them
     review_threshold: float = ExtractOpts.review_threshold
 
@@ -92,9 +105,23 @@ class Settings:
 
     @property
     def doc_workers(self) -> int:
+        if self.token_factory:  # rate-limited shared key: pages wait for the same few slots as every other call
+            return min(self.doc_concurrency or self.llm_concurrency, self.llm_concurrency)
         if self.doc_concurrency:
             return self.doc_concurrency
         return 32 if self.llm_backend in ("amd-vllm", "openai-compatible") else 4
+
+    @property
+    def token_factory(self) -> bool:
+        """The model runs on AMD Token Factory (hosted, rate limited, no GPU telemetry for us)."""
+        if self.offline:
+            return False
+        return self.llm_provider == "token-factory" or is_token_factory_url(self.llm_base_url)
+
+    @property
+    def llm_on_amd(self) -> bool:
+        """Model calls run on AMD hardware: our own vLLM on Instinct (LLM_IS_AMD) or AMD Token Factory."""
+        return not self.offline and (self.llm_is_amd or self.token_factory)
 
     @property
     def llm_host(self) -> str | None:
@@ -104,6 +131,8 @@ class Settings:
     def llm_backend(self) -> str:
         if self.offline:
             return "offline-fixtures"
+        if self.token_factory:
+            return "amd-token-factory"
         if self.llm_is_amd:
             return "amd-vllm"
         host = self.llm_host or ""
@@ -126,13 +155,27 @@ class Settings:
         cal_path = Path(e.get("CLARIO_REVIEW_CALIBRATION") or here.parent / "eval" / "results" / CALIBRATION_FILE)
         cal_status, cal = load_review_calibration(cal_path)
         threshold = float(cal["threshold"]) if cal else float(e.get("CLARIO_REVIEW_THRESHOLD") or d.review_threshold)
+        base_url = (e.get("LLM_BASE_URL") or DEFAULT_LOCAL_BASE).strip()
+        provider = (e.get("LLM_BACKEND") or "").strip().lower() or None
+        if provider not in (None, "auto", "token-factory"):
+            raise ValueError("LLM_BACKEND must be 'token-factory', 'auto' or unset")
+        provider = None if provider == "auto" else provider
+        tf = provider == "token-factory" or is_token_factory_url(base_url)
+        if tf:
+            default_model = TOKEN_FACTORY_MODEL
+        else:
+            default_model = "gemma4:e4b" if mode == "patient" else "google/gemma-4-31B-it"
+        concurrency = max(1, int(e.get("LLM_CONCURRENCY") or (TOKEN_FACTORY_CONCURRENCY if tf else 8)))
+        if tf:
+            concurrency = min(concurrency, TOKEN_FACTORY_MAX_CONCURRENCY)
         s = cls(
             mode=mode,
-            llm_base_url=(e.get("LLM_BASE_URL") or DEFAULT_LOCAL_BASE).strip(),
+            llm_base_url=base_url,
             llm_api_key=(e.get("LLM_API_KEY") or "ollama").strip(),
-            llm_model=(e.get("LLM_MODEL") or ("gemma4:e4b" if mode == "patient" else "google/gemma-4-31B-it")).strip(),
+            llm_model=(e.get("LLM_MODEL") or default_model).strip(),
             llm_is_amd=bool(_flag(e.get("LLM_IS_AMD"))),
-            llm_concurrency=max(1, int(e.get("LLM_CONCURRENCY") or 8)),
+            llm_provider=provider,
+            llm_concurrency=concurrency,
             offline=bool(_flag(e.get("CLARIO_OFFLINE"))),
             data_dir=Path(e.get("CLARIO_DATA_DIR") or default_dir),
             clinic_name=e.get("CLARIO_CLINIC_NAME") or "Clario clinic",

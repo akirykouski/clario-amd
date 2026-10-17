@@ -5,8 +5,8 @@ Shapes: `backend/clario/models.py`. One codebase, two modes: `CLARIO_MODE=patien
 ## Both modes
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/api/health` | `Health` (`mode`, `llm: {backend, model, base_url_host, is_amd}`, `ontology: {terms, diseases}`, `demo_instance: bool`, `clinic_url: string or null` (env CLARIO_CLINIC_URL, the Share page default), `review: {threshold, source (conformal\|env\|override), alpha, delta, calibration_n, calibration_status}`) |
-| GET | `/api/system/gpu` | `{gpu_name, util_pct, vram_used_gb, vram_total_gb}` or `null` (proxies `CLARIO_GPU_METRICS_URL`, else local `amd-smi`, else null) |
+| GET | `/api/health` | `Health` (`mode`, `llm: {backend (offline-fixtures\|amd-token-factory\|amd-vllm\|ollama-local\|local\|openai-compatible), model, base_url_host, is_amd (true for amd-vllm and amd-token-factory)}`, `ontology: {terms, diseases}`, `demo_instance: bool`, `clinic_url: string or null` (env CLARIO_CLINIC_URL, the Share page default), `review: {threshold, source (conformal\|env\|override), alpha, delta, calibration_n, calibration_status}`) |
+| GET | `/api/system/gpu` | `{gpu_name, util_pct, vram_used_gb, vram_total_gb}` or `null` (proxies `CLARIO_GPU_METRICS_URL`, else local `amd-smi`, else null; on AMD Token Factory null unless the sidecar URL is set, since a local GPU is not the one running the model) |
 | GET | `/api/terms/systems` | `?ids=HP:..,HP:..` -> `{hpo_id: system}`: organ-system key per term (`skin`, `joints`, `kidney`, `blood`, `immune`, `nervous`, `heart`, `lungs`, `digestive`, `eye`, `endocrine`, `metabolism`, `head`, `general`, `other`) for grouping heat map rows. Ontology only |
 
 ## Patient mode

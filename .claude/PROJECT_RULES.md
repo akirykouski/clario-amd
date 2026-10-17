@@ -62,3 +62,7 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 - Patient screens never show a condition name, an HPO code or (in IT) an English clinical label; a relative's condition shows as the patient's own words.
 - Numbers in IT use the decimal comma everywhere, server text included (`brief._num(n, lang)`, frontend `fmtNumText`).
 - PII headline is the strictly held-out 10.8%; 5.8% only with its caveat.
+## AMD Token Factory (T2)
+- Backend `amd-token-factory`: detected when LLM_BASE_URL host is developer.amd.com.cn, or forced with LLM_BACKEND=token-factory. Default model `Gemma-4-31B-IT` (case-sensitive) in both modes; is_amd true; UI label "Gemma 4 31B · AMD Token Factory" (`frontend/src/components/compute.ts`); `/api/system/gpu` is null unless CLARIO_GPU_METRICS_URL is set.
+- The gateway rejects `n > 1` with 400 ("does not support the n parameter"): `LLM.samples` sends n separate requests (and learns this from the 400 on any server, without dropping the JSON schema mode). `json_schema` works; `guided_json` is ignored; `thinking`/`reasoning.enabled` are rejected, never send them.
+- Shared team key: 20 RPM, 8 in flight, $1/day per user (`x-ratelimit-*` headers). LLM_CONCURRENCY defaults to 4 (cap 8) and every HTTP request takes a slot; 429 retried after Retry-After (wait > 60 s fails fast). One patient entry costs about 6 to 9 requests at CLARIO_SC_N=5.

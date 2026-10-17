@@ -8,16 +8,18 @@ import PackagePage from "./PackagePage";
 import PrivacyPage from "../patient/PrivacyPage";
 import { LangSwitch } from "../components/LangSwitch";
 import { useT } from "../i18n";
+import { tokenFactoryLabel } from "../components/compute";
 
 export function ComputeBadge({ llm }: { llm: Health["llm"] }) {
   const { t } = useT();
   const amd = !!llm.is_amd;
   const offline = llm.backend === "offline-fixtures";
+  const tf = tokenFactoryLabel(llm.backend, llm.model);
   return (
     <span className="inline-flex items-center gap-1.5 text-sm rounded-full border px-2.5 py-0.5"
       style={amd ? { color: "var(--accent)", borderColor: "var(--accent)", fontWeight: 700 } : { color: "var(--muted)", borderColor: "var(--line)" }}>
       <Cpu size={14} aria-hidden />
-      {amd ? "AMD Instinct MI300X · vLLM" : offline ? t("clinic.demoModel") : `${llm.backend ?? "unknown backend"}${llm.model ? ` · ${llm.model}` : ""}`}
+      {tf ?? (amd ? "AMD Instinct MI300X · vLLM" : offline ? t("clinic.demoModel") : `${llm.backend ?? "unknown backend"}${llm.model ? ` · ${llm.model}` : ""}`)}
     </span>
   );
 }

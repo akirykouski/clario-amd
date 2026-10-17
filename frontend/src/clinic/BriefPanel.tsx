@@ -7,6 +7,7 @@ import { ErrorBox, Spinner } from "../components/ui";
 import { tn, useT, type Key } from "../i18n";
 import { useRun } from "./useRun";
 import { DecisionLine } from "./Metrics";
+import { tokenFactoryLabel } from "../components/compute";
 
 const SECTIONS: BriefSection[] = ["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"];
 const sectionTitle = (s: BriefSection) => `brief.section.${s}` as Key;
@@ -37,7 +38,7 @@ export function RunChips({ model, backend, tokensPerS, latencyMs }: { model?: st
   const util = gpu && typeof gpu.util_pct === "number" ? ` ${Math.round(gpu.util_pct)}%` : "";
   return (
     <div className="no-print flex flex-wrap gap-1.5" data-testid="run-chips">
-      <span className="chip text-xs">{offline ? t("brief.chipDemo") : [backend, model].filter(Boolean).join(" · ")}</span>
+      <span className="chip text-xs">{offline ? t("brief.chipDemo") : tokenFactoryLabel(backend, model) ?? [backend, model].filter(Boolean).join(" · ")}</span>
       {!offline && tokensPerS ? <span className="chip text-xs">{t("brief.chipRate", { n: fmtNum(tokensPerS, 1) })}</span> : null}
       {!offline && latencyMs ? <span className="chip text-xs">{t("brief.chipLatency", { s: fmtNum(latencyMs / 1000, 1) })}</span> : null}
       {name && <span className="chip text-xs">{t("brief.chipGpu", { name })}{util}</span>}
