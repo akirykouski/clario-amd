@@ -26,5 +26,11 @@
   "dataset": "data/v3/train_sft.jsonl",
   "backend": "cuda-12.8",
   "date": "2026-10-17",
-  "label": "e4b-r32-lr1e-4"
+  "label": "e4b-r32-lr1e-4",
+  "hardware": {
+    "gpu_name": "NVIDIA L40S",
+    "gpu_count": 1,
+    "vram_total_gb": 48,
+    "source": "Modal (train/modal_app.py, gpu=L40S); recorded in train_*.json gpu field"
+  }
 }

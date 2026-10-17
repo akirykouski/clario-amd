@@ -70,5 +70,11 @@
       "raw": "{\"entities\":[{\"quote\":\"ancora pi\u00f9 capelli sul cuscino\",\"canonical\":\"Hair loss\",\"hpo_id\":\"HP:0000123\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":null,\"severity\":7,\"confidence\":null},{\"quote\":\"niente infiammazioni\",\"canonical\":\"Inflammation\",\"hpo_id\":\"HP:0000600\",\"type\":\"symptom\",\"negated\":true,\"family_history\":false,\"onset_hint\":null,\"severity\":null,\"confidence\":null},{\"quote\":\"i capelli si spezzano facilmente da marted\u00ec\",\"canonical\":\"Hair breakage\",\"hpo_id\":\"HP:0000124\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":\"da marted\u00ec\",\"severity\":null,\"",
       "err": null
     }
-  ]
+  ],
+  "hardware": {
+    "gpu_name": "NVIDIA L40S",
+    "gpu_count": 1,
+    "vram_total_gb": 48,
+    "source": "Modal (train/modal_app.py, gpu=L40S); recorded in train_*.json gpu field"
+  }
 }

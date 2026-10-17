@@ -60,5 +60,16 @@
       "load_in_4bit": false
     }
   ],
-  "note": "selection on val only; test is scored once, on the winner, by sweep.sh"
+  "note": "selection on val only; test is scored once, on the winner, by sweep.sh",
+  "hardware": {
+    "gpu_name": "NVIDIA L40S",
+    "gpu_count": 1,
+    "vram_total_gb": 48,
+    "source": "Modal (train/modal_app.py, gpu=L40S); recorded in train_*.json gpu field"
+  },
+  "n": 100,
+  "dataset": "v3/val.jsonl (first 100 rows)",
+  "model": "google/gemma-4-E4B-it + LoRA",
+  "backend": "transformers on Modal L40S",
+  "date": "2026-10-17"
 }

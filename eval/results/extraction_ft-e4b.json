@@ -70,5 +70,11 @@
       "raw": "{\"entities\":[{\"quote\":\"capelli si spezzano facilmente\",\"canonical\":\"Brittle hair\",\"hpo_id\":\"HP:0002299\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":\"da marted\u00ec\",\"severity\":null,\"confidence\":null},{\"quote\":\"zone senza capelli sulla testa\",\"canonical\":\"Alopecia of scalp\",\"hpo_id\":\"HP:0002292\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":null,\"severity\":null,\"confidence\":null},{\"quote\":\"perdita\",\"canonical\":\"Alopecia\",\"hpo_id\":\"HP:0001596\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":null,\"severity\":7,\"confidence\":null},{\"qu",
       "err": null
     }
-  ]
+  ],
+  "hardware": {
+    "gpu_name": "NVIDIA L40S",
+    "gpu_count": 1,
+    "vram_total_gb": 48,
+    "source": "Modal (train/modal_app.py, gpu=L40S); recorded in train_*.json gpu field"
+  }
 }
