@@ -271,12 +271,12 @@ class BriefItem(BaseModel):
     """One line of the clinician brief. AI lines are a draft until the clinician signs the brief text."""
 
     id: str
-    section: Literal["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"]
+    section: Literal["summary", "timeline", "symptoms", "negatives", "findings", "labs", "medications", "patterns", "questions"]
     text: str
     cites: list[str] = Field(default_factory=list, description="entry ids")
     origin: Literal["patient", "ai", "document", "clinician"] = Field(
         "ai", description="patient: straight from the diary; document: a lab line read from an imported report (pending until every row is checked); "
-                          "ai: drafted by the model; clinician: a line the clinician wrote in the signed text")
+                          "ai: drafted by the model; clinician: a line the clinician wrote in the signed text, or a finding of this visit built in code from the clinician's decisions (section `findings`, id `bi_find_...`)")
     review: Literal["pending", "accepted", "rejected", "edited"] = Field(
         "pending", description="AI lines: pending in the draft; at signing, accepted (kept as drafted), edited (changed) or rejected (removed)")
     flag: Literal["citation_mismatch"] | None = Field(
@@ -326,7 +326,7 @@ class BriefLine(BaseModel):
     clinician added); `cites` are entry ids. A trailing "[22 Aug]" in `text` is read as citations too."""
 
     id: str | None = None
-    section: Literal["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"]
+    section: Literal["summary", "timeline", "symptoms", "negatives", "findings", "labs", "medications", "patterns", "questions"]
     text: str
     cites: list[str] = Field(default_factory=list)
 

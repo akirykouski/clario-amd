@@ -214,8 +214,32 @@ def _label(x, lang: str) -> str:
     return x.canonical
 
 
-def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
-    """Clinician view of what the patient recorded, straight from data: clinical terms and HPO ids."""
+# Review-of-systems names for the organ-system keys of `clinic_ddx.system_key` ("other" gets no prefix)
+SYSTEM_NAMES = {
+    "en": {"general": "General", "skin": "Skin", "joints": "Musculoskeletal", "kidney": "Kidney and urinary", "blood": "Blood",
+           "immune": "Immune", "nervous": "Neurological", "heart": "Cardiovascular", "lungs": "Respiratory",
+           "digestive": "Digestive", "eye": "Eyes", "endocrine": "Endocrine", "metabolism": "Metabolic", "head": "Head and neck"},
+    "it": {"general": "Generale", "skin": "Cute", "joints": "Muscoloscheletrico", "kidney": "Rene e vie urinarie", "blood": "Sangue",
+           "immune": "Immunitario", "nervous": "Neurologico", "heart": "Cardiovascolare", "lungs": "Respiratorio",
+           "digestive": "Digerente", "eye": "Occhi", "endocrine": "Endocrino", "metabolism": "Metabolico", "head": "Testa e collo"},
+}
+
+
+def _system(onto, hpo_id: str | None) -> tuple[int, str]:
+    """(rank, key) of a term's organ system in review-of-systems order: general first, "other" last."""
+    from .clinic_ddx import SYSTEM_ORDER, system_key
+
+    if onto is None:
+        return 0, "other"
+    key = system_key(onto, hpo_id)
+    order = list(dict.fromkeys(["general", *SYSTEM_ORDER]))
+    return (order.index(key) if key in order else len(order)), key
+
+
+def patient_items(pkg: SharePackage, lang: str = "en", onto=None) -> list[BriefItem]:
+    """Clinician view of what the patient recorded, straight from data: clinical terms and HPO ids. With `onto`, symptom
+    lines are grouped by organ system as a review of systems ("Skin · Malar rash (HP:0025300): ..."), history last.
+    Symptoms the patient wrote were absent, and never recorded as present, are the pertinent negatives."""
     it = lang == "it"
     year = pkg.period[0][:4] != pkg.period[1][:4]
     items = []
@@ -223,6 +247,7 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         items.append(BriefItem(id="bi_note", section="summary", text=_note_text(pkg.note), origin="patient", review="accepted",
                                kind="patient_note"))
     groups: dict[tuple[str, str], list] = {}
+    rank: dict[tuple[str, str], int] = {}
     for x in pkg.entities:
         if x.negated:
             continue
@@ -230,10 +255,13 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         fam = ("Storia familiare: " if it else "Family history: ") if x.family_history else ""
         if x.past and not x.family_history:  # history, dated by the patient's words, not by the note
             fam = ("Anamnesi remota: " if it else "Past history: ")
-        label = fam + _label(x, lang) + (f" ({x.hpo_id})" if x.hpo_id else "")
+        r, sys_ = (99, "other") if fam or sec != "symptoms" else _system(onto, x.hpo_id)
+        ros = f"{SYSTEM_NAMES[lang][sys_]} · " if sys_ in SYSTEM_NAMES[lang] else ""
+        label = ros + fam + _label(x, lang) + (f" ({x.hpo_id})" if x.hpo_id else "")
         groups.setdefault((sec, label), []).append(x)
+        rank[(sec, label)] = r
     dates = {e.id: e.occurred_on for e in pkg.entries}
-    for (sec, label), xs in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+    for (sec, label), xs in sorted(groups.items(), key=lambda kv: (rank[kv[0]], -len(kv[1]))):
         cites = [x.entry_id for x in xs]
         ds = sorted(dates[c] for c in cites if c in dates)
         extra = ""
@@ -254,21 +282,112 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         items.append(BriefItem(id=_id(), section=sec, text=f"{label}: {rec}, {_span(ds, lang, year)}{extra}{mark}",
                                cites=sorted(set(cites)), origin="patient", review="accepted",
                                from_question=all(x.from_question for x in xs)))
-    return items + lab_items(pkg, lang)
+    return items + negative_items(pkg, lang, onto) + lab_items(pkg, lang)
+
+
+def negative_items(pkg: SharePackage, lang: str = "en", onto=None) -> list[BriefItem]:
+    """Pertinent negatives: symptoms the patient wrote were absent ("no fever", or "no" to a question the app asked) and
+    never recorded as present in the shared period. A relative's condition is not the patient's negative."""
+    present = {x.hpo_id or x.canonical.lower() for x in pkg.entities if not x.negated and not x.family_history}
+    groups: dict[str, list] = {}
+    for x in pkg.entities:
+        key = x.hpo_id or x.canonical.lower()
+        if x.negated and not x.family_history and x.type not in ("lab", "medication", "trigger") and key not in present:
+            groups.setdefault(key, []).append(x)
+    dates = {e.id: e.occurred_on for e in pkg.entries}
+    rows = []
+    for key, xs in groups.items():
+        r, sys_ = _system(onto, xs[0].hpo_id)
+        ros = f"{SYSTEM_NAMES[lang][sys_]} · " if sys_ in SYSTEM_NAMES[lang] else ""
+        label = ros + _label(xs[0], lang) + (f" ({xs[0].hpo_id})" if xs[0].hpo_id else "")
+        cites = sorted({x.entry_id for x in xs})
+        ds = sorted(dates[c] for c in cites if c in dates)
+        said = "riferito assente" if lang == "it" else "reported absent"
+        mark = f" ({_LOW[lang]})" if any(x.needs_review for x in xs) else ""
+        text = f"{label}: {said} {_times(len(xs), lang)}, {_span(ds, lang, _year(pkg))}{mark}"
+        rows.append(((r, -len(xs), label), BriefItem(id=f"bi_neg_{key}"[:60], section="negatives", text=text, cites=cites,
+                                                     origin="patient", review="accepted",
+                                                     from_question=all(x.from_question for x in xs))))
+    return [i for _k, i in sorted(rows, key=lambda kv: kv[0])]
+
+
+# ---------------------------------------------------------------- findings of this visit: the clinician's decisions
+_FIND = {
+    "en": {"yes": "present", "no": "absent", "unsure": "unclear", "checked": "Checked at this visit: {t}, {a}",
+           "revised": "Revised on review: {a} read as {b}", "aside": "Not counted after review: {t}, note of {d}",
+           "lab_aside": "Lab reading set aside on review: {t}, {d}, page {p}"},
+    "it": {"yes": "presente", "no": "assente", "unsure": "incerto", "checked": "Verificato in visita: {t}, {a}",
+           "revised": "Rivisto: {a} letto come {b}", "aside": "Non considerato dopo la revisione: {t}, nota del {d}",
+           "lab_aside": "Lettura di laboratorio scartata in revisione: {t}, {d}, pagina {p}"},
+}
+FINDING_PREFIX = "bi_find_"
+
+
+def _term(onto, hpo_id: str, fallback: str, lang: str) -> str:
+    name = (hpo_it().get(hpo_id) if lang == "it" else None) or (onto.label(hpo_id) if onto is not None else None) or fallback
+    return f"{name} ({hpo_id})"
+
+
+def finding_items(pkg: SharePackage, decisions: dict, lang: str = "en", onto=None) -> list[BriefItem]:
+    """What the clinician established at this visit, built in code from the console's decisions (no model): answers to
+    the differential's questions (present, absent, unclear), terms replaced or not counted, lab readings set aside.
+    `pkg` is the package as shared (rejected rows still in it). `origin=clinician`, ids `bi_find_...`, so they survive
+    the editor unchanged and are never sent to the patient copy."""
+    w = _FIND[lang]
+    ents = {x.id: x for x in pkg.entities if x.id}
+    dates = {e.id: e.occurred_on for e in pkg.entries}
+    out: list[BriefItem] = []
+
+    def add(key: str, text: str, cites: list[str] | None = None) -> None:
+        out.append(BriefItem(id=f"{FINDING_PREFIX}{key}"[:60], section="findings", text=elide_it(text) if lang == "it" else text,
+                             cites=cites or [], origin="clinician", review="accepted"))
+
+    for a in decisions.get("answers") or []:
+        if a.get("answer") in w:
+            add(f"q_{a['feature_id']}", w["checked"].format(t=_term(onto, a["feature_id"], a.get("label") or "", lang), a=w[a["answer"]]))
+    for ent_id, c in (decisions.get("corrections") or {}).items():
+        x = ents.get(ent_id)
+        if x is None or not c.get("to"):
+            continue
+        was = _term(onto, c["from"], c.get("from_label") or "", lang) if c.get("from") else (c.get("from_label") or x.canonical)
+        add(f"r_{ent_id}", w["revised"].format(a=was, b=_term(onto, c["to"], c.get("label") or "", lang)), [x.entry_id])
+    for ent_id, v in (decisions.get("terms") or {}).items():
+        x = ents.get(ent_id)
+        if v != "rejected" or x is None:
+            continue
+        t = _term(onto, x.hpo_id, x.canonical, lang) if x.hpo_id else x.canonical
+        add(f"x_{ent_id}", w["aside"].format(t=t, d=fdate(dates.get(x.entry_id, x.occurred_on), lang, _year(pkg))))
+    for l in pkg.labs:
+        if l.id and (decisions.get("labs") or {}).get(l.id) == "rejected":
+            name = l.name_en if lang == "en" and l.name_en else l.test_name
+            add(f"l_{l.id}", w["lab_aside"].format(t=name, d=fdate(l.date, lang, _year(pkg)), p=l.page))
+    return out
+
+
+def with_findings(brief: Brief, findings: list[BriefItem]) -> Brief:
+    """The unsigned brief with this visit's findings rebuilt from the current decisions (a signed brief keeps its own)."""
+    if brief.finalized:
+        return brief
+    keep = [i for i in brief.items if not i.id.startswith(FINDING_PREFIX)]
+    return brief.model_copy(update={"items": keep + findings})
 
 
 # ---------------------------------------------------------------- audience and language views
 TITLES = {
-    ("clinician", "en"): {"summary": "Summary", "timeline": "Timeline", "symptoms": "Recorded symptoms", "labs": "Labs",
-                          "medications": "Medications", "patterns": "Patterns software noticed (not a diagnosis)",
+    ("clinician", "en"): {"summary": "Summary", "timeline": "Timeline", "symptoms": "Recorded symptoms",
+                          "negatives": "Pertinent negatives (patient reported absent)", "findings": "Findings this visit (clinician)",
+                          "labs": "Labs", "medications": "Medications", "patterns": "Patterns software noticed (not a diagnosis)",
                           "questions": "Questions to ask"},
-    ("clinician", "it"): {"summary": "Riepilogo", "timeline": "Cronologia", "symptoms": "Sintomi registrati", "labs": "Esami",
-                          "medications": "Farmaci", "patterns": "Schemi notati dal software (non è una diagnosi)",
+    ("clinician", "it"): {"summary": "Riepilogo", "timeline": "Cronologia", "symptoms": "Sintomi registrati",
+                          "negatives": "Negatività rilevanti (riferite assenti dal paziente)", "findings": "Rilievi di questa visita (medico)",
+                          "labs": "Esami", "medications": "Farmaci", "patterns": "Schemi notati dal software (non è una diagnosi)",
                           "questions": "Domande da fare"},
     ("patient", "en"): {"summary": "Summary", "timeline": "What happened when", "symptoms": "What you wrote about",
+                        "negatives": "What you said was not there", "findings": "From your visit",
                         "labs": "Lab results", "medications": "Medicines", "patterns": "Worth discussing (not a diagnosis)",
                         "questions": "Questions"},
     ("patient", "it"): {"summary": "Riepilogo", "timeline": "Cosa è successo e quando", "symptoms": "Di cosa hai scritto",
+                        "negatives": "Cosa hai detto che non c'era", "findings": "Dalla visita",
                         "labs": "Esami", "medications": "Farmaci", "patterns": "Da discutere con il medico (non è una diagnosi)",
                         "questions": "Domande"},
 }
@@ -364,7 +483,7 @@ def render_brief(pkg: SharePackage, brief: Brief, audience: str, lang: str, onto
         return (brief if brief.finalized else with_labs(brief, pkg, lang)).model_copy(update={"audience": "clinician"})
     ai = [i for i in brief.items if i.origin in ("ai", "clinician")]
     if audience == "clinician":
-        items = patient_items(pkg, lang) + ai
+        items = patient_items(pkg, lang, onto) + ai
     else:
         keep = [i for i in ai if i.review in ("accepted", "edited") and i.section in ("summary", "timeline")
                 and brief.lang == lang and not i.flag and not names_condition(i.text, onto)]
@@ -653,11 +772,12 @@ def text_warnings(pkg: SharePackage, brief: Brief, text: str, lang: str, pending
     Lines straight from the patient's data or a checked lab report are not checked again."""
     msgs = _warn_texts(lang)
     from_data = {item_line(pkg, i, lang) for i in brief.items if i.origin in ("patient", "document")}
+    found = {item_line(pkg, i, lang) for i in brief.items if i.id.startswith(FINDING_PREFIX)}  # built from the decisions
     lines, warns = parse_text(text)
     for w in warns:
         w.message = msgs["unknown_section"]
     for sec, line in lines:
-        if line not in from_data:
+        if line not in from_data and line not in found:
             warns += _line_warnings(pkg, sec, line, msgs, lang)
     if pending_labs:
         warns.append(BriefWarning(kind="labs_pending", message=msgs["labs_pending"].format(n=pending_labs)))
@@ -738,7 +858,7 @@ def lines_warnings(pkg: SharePackage, shown: list[BriefItem], lines: list[BriefL
     msgs = _warn_texts(lang)
     warns: list[BriefWarning] = []
     for n, it in lines_items(pkg, shown, lines, lang):
-        if it.origin in ("patient", "document"):
+        if it.origin in ("patient", "document") or it.id.startswith(FINDING_PREFIX):  # data, or this visit's decisions unchanged
             continue
         for w in _line_warnings(pkg, it.section, item_line(pkg, it, lang), msgs, lang):
             w.item = n
