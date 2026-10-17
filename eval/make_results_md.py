@@ -109,6 +109,16 @@ def render(results_dir):
             for n, r in sc:
                 for x in r["self_consistency"]:
                     L.append(f"| {n} | {x['sc_n']} | {x['concurrency']} | {g(x['latency_p50_x'])} | {g(x['out_tokens_per_item_x'])} | {g(x['items_per_s_x'])} |")
+        app = [(n, r) for n, r in benches if r.get("app_self_consistency")]
+        if app:
+            L += ["", "Self-consistency cost on the app's own extraction path (`clario.extract.extract`: primary, samples, HPO picks), per note:", "",
+                  "| file | shown as | samples | requests per note | without samples | output tokens per note | without samples | prompt tokens per note | without samples | latency p50 x | cost per note USD |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|"]
+            for n, r in app:
+                for x in r["app_self_consistency"]:
+                    L.append(f"| {n} | {g(r.get('display_label'))} | {x['sc_n']} | {g(x['requests_per_note'])} | {g(x['requests_per_note_without_sc'])} | "
+                             f"{g(x['completion_tokens_per_note'])} | {g(x['completion_tokens_per_note_without_sc'])} | "
+                             f"{g(x['prompt_tokens_per_note'])} | {g(x['prompt_tokens_per_note_without_sc'])} | {g(x['latency_p50_x'])} | {g(x['cost_usd_per_note'])} |")
     else:
         L.append("No benchmark recorded yet.")
     L += ["", "## Review threshold with a guarantee (conformal)", ""]
@@ -117,6 +127,10 @@ def render(results_dir):
         for n, r in conf:
             L.append(f"| {n} | {r['model']} | {r['dataset']} | {r['n']} | {r['date']} | {f3(r.get('alpha'))} | {f3(r.get('delta'))} | "
                      f"{f3(r.get('threshold'))} | {f3(r.get('auto_accept_rate'))} | {f3(r.get('heldout_error'))} |")
+        for n, r in conf:
+            if r.get("correctness"):
+                L.append(f"\n{n}: correct means {r['correctness']}; confidence is {r.get('confidence_source')}; n counts entities"
+                         + (f" from {r['n_diaries']} diaries" if r.get("n_diaries") else "") + f"; hardware: {hw(r)}.")
         L += ["", "With probability at least 1 - delta, entities at or above the threshold have an error rate of at most alpha, for data like the calibration set (split calibration, Learn-then-Test). The held-out numbers are one draw on the other half, shown for transparency."]
     else:
         L.append("No certified threshold recorded yet (`eval/conformal.py` on a `--sc-n` run).")

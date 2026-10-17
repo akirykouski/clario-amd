@@ -18,6 +18,16 @@ LLM_API_KEY=$VLLM_API_KEY uv run --with openai --with httpx python bench/bench.p
 ```
 For the LoRA adapter, repeat with `--model clario-extract --workload extract --label amd-mi300x-clario-extract-lora`.
 
+## AMD Token Factory (hosted Gemma 4 31B)
+Token Factory is a hosted API, not our GPU: label its results "Gemma 4 31B · AMD Token Factory" and set `hardware` from `CLARIO_HARDWARE` (the bench has no GPU telemetry there). The gateway rejects `n > 1`, so `extract_sc` sends `--sc-n` separate requests per item. `--workload tf` runs extract, brief, extract_sc and `app` (the app's own `clario.extract.extract` at `--sc-n` and at 1, counting HTTP requests and tokens per note); `app` needs the backend importable, so run it with `backend/.venv/bin/python`. Keep inside the key's limits with `--rpm` and `--max-inflight`; a 429 waits for Retry-After.
+```bash
+CLARIO_HARDWARE='{"gpu_name": "AMD Token Factory (hosted API; GPU not disclosed, not our own GPU)", "source": "env"}' \
+TF_API_KEY=... backend/.venv/bin/python bench/bench.py --base-url https://developer.amd.com.cn/radeon/api/v1 \
+  --api-key-env TF_API_KEY --model Gemma-4-31B-IT --label tf-gemma4-31b --backend amd-token-factory \
+  --display-label "Gemma 4 31B · AMD Token Factory" --workload tf --concurrency 1,4 --n 8 --sc-n 5 --stream \
+  --rpm 18 --max-inflight 6
+```
+
 ## Local baseline (Ollama)
 ```bash
 uv run --with openai --with httpx python bench/bench.py --base-url http://localhost:11434/v1 \
