@@ -18,6 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 from . import documents as docs
 from . import gpu as gpumetrics
 from .config import Settings
+from .demo import DEMO_BATCH_PREFIX
 from .review import LabReviewKind, register_review_kind
 from .share import now_iso
 from .models import Entry, LabResult, LabsResponse, LabTest, LabValue
@@ -142,13 +143,31 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
             raise HTTPException(422, "Add at least one PDF or image")
         return start_batch(pages)
 
-    def start_batch(pages: list[docs.Page], shift_days: int = 0, precomputed: list[list[dict]] | None = None) -> dict:
+    def drop_batch(bid: str, entry_id: str) -> None:
+        """Delete a stored batch: its page images, its diary entry, its lab rows and the batch record."""
+        for d in vault.all("lab"):
+            if d["batch_id"] == bid:
+                vault.delete(d["id"])
+        for d in vault.all("docpage"):
+            if d["batch_id"] == bid:
+                vault.delete(f"{bid}_p{d['page']}")
+        vault.delete(entry_id)
+        vault.delete(bid)
+        batches.pop(bid, None)
+
+    def start_batch(pages: list[docs.Page], shift_days: int = 0, precomputed: list[list[dict]] | None = None,
+                    demo: bool = False) -> dict:
         """Store the pages encrypted, add the diary entry, start reading in the background. `precomputed` (the demo
-        referti): rows per page already read, stored at once instead of reading the pages."""
+        referti): rows per page already read, stored at once instead of reading the pages. `demo`: replace an earlier
+        import of the demo referti instead of adding a second copy."""
         now_m = time.monotonic()
         for k in [k for k, b in batches.items() if b["finished"] is not None and now_m - b["finished"] > FINISHED_TTL]:
             del batches[k]
-        bid = f"b_{uuid.uuid4().hex[:10]}"
+        if demo:
+            for d in vault.all("docbatch"):
+                if d["batch_id"].startswith(DEMO_BATCH_PREFIX):
+                    drop_batch(d["batch_id"], d["entry_id"])
+        bid = f"{DEMO_BATCH_PREFIX if demo else 'b_'}{uuid.uuid4().hex[:10]}"
         now = now_iso()
         occurred = docs.today_iso()
         for i, p in enumerate(pages):

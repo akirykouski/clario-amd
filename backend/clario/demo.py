@@ -63,6 +63,8 @@ GIULIA_IT = [
 PERSONAS = {"giulia": GIULIA, "giulia_it": GIULIA_IT}
 PERSONA_LANG = {"giulia": "en", "giulia_it": "it"}
 DEMO_DIR = Path(__file__).parent / "data" / "demo"
+DEMO_ENTRY_PREFIX = "e_demo_"  # ids of the persona's diary entries: a second load deletes these and writes them again
+DEMO_BATCH_PREFIX = "b_demo_"  # ids of the demo referti batch: a second import replaces its pages, entry and lab rows
 
 
 def persona_entries(persona: str, today: date | None = None) -> list[tuple[str, str, int]]:

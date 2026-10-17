@@ -35,7 +35,7 @@ from . import specialty
 from .config import Settings
 from .share import lab_needs_check, now_iso
 from . import documents as docs
-from .demo import (DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_care, persona_entries,
+from .demo import (DEMO_ENTRY_PREFIX, DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_care, persona_entries,
                    persona_labels, truth_rows)
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
@@ -558,9 +558,14 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             raise HTTPException(404, "unknown persona")
         vault.put("profile", "profile", {"age": 29, "sex": "female"})  # Giulia, 29 (synthetic)
         labels = persona_labels(body.persona)  # reviewed, precomputed (data/demo/LABELS.md): no model call, no call log
+        # loading again replaces the earlier demo diary (either persona) instead of adding a second copy; notes the user
+        # wrote keep their own ids and stay
+        for d in vault.all("entry"):
+            if d["id"].startswith(DEMO_ENTRY_PREFIX):
+                vault.delete(d["id"])
         n = 0
         for day, text, mood in persona_entries(body.persona):
-            eid = f"e_{uuid.uuid4().hex[:10]}"
+            eid = f"{DEMO_ENTRY_PREFIX}{uuid.uuid4().hex[:10]}"
             ents = [Entity(id=f"ent_{uuid.uuid4().hex[:10]}", entry_id=eid, **x) for x in labels[text]]
             save(Entry(id=eid, created_at=now_iso(), occurred_on=day, text=text, mood=mood, extraction="done",
                        entities=ents))
@@ -584,7 +589,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             rows += truth
         # the rows a live read gives (eval/results/documents_tf-mineru-table.json), stored at once: no OCR call
         return app.state.start_batch(pages, (date.today() - timedelta(days=DEMO_REFERTI_AGE) - REFERTI_LATEST).days,
-                                     precomputed=rows)
+                                     precomputed=rows, demo=True)
 
     async def clinic_key(url: str) -> dict:
         u = urlparse(url)
