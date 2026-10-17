@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { SYSTEM_COLOR } from "../lib";
-import { DayStrip } from "../components/DayStrip";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { buildHeat, fmtDate, pastWhen, weeklyMood } from "../lib";
@@ -58,15 +57,15 @@ export default function TimelinePage() {
           </div>
           {heat.rows.length > 0 && (
             <p aria-hidden className="flex items-center gap-1 text-[13px] text-muted">
-              <DayStrip days={[false, false, true, false, false, true, false]} color="var(--accent)" lit />
+              {[30, 52, 76].map((p) => <span key={p} className="w-5 h-5 rounded-[5px]" style={{ background: `color-mix(in srgb, var(--accent) ${p}%, transparent)` }} />)}
               <span className="ml-2 max-w-[340px]">{t("timeline.legend")}</span>
             </p>
           )}
         </div>
         {heat.rows.length === 0 ? <p className="text-muted mt-1">{t("timeline.confirmHint")}</p> : (
           <>
-            <HeatStrip heat={heat} mood={mood} entryDates={dates} onPick={(p) => setPick(pick && pick.hpo_id === p.hpo_id && pick.week === p.week ? null : p)}
-              selected={pick} />
+            <HeatStrip heat={heat} mood={mood} selected={pick}
+              onPick={(p) => setPick(pick && pick.hpo_id === p.hpo_id && pick.week === p.week ? null : p)} />
           </>
         )}
         <AnimatePresence initial={false}>
