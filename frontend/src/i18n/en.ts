@@ -219,6 +219,7 @@ export const en = {
   "import.gpu": "GPU {load}%",
   "import.demoModel": "Reading pages on the demo model",
   "import.reading": "Reading pages",
+  "import.precomputed": "Sample results, read earlier on AMD Token Factory and checked. Nothing was read now.",
 
   "share.title": "Share with your clinic",
   "share.intro": "You choose what goes. Only terms you confirmed and the notes in the period you pick. It is sealed to the clinic and expires.",

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from clario.app import create_app
 from clario.models import LabResult
 from clario.share import shared_labs
-from conftest import confirm_all, settings, sse, wait_extracted
+from conftest import confirm_all, demo_referti_with_unsure, settings, sse, wait_extracted
 from test_judge_share import share_body
 
 
@@ -34,7 +34,7 @@ def test_clinic_decides_unchecked_labs_before_finalize(unlocked, clinic_server, 
     unlocked.post("/api/entries", json={"text": "Knees ache. Tired. Rash on my cheeks."})
     wait_extracted(unlocked)
     confirm_all(unlocked)
-    bid = unlocked.post("/api/demo/documents").json()["batch_id"]
+    bid = demo_referti_with_unsure(unlocked)
     with unlocked.stream("GET", f"/api/documents/batch/{bid}/events") as s:
         for line in s.iter_lines():
             if line.startswith("data:") and '"done": true' in line:
@@ -79,7 +79,7 @@ def test_clinic_bulk_lab_decisions_one_log_row_per_lab(unlocked, clinic_server, 
     unlocked.post("/api/entries", json={"text": "Knees ache. Tired. Rash on my cheeks."})
     wait_extracted(unlocked)
     confirm_all(unlocked)
-    bid = unlocked.post("/api/demo/documents").json()["batch_id"]
+    bid = demo_referti_with_unsure(unlocked)
     with unlocked.stream("GET", f"/api/documents/batch/{bid}/events") as s:
         for line in s.iter_lines():
             if line.startswith("data:") and '"done": true' in line:

@@ -220,6 +220,7 @@ export const it: Record<Key, string> = {
   "import.gpu": "GPU {load}%",
   "import.demoModel": "Lettura delle pagine con il modello demo",
   "import.reading": "Lettura delle pagine",
+  "import.precomputed": "Risultati di esempio, letti in precedenza su AMD Token Factory e controllati. Ora non è stato letto nulla.",
 
   "share.title": "Condividi con la tua clinica",
   "share.intro": "Decidi tu cosa inviare: solo i termini che hai confermato e le note del periodo che scegli. Il pacchetto viene sigillato per la clinica e ha una scadenza.",

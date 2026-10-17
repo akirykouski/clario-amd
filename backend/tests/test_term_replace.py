@@ -75,10 +75,10 @@ def test_replace_validates_the_term(unlocked, clinic_server, tmp_path):
         assert clinic.get(f"/api/inbox/{pid}/terms/nope/candidates").status_code == 404
         fam = next(x for x in pkg["entities"] if x["family_history"])
         assert clinic.patch(f"/api/inbox/{pid}/terms/{fam['id']}", json={"decision": "corrected", "hpo_id": PHOTO}).status_code == 422
-        # the overview counts the replaced term: the mouth sore read as joint pain makes joint pain a third note
-        joints = next(r for r in clinic.get(f"/api/inbox/{pid}/overview").json()["frequent"] if r["label"] == "joint pain")
-        assert clinic.patch(url, json={"decision": "corrected", "hpo_id": "HP:0002829"}).status_code == 200
-        now = next(r for r in clinic.get(f"/api/inbox/{pid}/overview").json()["frequent"] if r["label"] == "joint pain")
+        # the overview counts the replaced term: the mouth sore read as joint swelling makes joint swelling a third note
+        joints = next(r for r in clinic.get(f"/api/inbox/{pid}/overview").json()["frequent"] if r["label"] == "swollen joints")
+        assert clinic.patch(url, json={"decision": "corrected", "hpo_id": "HP:0001386"}).status_code == 200
+        now = next(r for r in clinic.get(f"/api/inbox/{pid}/overview").json()["frequent"] if r["label"] == "swollen joints")
         assert now["count"] == joints["count"] + 1
         # confirm and reject still work as before and clear a replacement
         assert clinic.patch(url, json={"decision": "corrected", "hpo_id": "HP:0200042"}).status_code == 200

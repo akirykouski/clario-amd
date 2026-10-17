@@ -41,7 +41,7 @@ export default function ImportPage() {
     stream,
     (e) => e.done,
     // a live run stays on screen a little longer, so the speed and the reader can be read
-    (e) => { setEv(e); if (e.done) { notifyReview(); setTimeout(() => nav("/labs"), offline ? 1200 : 4000); } },
+    (e) => { setEv(e); if (e.done) { notifyReview(); setTimeout(() => nav("/labs"), offline || e.precomputed ? 1200 : 4000); } },
     () => { setErr(t("import.lost")); setBusy(false); },
   );
 
@@ -69,7 +69,7 @@ export default function ImportPage() {
   const pct = ev && ev.pages_total ? Math.round((ev.pages_done / ev.pages_total) * 100) : 0;
   const load = ev ? gpuLoad(ev.gpu) : null;
   // Pages per second means nothing on the offline fixtures, or mid-batch before enough pages have been read.
-  const showSpeed = !!ev && !offline && (ev.pages_done >= 10 || (ev.done && ev.pages_done > 0));
+  const showSpeed = !!ev && !offline && !ev.precomputed && (ev.pages_done >= 10 || (ev.done && ev.pages_done > 0));
   const reader = ev && !offline && ev.model ? readerName(ev.model) + (ev.backend === TOKEN_FACTORY ? " · AMD Token Factory" : "") : null;
   const realGpu = !!ev?.gpu && !offline && (load !== null || (typeof ev.gpu.gpu_name === "string" && !!ev.gpu.gpu_name) || (typeof ev.gpu.name === "string" && !!ev.gpu.name));
   return (
@@ -110,6 +110,8 @@ export default function ImportPage() {
                 <p className="text-sm text-muted" data-testid="took">{t("import.took", { n: ev.pages_done, s: fmtNum(ev.elapsed_s, 0) })}</p>
               )}
             </>
+          ) : ev.precomputed ? (
+            <p className="font-display text-2xl" data-testid="precomputed">{t("import.precomputed")}</p>
           ) : (
             <p className="font-display text-2xl" data-testid="pps-wait">{t(offline ? "import.demoModel" : "import.reading")}</p>
           )}

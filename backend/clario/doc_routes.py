@@ -27,6 +27,9 @@ log = logging.getLogger("clario")
 
 MAX_PAGES = 400
 MAX_FILE_BYTES = 60 * 1024 * 1024
+# provenance of the demo referti rows: what produced them, never a claim of a live call (data/demo/LABELS.md)
+PRECOMPUTED_LABS = ("precomputed: MinerU2.5-Pro OCR on AMD Token Factory, table read in code, "
+                    "checked against the truth file (eval/results/documents_tf-mineru-table.json)")
 FINISHED_TTL = 15 * 60  # seconds a finished batch stays readable for its progress stream, then dropped
 
 
@@ -60,11 +63,30 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         except Exception:  # noqa: BLE001 - telemetry must never break the import
             return None
 
+    def store_row(bid: str, r: dict, model: str) -> None:
+        b = batches[bid]
+        shift = timedelta(days=b.get("shift_days", 0))  # demo only: move the synthetic referti into the diary's weeks
+        lab = LabResult(id=f"l_{uuid.uuid4().hex[:10]}", batch_id=bid, test_key=docs.test_key(r["test_name"]),
+                        model=model, **{**r, "date": (date.fromisoformat(r["date"]) + shift).isoformat()
+                                        if r["date"] else b["occurred_on"]})
+        vault.put("lab", lab.id, lab.model_dump(mode="json"))
+        b["labs"] += 1
+        b["needs_review"] += lab.review == "needs_review"
+
+    def store_precomputed(bid: str, pages: list[list[dict]]) -> None:
+        """Demo referti: the rows a live read of these pages gives (OCR, table read in code), stored without a call.
+        Same review rule as the live table path: clean cells get docs.TABLE_CONFIDENCE, flags recomputed in code."""
+        b = batches[bid]
+        for i, rows in enumerate(pages):
+            for r in rows:
+                store_row(bid, {**r, "flag": docs.compute_flag(r["value_numeric"], r["ref_low"], r["ref_high"], r["flag"]),
+                                "page": i + 1, "confidence": docs.TABLE_CONFIDENCE, "review": "auto"}, PRECOMPUTED_LABS)
+            b["done"] += 1
+        b["finished"] = time.monotonic()
+
     async def run_batch(bid: str, pages: list[docs.Page]) -> None:
         b = batches[bid]
         sem = asyncio.Semaphore(s.doc_workers)
-        fallback_date = b["occurred_on"]
-        shift = timedelta(days=b.get("shift_days", 0))  # demo only: move the synthetic referti into the diary's weeks
 
         async def one(i: int, page: docs.Page) -> None:
             async with sem:
@@ -75,12 +97,7 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
                                                   n_samples=s.doc_samples)
                     b["model"] = res.model
                     for r in res.rows:
-                        lab = LabResult(id=f"l_{uuid.uuid4().hex[:10]}", batch_id=bid, test_key=docs.test_key(r["test_name"]),
-                                        model=res.model, **{**r, "date": (date.fromisoformat(r["date"]) + shift).isoformat()
-                                                            if r["date"] else fallback_date})
-                        vault.put("lab", lab.id, lab.model_dump(mode="json"))
-                        b["labs"] += 1
-                        b["needs_review"] += lab.review == "needs_review"
+                        store_row(bid, r, res.model)
                 except Locked:
                     b["errors"] += 1
                 except Exception as err:  # noqa: BLE001 - one bad page must not sink the batch
@@ -112,8 +129,9 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
             raise HTTPException(422, "Add at least one PDF or image")
         return start_batch(pages)
 
-    def start_batch(pages: list[docs.Page], shift_days: int = 0) -> dict:
-        """Store the pages encrypted, add the diary entry, start reading in the background."""
+    def start_batch(pages: list[docs.Page], shift_days: int = 0, precomputed: list[list[dict]] | None = None) -> dict:
+        """Store the pages encrypted, add the diary entry, start reading in the background. `precomputed` (the demo
+        referti): rows per page already read, stored at once instead of reading the pages."""
         now_m = time.monotonic()
         for k in [k for k, b in batches.items() if b["finished"] is not None and now_m - b["finished"] > FINISHED_TTL]:
             del batches[k]
@@ -129,8 +147,11 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         vault.put("docbatch", bid, {"batch_id": bid, "entry_id": entry.id})  # what a shared lab row cites
         batches[bid] = {"total": len(pages), "done": 0, "errors": 0, "labs": 0, "needs_review": 0,
                         "started": time.monotonic(), "finished": None, "entry_id": entry.id, "occurred_on": occurred,
-                        "shift_days": shift_days}
-        spawn(run_batch(bid, pages))
+                        "shift_days": shift_days, "precomputed": precomputed is not None}
+        if precomputed is not None:
+            store_precomputed(bid, precomputed)
+        else:
+            spawn(run_batch(bid, pages))
         return {"batch_id": bid, "pages": len(pages), "entry_id": entry.id}
 
     app.state.start_batch = start_batch
@@ -139,10 +160,12 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         b = batches[bid]
         end = b["finished"] or time.monotonic()
         el = max(end - b["started"], 1e-3)
+        pre = b["precomputed"]  # nothing was read now: no speed, no reader, no GPU reading to show
         return {"batch_id": bid, "pages_done": b["done"], "pages_total": b["total"],
-                "pages_per_sec": round(b["done"] / el, 2), "gpu": gpu, "errors": b["errors"], "labs": b["labs"],
+                "pages_per_sec": 0.0 if pre else round(b["done"] / el, 2), "gpu": gpu, "errors": b["errors"], "labs": b["labs"],
                 "needs_review": b["needs_review"], "done": b["done"] >= b["total"],
-                "elapsed_s": round(el, 1), "backend": llm.backend, "model": b.get("model")}
+                "elapsed_s": 0.0 if pre else round(el, 1), "backend": llm.backend, "model": b.get("model"),
+                "precomputed": pre}
 
     @app.get("/api/documents/batch/{bid}/events")
     async def batch_events(bid: str):
@@ -151,7 +174,7 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
 
         async def stream():
             while True:
-                ev = snapshot(bid, await gpu_info())
+                ev = snapshot(bid, None if batches[bid]["precomputed"] else await gpu_info())
                 yield {"data": json.dumps(ev)}
                 if ev["done"]:
                     return

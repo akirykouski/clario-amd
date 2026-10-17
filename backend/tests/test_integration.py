@@ -188,7 +188,8 @@ def test_clinic_data_key_is_stable_and_private(tmp_path):
 
 # ------------------------------------------------------------ privacy wrapper on every path
 def test_every_llm_path_is_logged_and_semaphore_reaches_the_client(unlocked):
-    unlocked.post("/api/demo", json={"persona": "giulia"})
+    unlocked.post("/api/demo", json={"persona": "giulia"})  # precomputed: no call
+    unlocked.post("/api/entries", json={"text": "Knees ache again today. No fever."})  # a typed note: live extraction
     wait_extracted(unlocked)
     for e in unlocked.get("/api/entries").json():
         for x in e["entities"]:

@@ -149,6 +149,8 @@ export interface BatchEvent {
   gpu: Record<string, unknown> | null; errors: number; labs: number; needs_review: number; done: boolean;
   /** Seconds since the batch started; backend and model(s) that read the pages ("MinerU2.5-Pro + Gemma-4-31B-IT"). */
   elapsed_s?: number; backend?: string; model?: string | null;
+  /** The demo referti: rows stored from the reviewed sample results, no page was read now (no speed, no reader). */
+  precomputed?: boolean;
 }
 export interface LabResult {
   id: string; batch_id: string; test_name: string; test_key: string; value_numeric: number | null;

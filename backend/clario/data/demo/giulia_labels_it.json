@@ -1,0 +1,714 @@
+{
+ "persona": "giulia_it",
+ "lang": "it",
+ "made": "Draft: one extraction call per entry to Gemma-4-31B-IT on AMD Token Factory on 2026-10-17 (app prompt in its confidence variant, extraction_v3 schema, app grounding and ontology check, no HPO pick call). See LABELS.md.",
+ "reviewed": "Every entity checked by hand against the shipped HPO ontology and the entry text on 2026-10-17; changes in review_note.",
+ "entries": [
+  {
+   "day": 70,
+   "text": "Stanchissima da lunedì, anche dopo nove ore di sonno. Le scale per salire in ufficio sembravano una montagna.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Stanchissima",
+     "canonical": "Fatigue",
+     "hpo_id": "HP:0012378",
+     "hpo_label": "Fatigue",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": "da lunedì",
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 66,
+   "text": "Le ginocchia e le dita delle mani mi fanno male la mattina, rigide per un'oretta prima di sciogliersi.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "ginocchia",
+     "canonical": "Knee pain",
+     "hpo_id": "HP:0030839",
+     "hpo_label": "Knee pain",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "type body_site -> symptom"
+    },
+    {
+     "type": "symptom",
+     "quote": "dita delle mani",
+     "canonical": "Arthralgia",
+     "hpo_id": "HP:0002829",
+     "hpo_label": "Arthralgia",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model 'Finger pain' typed body_site -> Arthralgia, as in the English entry (finger joints, stiff in the morning)"
+    },
+    {
+     "type": "symptom",
+     "quote": "rigide",
+     "canonical": "Joint stiffness",
+     "hpo_id": "HP:0001387",
+     "hpo_label": "Joint stiffness",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset \"per un'oretta\" removed (duration of the stiffness, not an onset); generic 'Pain' on 'mi fanno male' dropped (covered by knee and finger pain)"
+    }
+   ]
+  },
+  {
+   "day": 63,
+   "text": "Pranzo lungo all'aperto sul lago, domenica. Verso sera guance e naso erano rossi, a forma di farfalla. Bruciava un po'.",
+   "entities": [
+    {
+     "type": "finding",
+     "quote": "guance e naso erano rossi, a forma di farfalla",
+     "canonical": "Malar rash",
+     "hpo_id": "HP:0025300",
+     "hpo_label": "Malar rash",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'Verso sera' removed (time of day)"
+    },
+    {
+     "type": "symptom",
+     "quote": "Bruciava",
+     "canonical": "Burning sensation",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.8,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model term mapped to 'Burning eye sensation' (wrong body part); no HPO id"
+    }
+   ]
+  },
+  {
+   "day": 59,
+   "text": "Di nuovo una piaga in bocca, sul palato. Non fa tanto male ma è la terza questo mese.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "piaga in bocca",
+     "canonical": "Oral ulcer",
+     "hpo_id": "HP:0000155",
+     "hpo_label": "Oral ulcer",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model 'Stomatitis' -> Oral ulcer (same as the English entry); body site 'sul palato' with no HPO id dropped"
+    }
+   ]
+  },
+  {
+   "day": 55,
+   "text": "Stamattina in attesa del tram le dita sono diventate bianche e poi blu per il freddo. Ci hanno messo una vita a scaldarsi.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "dita sono diventate bianche e poi blu",
+     "canonical": "Raynaud phenomenon",
+     "hpo_id": "HP:0030880",
+     "hpo_label": "Raynaud phenomenon",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'Stamattina' removed (time of day)"
+    },
+    {
+     "type": "trigger",
+     "quote": "freddo",
+     "canonical": "Cold exposure",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 52,
+   "text": "Ginocchia che fanno male, 6/10 oggi. Niente febbre. Il lavoro è stressante ma non credo c'entri.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Ginocchia che fanno male",
+     "canonical": "Knee pain",
+     "hpo_id": "HP:0030839",
+     "hpo_label": "Knee pain",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": 6,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'oggi' removed"
+    },
+    {
+     "type": "symptom",
+     "quote": "febbre",
+     "canonical": "Fever",
+     "hpo_id": "HP:0001945",
+     "hpo_label": "Fever",
+     "negated": true,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.98,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 48,
+   "text": "Ho notato più capelli del solito nello scarico della doccia. Spazzolandoli vengono via a ciocche.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "più capelli del solito nello scarico della doccia",
+     "canonical": "Hair loss",
+     "hpo_id": "HP:0001596",
+     "hpo_label": "Alopecia",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "duplicate Alopecia from 'vengono via a ciocche' merged"
+    }
+   ]
+  },
+  {
+   "day": 45,
+   "text": "Questa settimana va un po' meglio, più energia. Ho fatto una breve passeggiata. Mia madre ha il lupus, me l'ha detto solo ora, e ci sto pensando.",
+   "entities": [
+    {
+     "type": "finding",
+     "quote": "lupus",
+     "canonical": "Systemic lupus erythematosus",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": true,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 1.0,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "HPO id HP:0002725 removed: a relative's diagnosis is not the patient's phenotype, and patient screens never show a condition name (the relative's condition shows as her own words)"
+    }
+   ]
+  },
+  {
+   "day": 41,
+   "text": "Forse il rossore sulle guance è tornato dopo un pomeriggio di sole al mercato.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "rossore sulle guance",
+     "canonical": "Malar rash",
+     "hpo_id": "HP:0025300",
+     "hpo_label": "Malar rash",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.5,
+     "review": "needs_review",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, unsure on purpose",
+     "confidence_source": "set in review (hedged sentence); the model said 0.9",
+     "review_note": "hedged ('Forse'): unsure on purpose; onset 'dopo un pomeriggio di sole' removed (a trigger, not an onset)"
+    },
+    {
+     "type": "trigger",
+     "quote": "pomeriggio di sole",
+     "canonical": "Sun exposure",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.5,
+     "review": "needs_review",
+     "flags": [],
+     "model": "precomputed: added by hand in review (HPO ontology lookup), no model",
+     "source": "hand, unsure on purpose",
+     "confidence_source": "set in review (hedged sentence)",
+     "review_note": "added by hand (the model put it in onset_hint); no HPO id, unsure on purpose so the clinician can replace it with Cutaneous photosensitivity"
+    }
+   ]
+  },
+  {
+   "day": 37,
+   "text": "Mi fa male il petto quando faccio un respiro profondo, una fitta a sinistra. Va meglio se mi siedo in avanti. È durato due giorni.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Mi fa male il petto quando faccio un respiro profondo",
+     "canonical": "Pleuritic chest pain",
+     "hpo_id": "HP:0033771",
+     "hpo_label": "Pleuritic chest pain",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": "È durato due giorni",
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model gave two 'Chest pain' and a 'Dyspnea' on 'respiro profondo' (wrong: the breath triggers the pain); merged into Pleuritic chest pain as in the English entry"
+    }
+   ]
+  },
+  {
+   "day": 34,
+   "text": "Un po' di febbre alla sera, 37,9. Polsi gonfi.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "febbre",
+     "canonical": "Fever",
+     "hpo_id": "HP:0001945",
+     "hpo_label": "Fever",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 1.0,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'alla sera' removed (time of day)"
+    },
+    {
+     "type": "finding",
+     "quote": "Polsi gonfi",
+     "canonical": "Joint swelling",
+     "hpo_id": "HP:0001386",
+     "hpo_label": "Joint swelling",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model 'Wrist edema' had no valid HPO id -> Joint swelling, as in the English entry"
+    }
+   ]
+  },
+  {
+   "day": 30,
+   "text": "Esami del sangue dal medico: dice che ho proteine nelle urine e i globuli bianchi un po' bassi. Altro controllo fra un mese.",
+   "entities": [
+    {
+     "type": "finding",
+     "quote": "proteine nelle urine",
+     "canonical": "Proteinuria",
+     "hpo_id": "HP:0000093",
+     "hpo_label": "Proteinuria",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 1.0,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "finding",
+     "quote": "globuli bianchi un po' bassi",
+     "canonical": "Leukopenia",
+     "hpo_id": "HP:0001882",
+     "hpo_label": "Decreased total leukocyte count",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 1.0,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 26,
+   "text": "Mi sembra di nuovo una piaga in bocca. Stanca da tre giorni. Caviglie un po' gonfie a fine giornata.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "piaga in bocca",
+     "canonical": "Oral ulcer",
+     "hpo_id": "HP:0000155",
+     "hpo_label": "Oral ulcer",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.5,
+     "review": "needs_review",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, unsure on purpose",
+     "confidence_source": "set in review (hedged sentence); the model said 0.9",
+     "review_note": "hedged ('Mi sembra'): unsure on purpose; model 'Stomatitis' -> Oral ulcer"
+    },
+    {
+     "type": "symptom",
+     "quote": "Stanca",
+     "canonical": "Fatigue",
+     "hpo_id": "HP:0012378",
+     "hpo_label": "Fatigue",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": "da tre giorni",
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "finding",
+     "quote": "Caviglie un po' gonfie",
+     "canonical": "Ankle swelling",
+     "hpo_id": "HP:0001785",
+     "hpo_label": "Ankle swelling",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model 'Pedal edema' -> Ankle swelling (the words name the ankles); onset 'a fine giornata' removed"
+    }
+   ]
+  },
+  {
+   "day": 21,
+   "text": "Polsi e dita rigidi e gonfi al mattino, non riuscivo ad aprire un barattolo.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Polsi e dita rigidi",
+     "canonical": "Joint stiffness",
+     "hpo_id": "HP:0001387",
+     "hpo_label": "Joint stiffness",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'al mattino' removed"
+    },
+    {
+     "type": "symptom",
+     "quote": "gonfi",
+     "canonical": "Joint swelling",
+     "hpo_id": "HP:0001386",
+     "hpo_label": "Joint swelling",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model 'Edema' -> Joint swelling (wrists and fingers); onset 'al mattino' removed"
+    }
+   ]
+  },
+  {
+   "day": 17,
+   "text": "Bel weekend, ho dormito bene, sabato tutto tranquillo.",
+   "entities": []
+  },
+  {
+   "day": 13,
+   "text": "Rossore sulle guance dopo venti minuti al sole. Mal di testa nel pomeriggio.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Rossore sulle guance",
+     "canonical": "Malar rash",
+     "hpo_id": "HP:0025300",
+     "hpo_label": "Malar rash",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model 'Flushing of the cheeks' had no valid HPO id -> Malar rash; onset 'dopo venti minuti al sole' removed (trigger)"
+    },
+    {
+     "type": "trigger",
+     "quote": "al sole",
+     "canonical": "Sun exposure",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": null,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: added by hand in review (HPO ontology lookup), no model",
+     "source": "hand",
+     "confidence_source": null,
+     "review_note": "added by hand (the model put it in onset_hint)"
+    },
+    {
+     "type": "symptom",
+     "quote": "Mal di testa",
+     "canonical": "Headache",
+     "hpo_id": "HP:0002315",
+     "hpo_label": "Headache",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'nel pomeriggio' removed (time of day)"
+    }
+   ]
+  },
+  {
+   "day": 9,
+   "text": "Le dita sono diventate bianche di nuovo, al banco frigo del supermercato.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "dita sono diventate bianche",
+     "canonical": "Raynaud phenomenon",
+     "hpo_id": "HP:0030880",
+     "hpo_label": "Raynaud phenomenon",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "trigger",
+     "quote": "banco frigo",
+     "canonical": "Cold exposure",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.8,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 5,
+   "text": "Esausta. I capelli continuano a cadere. Ginocchia e polsi fanno male, 5/10.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Esausta",
+     "canonical": "Fatigue",
+     "hpo_id": "HP:0012378",
+     "hpo_label": "Fatigue",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": null,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: added by hand in review (HPO ontology lookup), no model",
+     "source": "hand",
+     "confidence_source": null,
+     "review_note": "the model missed it"
+    },
+    {
+     "type": "symptom",
+     "quote": "capelli continuano a cadere",
+     "canonical": "Alopecia",
+     "hpo_id": "HP:0001596",
+     "hpo_label": "Alopecia",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "symptom",
+     "quote": "Ginocchia e polsi fanno male",
+     "canonical": "Arthralgia",
+     "hpo_id": "HP:0002829",
+     "hpo_label": "Arthralgia",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": 5,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 2,
+   "text": "Sto scrivendo le domande per la visita di reumatologia di giovedì. Voglio chiedere del dolore alle articolazioni e dell'eruzione sul viso.",
+   "entities": []
+  }
+ ]
+}
