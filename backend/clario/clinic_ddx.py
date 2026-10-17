@@ -8,11 +8,16 @@ it was picked. Answers are applied as present or absent terms and the list is sc
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
+
 import numpy as np
 
+from .documents import test_key
 from .i18n import disease_name, term_label
 from .knowledge import Ontology
-from .models import ClinicQuestion, Condition, ConditionFeature, Entity, Entry, SharedEntity, SharePackage, Term
+from .models import (ClinicQuestion, Condition, ConditionFeature, Entity, Entry, SharedEntity, SharedLab, SharePackage,
+                     Term)
 from .next_question import EPS, FLOOR, MIN_PF, expected_gain
 from .patterns import (DEFAULT_FREQ, MIN_TERMS, annotated_freq, evidence_from, has_frequency_info, is_generic,
                        negated_ids, scored_diseases)
@@ -48,6 +53,136 @@ def system_key(onto: Ontology, hpo_id: str | None) -> str:
         if any(word in l for l in labels):
             return key
     return "other"
+
+
+# ---------------------------------------------------------------- labs -> HPO features
+@dataclass(frozen=True)
+class LabRule:
+    hpo_id: str
+    direction: str  # "low", "high", or "positive" (a positive qualitative result, a titre, or a value above range)
+    names: tuple[str, ...]  # folded test names (documents.test_key), Italian and English
+    skip_units: tuple[str, ...] = ()  # e.g. a lymphocyte percentage is not a count
+
+
+# Abnormal lab results that are phenotype features in HPO. Every id and label is checked against the shipped ontology
+# by tests/test_clinic_ddx_labs.py. Only these tests turn into features; everything else stays in the lab table.
+LAB_RULES: tuple[LabRule, ...] = (
+    LabRule("HP:0001903", "low", ("emoglobina", "hemoglobin", "haemoglobin", "hb", "hgb")),  # Anemia
+    LabRule("HP:0005421", "low", ("c3", "complementoc3", "complementc3", "c3complement", "c3complemento")),  # Decreased circulating complement C3 concentration
+    LabRule("HP:0045042", "low", ("c4", "complementoc4", "complementc4", "c4complement", "c4complemento")),  # Decreased circulating complement C4 concentration
+    LabRule("HP:0004431", "low", ("complemento", "complement", "ch50", "complementototale", "totalcomplement")),  # Reduced circulating complement concentration
+    LabRule("HP:0003493", "positive", ("ana", "anticorpiantinucleo", "anticorpiantinucleari", "antinuclearantibodies",
+                                       "antinuclearantibody", "anaifi", "anaifa")),  # Antinuclear antibody positivity
+    LabRule("HP:0020151", "positive", ("antidsdna", "anticorpiantidsdna", "dsdna", "antidnanativo", "antidna",
+                                       "antidoublestrandeddna")),  # Anti-dsDNA antibody positivity
+    LabRule("HP:0001882", "low", ("globulibianchi", "leucociti", "wbc", "whitebloodcells", "whitecells", "leukocytes"),
+            ("%",)),  # Decreased total leukocyte count (leukopenia)
+    LabRule("HP:0001888", "low", ("linfociti", "lymphocytes", "linfocitiassoluti", "lymphocytecount"),
+            ("%",)),  # Decreased total lymphocyte count (lymphopenia)
+    LabRule("HP:0001873", "low", ("piastrine", "platelets", "plt", "plateletcount", "conteggiopiastrinico")),  # Thrombocytopenia
+    LabRule("HP:0003259", "high", ("creatinina", "creatinine", "creatininaserica", "serumcreatinine")),  # Elevated circulating creatinine concentration
+    LabRule("HP:0000093", "positive", ("proteineurinarie", "proteinuria", "urineprotein", "proteineurine", "protidurinarie",
+                                       "proteinurine")),  # Proteinuria
+    LabRule("HP:0003565", "high", ("ves", "esr", "velocitadieritrosedimentazione", "erythrocytesedimentationrate")),  # Elevated erythrocyte sedimentation rate
+    LabRule("HP:0011227", "high", ("pcr", "crp", "proteinacreattiva", "creactiveprotein")),  # Elevated circulating C-reactive protein concentration
+)
+_BY_NAME = {n: r for r in LAB_RULES for n in r.names}
+LAB_ENTRY = "clinic_labs"  # prefix of the entries that carry lab-derived features
+_NEGATIVE = re.compile(r"\b(negativ|non\s*reattiv|non\s*rilevat|not\s*detected|non[- ]?reactive|assent|absent)", re.I)
+_POSITIVE = re.compile(r"\b(positiv|reattiv|reactive|detected|rilevat|presen)|^\s*\+{1,4}\s*$", re.I)
+_TITRE = re.compile(r"\b1\s*:\s*\d{2,5}\b")
+
+
+def lab_rule(l: SharedLab) -> LabRule | None:
+    for name in (l.test_key, test_key(l.test_name), test_key(l.name_en or "")):
+        if name and name in _BY_NAME:
+            return _BY_NAME[name]
+    return None
+
+
+def lab_reading(l: SharedLab) -> set[str]:
+    """What one result says, read from the value itself (never only from the flag): {"low"}, {"high", "positive"},
+    {"positive"} or nothing. A text result reads positive on a positive word or a titre, and a negative word wins."""
+    text = (l.value_text or "").strip()
+    if text and _NEGATIVE.search(text):
+        return set()
+    if text and (_POSITIVE.search(text) or _TITRE.search(text)):
+        return {"positive"}
+    num = l.value_numeric
+    if num is not None and (l.ref_low is not None or l.ref_high is not None):
+        if l.ref_high is not None and num > l.ref_high:
+            return {"high", "positive"}
+        if l.ref_low is not None and num < l.ref_low:
+            return {"low"}
+        return set()
+    if l.flag == "high":
+        return {"high", "positive"}
+    if l.flag == "low":
+        return {"low"}
+    return set()
+
+
+def lab_counts(l: SharedLab, decision: str | None) -> bool:
+    """Same rule as terms: every row counts unless a person rejected it. A row still waiting for the clinician's check
+    counts like an unsure term does (`models.COUNTED`), and a rejected one never does."""
+    return decision != "rejected"
+
+
+def lab_findings(labs: list[SharedLab], decisions: dict[str, str] | None = None) -> dict[str, list[SharedLab]]:
+    """HPO feature -> the abnormal results behind it, from the rows the clinician has not rejected."""
+    decisions = decisions or {}
+    out: dict[str, list[SharedLab]] = {}
+    for l in labs:
+        if not lab_counts(l, decisions.get(l.id or "")):
+            continue
+        rule = lab_rule(l)
+        if rule is None or (l.unit or "").strip() in rule.skip_units:
+            continue
+        if rule.direction in lab_reading(l):
+            out.setdefault(rule.hpo_id, []).append(l)
+    return out
+
+
+def lab_normal(labs: list[SharedLab], decisions: dict[str, str] | None = None) -> set[str]:
+    """Features a counted lab result already answers as absent: the test was measured and never read abnormal in the
+    rule's direction (CRP within range three times is not "elevated CRP, not recorded"). Kept out of the next question
+    and the "typical, not recorded" list; the score is not changed by it."""
+    decisions = decisions or {}
+    measured: set[str] = set()
+    for l in labs:
+        rule = lab_rule(l)
+        if rule is None or not lab_counts(l, decisions.get(l.id or "")) or (l.unit or "").strip() in rule.skip_units:
+            continue
+        if l.value_numeric is not None or (l.value_text or "").strip():
+            measured.add(rule.hpo_id)
+    return measured - set(lab_findings(labs, decisions))
+
+
+def with_labs(onto: Ontology, entries: list[Entry], labs: list[SharedLab], decisions: dict[str, str] | None = None) -> list[Entry]:
+    """The entries plus one entry per lab date carrying the lab-derived features. A feature also in the notes is the
+    same HPO term, so it is one feature (its note count is unchanged) and scores once."""
+    decisions = decisions or {}
+    by_date: dict[str, list[Entity]] = {}
+    for hid, rows in lab_findings(labs, decisions).items():
+        label = onto.label(hid) or hid
+        for i, l in enumerate(rows):
+            shown = l.value_text or (f"{l.value_numeric:g} {l.unit}".strip() if l.value_numeric is not None else l.flag or "")
+            confirmed = decisions.get(l.id or "") == "confirmed"
+            by_date.setdefault(l.date, []).append(Entity(
+                id=f"lab_{l.id or i}_{hid}", entry_id=f"{LAB_ENTRY}_{l.date}", type="lab", quote=f"{l.test_name}: {shown}",
+                canonical=label, hpo_id=hid, hpo_label=label, flags=["from_labs"], model="lab",
+                review="confirmed" if confirmed else "needs_review" if l.needs_review else "auto"))
+    extra = [Entry(id=f"{LAB_ENTRY}_{d}", created_at="", occurred_on=d, text="", extraction="done", entities=ents)
+             for d, ents in sorted(by_date.items())]
+    return entries + extra
+
+
+def _note_count(entry_ids: list[str]) -> int:
+    return sum(1 for i in entry_ids if not i.startswith(LAB_ENTRY))
+
+
+def _lab_count(entry_ids: list[str]) -> int:
+    return sum(1 for i in entry_ids if i.startswith(LAB_ENTRY))
 
 
 def disease_url(disease_id: str) -> str | None:
@@ -132,25 +267,28 @@ def replacement_candidates(onto: Ontology, quote: str, canonical: str, current: 
 
 
 def shortlist(onto: Ontology, entries: list[Entry], ev=None, limit: int = MAX_CONDITIONS) -> list:
-    """Signalled conditions first, then the best-scoring others above ALSO_MIN, up to `limit`."""
-    scored = scored_diseases(entries, onto, ev)
+    """Signalled conditions first, then the best-scoring others above ALSO_MIN, up to `limit`. One entry per condition
+    family, shown as its general entry (Orphanet, else OMIM), never a numbered subtype."""
+    scored = scored_diseases(entries, onto, ev, general=True)
     top = [s for s in scored if s.signal][:limit]
     top += [s for s in scored if not s.signal and s.score >= ALSO_MIN][:max(0, limit - len(top))]
     return top
 
 
-def conditions(onto: Ontology, entries: list[Entry], lang: str = "en", limit: int = MAX_CONDITIONS) -> list[Condition]:
+def conditions(onto: Ontology, entries: list[Entry], lang: str = "en", limit: int = MAX_CONDITIONS,
+               measured_normal: set[str] | frozenset[str] = frozenset()) -> list[Condition]:
     ev = evidence_from(entries, onto)
     if len(ev) < MIN_TERMS:
         return []
     patient = set(ev)
     out = []
     for s in shortlist(onto, entries, ev, limit):
-        matched = [ConditionFeature(hpo_id=p, label=term_label(p, onto.label(p) or p, lang), count=ev[p].count)
-                   for p in sorted((p for p in s.matched_ids if p in ev), key=lambda p: (-ev[p].count, p))]
+        matched = [ConditionFeature(hpo_id=p, label=term_label(p, onto.label(p) or p, lang),
+                                    count=_note_count(ev[p].entry_ids), labs=_lab_count(ev[p].entry_ids))
+                   for p in sorted((p for p in s.matched_ids if p in ev), key=lambda p: (-_note_count(ev[p].entry_ids), -ev[p].count, p))]
         out.append(Condition(disease_id=s.disease.id, name=disease_name(s.name, lang), full_name=s.disease.name, signal=s.signal,  # type: ignore[arg-type]
                              score=round(s.score, 3), rank=len(out) + 1, url=disease_url(s.disease.id), matched=matched,
-                             missing=missing_features(onto, s.disease, patient, lang)))
+                             missing=missing_features(onto, s.disease, patient, lang, normal=measured_normal)))
     return out
 
 
@@ -164,12 +302,16 @@ def feature_prob(onto: Ontology, disease, feature: str) -> tuple[float, float | 
     return LISTED, None
 
 
-def missing_features(onto: Ontology, disease, patient: set[str], lang: str = "en", k: int = 6) -> list[ConditionFeature]:
+def missing_features(onto: Ontology, disease, patient: set[str], lang: str = "en", k: int = 6,
+                     normal: set[str] | frozenset[str] = frozenset()) -> list[ConditionFeature]:
     """Features of the condition the patient has not recorded. With real frequencies: the most common first. Without:
-    the broadest recognisable features first, never two from the same branch. Labs and exam findings included."""
+    the broadest recognisable features first, never two from the same branch. Labs and exam findings included, except
+    those a lab result already answers as normal (`normal`, from `lab_normal`)."""
     covered = set(patient)
     for p in patient:
         covered |= onto.ancestors(p)
+    for n in normal:
+        covered |= {n} | onto.descendants(n)
     freq_known = has_frequency_info(disease)
     cands = []
     for hid, w in disease.phenotypes.items():
@@ -193,12 +335,14 @@ def missing_features(onto: Ontology, disease, patient: set[str], lang: str = "en
                              freq=real_freq(disease.phenotypes[h]) if freq_known else None) for h in out]
 
 
-def question(onto: Ontology, entries: list[Entry], answered: set[str], lang: str = "en", k: int = 15) -> ClinicQuestion | None:
-    """The finding with the highest expected information gain over the top conditions."""
+def question(onto: Ontology, entries: list[Entry], answered: set[str], lang: str = "en", k: int = 15,
+             measured_normal: set[str] | frozenset[str] = frozenset()) -> ClinicQuestion | None:
+    """The finding with the highest expected information gain over the top conditions. Never one the record already
+    answers: a recorded or answered feature, or one a lab result measured as normal."""
     ev = evidence_from(entries, onto)
     if len(ev) < MIN_TERMS:
         return None
-    scored = scored_diseases(entries, onto, ev)[:k]
+    scored = scored_diseases(entries, onto, ev, general=True)[:k]
     focus_ids = {s.disease.id for s in shortlist(onto, entries, ev)[:FOCUS]}
     focus = [s for s in scored if s.disease.id in focus_ids]
     if len(scored) < 2 or not focus:
@@ -206,8 +350,8 @@ def question(onto: Ontology, entries: list[Entry], answered: set[str], lang: str
     blocked: set[str] = set(answered)
     for h in set(ev) | answered:
         blocked |= {h} | onto.ancestors(h)
-    for h in negated_ids(entries) | answered:
-        blocked |= onto.descendants(h)
+    for h in negated_ids(entries) | answered | set(measured_normal):
+        blocked |= {h} | onto.descendants(h)
     cand: dict[str, int] = {}
     for s in focus:
         for q, w in s.disease.phenotypes.items():

@@ -655,9 +655,11 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         pkg = clinic_ddx.with_corrections(pkg, d["corrections"])
         rejected = {k for k, v in d["terms"].items() if v == "rejected"}
         entries = clinic_ddx.with_answers(pkg.entries, d["answers"], rejected)
+        entries = clinic_ddx.with_labs(onto, entries, pkg.labs, d["labs"])  # abnormal labs as features, rejected rows left out
+        normal = clinic_ddx.lab_normal(pkg.labs, d["labs"])  # measured and within range: never asked, never "missing"
         answered = {a["feature_id"] for a in d["answers"]}
-        conds = clinic_ddx.conditions(onto, entries, lang)
-        q = clinic_ddx.question(onto, entries, answered, lang) if conds else None
+        conds = clinic_ddx.conditions(onto, entries, lang, measured_normal=normal)
+        q = clinic_ddx.question(onto, entries, answered, lang, measured_normal=normal) if conds else None
         n_terms = len(evidence_from(entries, onto))
         note = "" if conds else ("Not enough specific findings yet to suggest conditions." if lang != "it"
                                  else "Non ci sono ancora abbastanza elementi specifici per suggerire condizioni.")

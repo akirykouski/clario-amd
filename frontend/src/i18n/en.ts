@@ -469,6 +469,8 @@ export const en = {
   "ddx.title": "Conditions to consider",
   "ddx.sub": "Ranked by how well the recorded findings match published disease annotations (HPO, Orphanet, OMIM). Decision support for you, not a diagnosis.",
   "ddx.matched": "Recorded",
+  "ddx.fromLabs": "from labs",
+  "ddx.fromLabsTitle": "Out-of-range lab results: {n}",
   "ddx.missing": "Typical, not recorded",
   "ddx.weaker": "weaker match",
   "ddx.freqUnknown": "listed",

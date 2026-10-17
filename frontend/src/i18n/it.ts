@@ -470,6 +470,8 @@ export const it: Record<Key, string> = {
   "ddx.title": "Condizioni da considerare",
   "ddx.sub": "Ordinate in base a quanto i riscontri registrati corrispondono alle annotazioni pubblicate (HPO, Orphanet, OMIM). Un supporto alla tua decisione, non una diagnosi.",
   "ddx.matched": "Registrati",
+  "ddx.fromLabs": "dagli esami",
+  "ddx.fromLabsTitle": "Esami fuori intervallo: {n}",
   "ddx.missing": "Tipici, non registrati",
   "ddx.weaker": "corrispondenza debole",
   "ddx.freqUnknown": "presente",

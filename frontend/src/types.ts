@@ -171,7 +171,8 @@ export interface ClinicMetrics {
 }
 
 // Clinic differential (clinician only)
-export interface ConditionFeature { hpo_id: string; label: string; count: number; freq: number | null }
+/** `count`: notes that record the feature; `labs`: lab dates with an out-of-range result that maps to it (0 or absent: notes only). */
+export interface ConditionFeature { hpo_id: string; label: string; count: number; labs?: number; freq: number | null }
 export interface Condition {
   disease_id: string; name: string; full_name: string; signal: Signal | null; score: number; rank: number; url: string | null;
   matched: ConditionFeature[]; missing: ConditionFeature[];

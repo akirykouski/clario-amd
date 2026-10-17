@@ -219,6 +219,43 @@ def display_name(name: str) -> str:
     return re.sub(r"[\s,;-]*(type\s*)?\d+[a-z]?$", "", name, flags=re.I).strip() or name
 
 
+_SUBTYPE = re.compile(r"(?<=[a-z\)])[\s,;-]+(?:(?:type|form|group)\s+)?(?:\d{1,3}[a-z]?|(?<=type )[ivx]+)$", re.I)
+_SUSCEPTIBILITY = re.compile(r"[\s,;-]*(?:,\s*)?susceptibility to$", re.I)
+
+
+def base_name(name: str) -> str:
+    """The condition a numbered subtype belongs to, for the clinic list: 'Systemic lupus erythematosus 18' and
+    'Systemic lupus erythematosus, susceptibility to, 6' -> 'Systemic lupus erythematosus'. Only a separated trailing
+    number, 'type N' or 'susceptibility to' goes; a one-word remainder keeps its number ('Trisomy 18' is not 'Trisomy 13')."""
+    n, prev = name.strip(), None
+    while n != prev:
+        prev = n
+        n = _SUSCEPTIBILITY.sub("", _SUBTYPE.sub("", n)).strip(" ,;-")
+    return n if len(n.split()) >= 2 else name.strip()
+
+
+_general_cache: dict[int, dict[str, Disease]] = {}
+
+
+def general_entry(onto: Ontology, key: str) -> Disease | None:
+    """The general entry of a condition family (`key` = lower-cased base name): an annotated Orphanet entry titled with
+    the base name itself, else such an OMIM entry, else None."""
+    idx = _general_cache.get(id(onto))
+    if idx is None:
+        idx = {}
+        rank = {"ORPHA": 0, "OMIM": 1}
+        for d in onto.diseases():
+            db = d.id.partition(":")[0]
+            if db not in rank or not d.phenotypes or d.name.strip().lower() != base_name(d.name).lower():
+                continue
+            k = d.name.strip().lower()
+            cur = idx.get(k)
+            if cur is None or (rank[db], -len(d.phenotypes), d.id) < (rank[cur.id.partition(":")[0]], -len(cur.phenotypes), cur.id):
+                idx[k] = d
+        _general_cache[id(onto)] = idx
+    return idx.get(key)
+
+
 # ---------------------------------------------------------------- scoring
 @dataclass
 class Scored:
@@ -238,8 +275,45 @@ class Scored:
 _RANK = {"strong": 0, "moderate": 1, "weak": 2}
 
 
-def scored_diseases(entries: list[Entry], onto: Ontology, ev: dict[str, Evidence] | None = None, k: int = 80) -> list[Scored]:
-    """Every candidate condition, best score first, one per family. The score counts close matches only."""
+def _score(onto: Ontology, disease: Disease, contrib, denom: float, negated: set[str], name: str) -> Scored | None:
+    hits = [(p, c) for p, d, c in contrib if close(onto, p, d)]
+    if not hits:
+        return None
+    score = min(1.0, sum(c for _, c in hits) / denom) * negation_factor(onto, negated, disease)
+    ids = [p for p, _ in hits]
+    spec = [p for p in ids if not is_generic(onto, p)]
+    return Scored(disease, name, round(score, 4), ids, spec, None)
+
+
+def _general_families(onto: Ontology, out: list[Scored], patient: set[str], denom: float, negated: set[str]) -> list[Scored]:
+    """One entry per condition family (same base name), represented by the family's general entry (Orphanet first,
+    then OMIM) scored on its own annotations, so the matched and missing features belong to the entry that is linked.
+    A family without a general entry, or whose general entry matches nothing, keeps its best-scoring member."""
+    fams: dict[str, list[Scored]] = {}
+    for s in out:
+        fams.setdefault(base_name(s.disease.name).lower(), []).append(s)
+    res = []
+    for key, members in fams.items():
+        best = members[0]  # `out` is sorted best first
+        rep = general_entry(onto, key)
+        pick = None
+        if rep is not None:
+            pick = next((m for m in members if m.disease.id == rep.id), None)
+            if pick is None:
+                pick = _score(onto, rep, onto.similarity(patient, rep)[1], denom, negated, rep.name)
+        pick = pick or best
+        pick.name = base_name(pick.disease.name)
+        res.append(pick)
+    res.sort(key=lambda s: (-s.score, s.disease.id))
+    return res
+
+
+def scored_diseases(entries: list[Entry], onto: Ontology, ev: dict[str, Evidence] | None = None, k: int = 80,
+                    general: bool = False) -> list[Scored]:
+    """Every candidate condition, best score first, one per family. The score counts close matches only.
+
+    `general` (clinic differential): families group by `base_name` and show their general entry; otherwise (patient
+    cards, calibration) the best-scoring member of each `display_name` family stands for it."""
     ev = evidence_from(entries, onto) if ev is None else ev
     patient = {p for p in ev if onto.label(p) is not None}
     denom = sum(onto.ic(p) for p in sorted(patient))
@@ -248,20 +322,19 @@ def scored_diseases(entries: list[Entry], onto: Ontology, ev: dict[str, Evidence
     negated = negated_ids(entries)
     out: list[Scored] = []
     for disease, _far, contrib in onto.top_diseases(patient, k=k):
-        hits = [(p, c) for p, d, c in contrib if close(onto, p, d)]
-        if not hits:
-            continue
-        score = min(1.0, sum(c for _, c in hits) / denom) * negation_factor(onto, negated, disease)
-        ids = [p for p, _ in hits]
-        spec = [p for p in ids if not is_generic(onto, p)]
-        out.append(Scored(disease, display_name(disease.name), round(score, 4), ids, spec, None))
+        sc = _score(onto, disease, contrib, denom, negated, display_name(disease.name))
+        if sc is not None:
+            out.append(sc)
     out.sort(key=lambda s: (-s.score, s.disease.id))
-    seen: set[str] = set()
-    deduped = []
-    for s in out:  # subtypes of one condition ("... 16", "... 18") are one family: keep the best
-        if s.name.lower() not in seen:
-            seen.add(s.name.lower())
-            deduped.append(s)
+    if general:
+        deduped = _general_families(onto, out, patient, denom, negated)
+    else:
+        seen: set[str] = set()
+        deduped = []
+        for s in out:  # subtypes of one condition ("... 16", "... 18") are one family: keep the best
+            if s.name.lower() not in seen:
+                seen.add(s.name.lower())
+                deduped.append(s)
     for i, s in enumerate(deduped):  # the signal needs the lead over the best other condition, known only now
         rival = deduped[1].score if i == 0 and len(deduped) > 1 else (deduped[0].score if i else 0.0)
         s.lead = round(s.score - rival, 4)

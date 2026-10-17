@@ -62,5 +62,14 @@
   "HP:0008070": "Capelli radi",
   "HP:0001260": "Difficoltà a parlare in modo chiaro",
   "HP:0100543": "Difficoltà di concentrazione e di memoria",
-  "HP:0002019": "Stitichezza"
+  "HP:0002019": "Stitichezza",
+  "HP:0005421": "C3 basso",
+  "HP:0045042": "C4 basso",
+  "HP:0004431": "Complemento basso",
+  "HP:0003493": "Anticorpi antinucleo (ANA) positivi",
+  "HP:0020151": "Anticorpi anti-DNA nativo positivi",
+  "HP:0001888": "Linfociti bassi",
+  "HP:0003259": "Creatinina alta",
+  "HP:0003565": "VES alta",
+  "HP:0011227": "PCR alta"
 }

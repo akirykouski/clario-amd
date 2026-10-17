@@ -401,7 +401,8 @@ class AnswerResult(BaseModel):
 class ConditionFeature(BaseModel):
     hpo_id: str
     label: str
-    count: int = 0
+    count: int = Field(0, description="Notes that record the feature")
+    labs: int = Field(0, description="Lab dates with an abnormal result that maps to the feature (clinic_ddx.LAB_RULES)")
     freq: float | None = Field(None, description="Share of described cases with the feature (HPO annotation), when known")
 
 
