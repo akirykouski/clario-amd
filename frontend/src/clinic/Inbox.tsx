@@ -13,7 +13,7 @@ export default function Inbox() {
   const { data, error, loading, reload } = useAsync(() => api.inbox(), []);
   if (loading) return <Loading />;
   if (error || !data) return <ErrorBox error={error ?? t("common.noData")} retry={reload} />;
-  if (data.length === 0) return <Empty title={t("inbox.emptyTitle")}>{t("inbox.emptyText")}</Empty>;
+  if (data.length === 0) return <div data-tour="inbox-empty"><Empty title={t("inbox.emptyTitle")}>{t("inbox.emptyText")}</Empty></div>;
   return (
     <section>
       <h1 className="text-3xl mb-1">{t("inbox.title")}</h1>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeftRight, Check, MessageSquareQuote, X } from "lucide-react";
 import { api } from "../api";
 import type { Brief, Decisions, Entry, Overview, OverviewTerm, SharedLab, SharePackage, Term, TermCorrection, TermDecision } from "../types";
@@ -22,7 +22,10 @@ export default function PackagePage() {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [decisions, setDecisions] = useState<Decisions>({ terms: {}, answers: [] });
   const [version, setVersion] = useState(0);  // bumps when a term decision changes the differential
-  const [pane, setPane] = useState<"package" | "brief">("package"); // below xl the two columns become one switchable page
+  const [search] = useSearchParams();
+  const asked = search.get("pane") === "brief" ? "brief" : "package";  // ?pane=brief opens the brief (the onboarding tour)
+  const [pane, setPane] = useState<"package" | "brief">(asked); // below xl the two columns become one switchable page
+  useEffect(() => { setPane(asked); }, [asked]);
   const fetchBrief = useCallback(() => {
     // ask the inbox first: a brief that does not exist yet would be a 404 in the console
     return api.inbox().then((rows) => (rows.find((r) => r.package_id === id)?.brief_state !== "none" ? api.brief(id, { lang }) : null))
@@ -60,7 +63,7 @@ export default function PackagePage() {
   };
   const open = brief ? brief.items.filter((i) => i.review === "pending" && i.origin === "ai").length : 0;
   const seg = (k: "package" | "brief") => (
-    <button key={k} role="tab" aria-selected={pane === k} className="btn flex-1" data-tour={k === "brief" ? "brief" : undefined} onClick={() => { setPane(k); window.scrollTo({ top: 0 }); }}
+    <button key={k} role="tab" aria-selected={pane === k} className="btn flex-1" onClick={() => { setPane(k); window.scrollTo({ top: 0 }); }}
       style={pane === k ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
       {k === "package" ? t("pkg.panePackage") : t("pkg.paneBrief")}{k === "brief" && open > 0 ? ` (${open})` : ""}
     </button>
@@ -68,7 +71,7 @@ export default function PackagePage() {
   return (
     <div>
       <div className="no-print mb-3"><Link to="/" className="text-accent underline underline-offset-4 text-sm">{t("pkg.inbox")}</Link></div>
-      <div role="tablist" aria-label={t("pkg.paneSwitch")} data-testid="pane-switch"
+      <div role="tablist" aria-label={t("pkg.paneSwitch")} data-testid="pane-switch" data-tour-inset="top"
         className="xl:hidden no-print sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 mb-3 flex gap-2 bg-panel border-b border-line">
         {seg("package")}{seg("brief")}
       </div>
@@ -101,8 +104,8 @@ function Header({ pkg, brief, version = 0 }: { pkg: SharePackage; brief: Brief |
   const term = (x: OverviewTerm, n: number) =>
     `${x.label} (${tn("ov.notes", n)}${x.max_severity !== null && x.max_severity >= 5 ? `, ${t("ov.upTo", { n: x.max_severity })}` : ""})`;
   return (
-    <header className="space-y-3">
-      <div data-tour="pkg-glance">
+    <header className="space-y-3" data-tour="pkg-glance">
+      <div>
         <h1 className="text-3xl">{pkg.patient_alias}{who && <span className="text-xl text-muted font-sans ml-3" data-testid="pkg-who">{who}</span>}</h1>
         <p className="text-muted text-sm">{t("share.range", { a: fmtDate(pkg.period[0]), b: fmtDate(pkg.period[1]) })} · {t("pkg.expiresShort", { date: fmtDate(pkg.expires_at) })}</p>
         <p className="text-sm font-bold mt-1" data-testid="pkg-glance">{t("pkg.glance", { notes: pkg.entries.length, weeks: ov?.weeks ?? "?", terms, labs: abnormal })}</p>

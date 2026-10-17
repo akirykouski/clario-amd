@@ -52,11 +52,13 @@ export default function Today() {
   return (
     <div className="space-y-6">
       {safety && <SafetyBanner notice={safety} onDismiss={() => setSafety(null)} />}
-      <form onSubmit={save} className="space-y-3" data-tour="today-write">
+      <form onSubmit={save} className="space-y-3">
         <label htmlFor="today" className="block font-display text-3xl">{t("today.question")}</label>
-        <textarea id="today" className="input min-h-[140px] text-[17px]" value={text} onChange={(e) => setText(e.target.value)}
-          placeholder={t("today.placeholder")} />
-        <DictationButton onText={addSpoken} />
+        <div className="space-y-3" data-tour="today-write">
+          <textarea id="today" className="input min-h-[140px] text-[17px]" value={text} onChange={(e) => setText(e.target.value)}
+            placeholder={t("today.placeholder")} />
+          <DictationButton onText={addSpoken} />
+        </div>
         <div className="grid grid-cols-2 gap-3 items-end">
           <div>
             <label htmlFor="d" className="label">{t("today.date")}</label>

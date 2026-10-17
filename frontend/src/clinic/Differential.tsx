@@ -43,8 +43,8 @@ export function Differential({ pid, version }: { pid: string; version: number })
   };
 
   return (
-    <section aria-labelledby="ddx-title" className="card space-y-4" style={{ borderLeft: "5px solid var(--accent)" }} data-testid="ddx">
-      <div data-tour="ddx">
+    <section aria-labelledby="ddx-title" className="card space-y-4" style={{ borderLeft: "5px solid var(--accent)" }} data-testid="ddx" data-tour="ddx">
+      <div>
         <h2 id="ddx-title" className="text-2xl flex items-center gap-2"><Sparkles size={22} aria-hidden className="text-accent" />{t("ddx.title")}</h2>
         <p className="text-sm text-muted mt-1">{t("ddx.sub")}</p>
       </div>

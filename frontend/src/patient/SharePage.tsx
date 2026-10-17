@@ -70,6 +70,7 @@ export default function SharePage() {
           <p className="font-mono text-lg tracking-wide break-all">{key.fingerprint}</p>
         </div>
       )}
+      <div className="space-y-5" data-tour="share-period">
       <fieldset>
         <legend className="label">{t("share.period")}</legend>
         <div className="flex gap-2">
@@ -81,6 +82,7 @@ export default function SharePage() {
         <p className="text-sm text-muted mt-1">{t("share.range", { a: fmtDate(daysAgo(weeks * 7), { day: "numeric", month: "long" }), b: fmtDate(today(), { day: "numeric", month: "long" }) })}</p>
       </fieldset>
       <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" className="w-5 h-5 accent-[var(--accent)]" checked={patterns} onChange={(e) => setPatterns(e.target.checked)} />{t("share.includePatterns")}</label>
+      </div>
       <div><label className="label" htmlFor="nt">{t("share.noteLabel")}</label>
         <textarea id="nt" className="input min-h-[90px]" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("share.notePlaceholder")} /></div>
       <fieldset className="card space-y-2" data-testid="share-about">

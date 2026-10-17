@@ -46,10 +46,14 @@ export function CallLogPanel() {
     return <ErrorBox error={verify.error ?? calls.error ?? t("privacy.loadError")} retry={() => { verify.reload(); calls.reload(); }} />;
   return (
     <div className="space-y-4">
-      <ChainStatus v={verify.data} />
-      {calls.data.length === 0
-        ? <Empty title={t("privacy.emptyTitle")}>{t("privacy.emptyText")}</Empty>
-        : <ul className="space-y-3">{calls.data.map((c) => <CallRow key={c.id} c={c} />)}</ul>}
+      {/* the onboarding tour spotlights the chain check with the newest call */}
+      <div className="space-y-4" data-tour="privacy-log">
+        <ChainStatus v={verify.data} />
+        {calls.data.length === 0
+          ? <Empty title={t("privacy.emptyTitle")}>{t("privacy.emptyText")}</Empty>
+          : <ul className="space-y-3"><CallRow c={calls.data[0]} /></ul>}
+      </div>
+      {calls.data.length > 1 && <ul className="space-y-3">{calls.data.slice(1).map((c) => <CallRow key={c.id} c={c} />)}</ul>}
     </div>
   );
 }

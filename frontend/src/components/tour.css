@@ -1,0 +1,108 @@
+/* Onboarding tour: driver.js does steps, scrolling and popover placement; the look is ours.
+   Layers, bottom to top: page, blur (9999, clip-path hole), driver dim overlay (10000, SVG hole),
+   glow ring (10001), popover (driver.js default 1e9). */
+:root {
+  --tour-scrim: rgba(17, 27, 25, 0.30);
+  --tour-blur: 7px;
+  --tour-shadow: 0 24px 64px -16px rgba(16, 24, 22, 0.38), 0 2px 8px rgba(16, 24, 22, 0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tour-scrim: rgba(3, 6, 5, 0.55);
+    --tour-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  }
+}
+
+/* Keep a spotlighted element clear of the sticky header and the phone tab bar when it is scrolled to. */
+[data-tour] { scroll-margin-top: calc(var(--demo-h, 0px) + 88px); scroll-margin-bottom: 104px; }
+
+.driver-overlay path { fill: var(--tour-scrim) !important; opacity: 1 !important; }
+
+.clario-tour-blur {
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--tour-blur)) saturate(0.85);
+  backdrop-filter: blur(var(--tour-blur)) saturate(0.85);
+  animation: clario-tour-fade 240ms ease-out both;
+}
+.clario-tour-ring {
+  position: fixed; z-index: 10001; pointer-events: none; left: 0; top: 0;
+  border-radius: 14px; opacity: 0; transition: opacity 200ms ease;
+  box-shadow:
+    0 0 0 1.5px var(--accent),
+    0 0 0 6px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 0 36px 2px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.clario-tour-ring.is-on { opacity: 1; }
+/* A tall target shows only its start: fade the lower edge so the window reads as "continues below". */
+.clario-tour-ring.is-clamped::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 48px; border-radius: 0 0 14px 14px;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--panel) 94%, transparent));
+}
+@keyframes clario-tour-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Popover card */
+.driver-popover.clario-tour {
+  font-family: "Atkinson Hyperlegible", system-ui, sans-serif;
+  background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 16px;
+  padding: 16px 20px 16px; min-width: 280px; width: 360px; max-width: calc(100vw - 32px);
+  box-shadow: var(--tour-shadow);
+}
+.driver-fade .driver-popover.clario-tour { animation: clario-tour-pop 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes clario-tour-pop { from { opacity: 0; transform: translateY(4px) scale(0.985); } to { opacity: 1; transform: none; } }
+
+.clario-tour .clario-tour-top { display: flex; align-items: center; gap: 10px; min-height: 24px; padding-right: 32px; }
+.clario-tour .clario-tour-dots { display: flex; align-items: center; gap: 5px; }
+.clario-tour .clario-tour-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--line); transition: width 240ms ease, background-color 240ms ease; }
+.clario-tour .clario-tour-dot.is-done { background: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.clario-tour .clario-tour-dot.is-active { width: 18px; background: var(--accent); }
+.clario-tour .clario-tour-count { font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.driver-popover.clario-tour .driver-popover-title {
+  font-family: Newsreader, Georgia, serif; font-weight: 500; letter-spacing: -0.01em;
+  font-size: 22px; line-height: 1.25; margin: 10px 0 0; color: var(--ink);
+}
+.driver-popover.clario-tour .driver-popover-description { font-size: 16px; line-height: 1.5; margin-top: 6px; color: var(--ink); opacity: 0.86; }
+
+.driver-popover.clario-tour .driver-popover-close-btn {
+  top: 10px; right: 10px; width: 32px; height: 32px; border-radius: 8px;
+  display: inline-flex !important; align-items: center; justify-content: center; color: var(--muted);
+}
+.driver-popover.clario-tour .driver-popover-close-btn[style*="none"] { display: none !important; }
+.driver-popover.clario-tour .driver-popover-close-btn:hover { color: var(--ink); background: var(--paper); }
+.driver-popover.clario-tour .driver-popover-close-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; color: var(--ink); }
+
+.driver-popover.clario-tour .driver-popover-footer { margin-top: 16px; }
+.driver-popover.clario-tour .driver-popover-progress-text { display: none !important; }
+.driver-popover.clario-tour .driver-popover-navigation-btns { gap: 8px; }
+.driver-popover.clario-tour .driver-popover-navigation-btns button + button { margin-left: 0; }
+.driver-popover.clario-tour .driver-popover-footer-btn {
+  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line); text-align: center;
+  background: var(--panel); color: var(--ink); font: inherit; font-size: 15px; font-weight: 700; text-shadow: none;
+  transition: border-color 150ms ease, opacity 150ms ease;
+}
+.driver-popover.clario-tour .driver-popover-footer-btn { display: inline-flex !important; }
+.driver-popover.clario-tour .driver-popover-footer-btn[style*="none"] { display: none !important; }
+.driver-popover.clario-tour .driver-popover-footer-btn:hover { border-color: var(--accent); background: var(--panel); }
+.driver-popover.clario-tour .driver-popover-footer-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.driver-popover.clario-tour .driver-popover-next-btn { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); min-width: 88px; }
+.driver-popover.clario-tour .driver-popover-next-btn:hover { background: var(--accent); opacity: 0.92; }
+.driver-popover.clario-tour .driver-popover-footer-btn:disabled { opacity: 0.55; cursor: progress; }
+
+/* Arrow: a rotated square in the card colour with the card's border on its two outer edges. */
+.driver-popover.clario-tour .driver-popover-arrow {
+  border: 0; width: 14px; height: 14px; background: var(--panel); transform: rotate(45deg); border-radius: 2px;
+}
+.driver-popover.clario-tour .driver-popover-arrow-side-left { left: calc(100% - 7px); border-top: 1px solid var(--line); border-right: 1px solid var(--line); }
+.driver-popover.clario-tour .driver-popover-arrow-side-right { right: calc(100% - 7px); border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); }
+.driver-popover.clario-tour .driver-popover-arrow-side-top { top: calc(100% - 7px); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.driver-popover.clario-tour .driver-popover-arrow-side-bottom { bottom: calc(100% - 7px); border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
+.driver-popover.clario-tour .driver-popover-arrow-none,
+.driver-popover.clario-tour .driver-popover-arrow-side-over { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .clario-tour-blur, .driver-fade .driver-popover.clario-tour { animation: none; }
+  .clario-tour-ring, .clario-tour .clario-tour-dot { transition: none; }
+}
+@media print { .clario-tour-blur, .clario-tour-ring { display: none; } }

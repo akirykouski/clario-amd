@@ -24,7 +24,7 @@ export default function TimelinePage() {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl">{t("timeline.title")}</h1>
-      <section aria-labelledby="hs" className="card">
+      <section aria-labelledby="hs" className="card" data-tour="timeline-heat">
         <h2 id="hs" className="text-xl">{t("timeline.byWeek")}</h2>
         {heat.rows.length === 0 ? <p className="text-muted mt-1">{t("timeline.confirmHint")}</p> : (
           <>

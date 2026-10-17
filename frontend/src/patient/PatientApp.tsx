@@ -46,18 +46,18 @@ export default function PatientApp() {
 
   return (
     <div className="min-h-screen pb-24 lg:pb-8">
-      <header className="sticky top-[var(--demo-h,0px)] z-20 bg-paper/95 backdrop-blur border-b border-line">
+      <header data-tour-inset="top" className="sticky top-[var(--demo-h,0px)] z-20 bg-paper/95 backdrop-blur border-b border-line">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4 lg:gap-8">
           <span className="font-display text-xl sm:text-2xl shrink-0">Clario</span>
           <nav className="hidden lg:flex flex-1 min-w-0 gap-6 text-[15px] font-bold whitespace-nowrap" aria-label={t("nav.main")}>
             {([["/", t("nav.today")], ["/timeline", t("nav.timeline")], ["/patterns", t("nav.patterns")], ["/labs", t("nav.labs")], ["/share", t("nav.share")]] as const).map(([to, l]) => (
-              <NavLink key={to} to={to} end={to === "/"} data-tour={to === "/timeline" ? "nav-timeline" : to === "/share" ? "nav-share" : undefined} className={({ isActive }) => (isActive ? "text-accent" : "text-muted")}>{l}</NavLink>
+              <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => (isActive ? "text-accent" : "text-muted")}>{l}</NavLink>
             ))}
           </nav>
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
             <LangSwitch />
             <TourButton steps={PATIENT_TOUR} />
-            <NavLink to="/privacy" data-tour="nav-privacy" className="btn !px-0 w-11" aria-label={t("nav.privacy")} title={t("nav.privacy")}><ShieldCheck size={18} aria-hidden /></NavLink>
+            <NavLink to="/privacy" className="btn !px-0 w-11" aria-label={t("nav.privacy")} title={t("nav.privacy")}><ShieldCheck size={18} aria-hidden /></NavLink>
             <button className="btn !px-0 w-11 sm:!px-4 sm:w-auto" onClick={lock} aria-label={t("nav.lockAria")} title={t("nav.lockAria")}><Lock size={16} aria-hidden /><span className="hidden sm:inline">{t("nav.lock")}</span></button>
           </div>
         </div>
@@ -76,12 +76,12 @@ export default function PatientApp() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <nav aria-label={t("nav.main")} className="lg:hidden fixed bottom-0 inset-x-0 z-20 bg-panel border-t border-line flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <nav aria-label={t("nav.main")} data-tour-inset="bottom" className="lg:hidden fixed bottom-0 inset-x-0 z-20 bg-panel border-t border-line flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         <NavLink to="/" end className={tab}><BookOpen size={20} aria-hidden />{t("nav.today")}</NavLink>
-        <NavLink to="/timeline" className={tab} data-tour="nav-timeline"><CalendarDays size={20} aria-hidden />{t("nav.timeline")}</NavLink>
+        <NavLink to="/timeline" className={tab}><CalendarDays size={20} aria-hidden />{t("nav.timeline")}</NavLink>
         <NavLink to="/patterns" className={tab}><Waypoints size={20} aria-hidden />{t("nav.patterns")}</NavLink>
         <NavLink to="/labs" className={tab}><FlaskConical size={20} aria-hidden />{t("nav.labs")}</NavLink>
-        <NavLink to="/share" className={tab} data-tour="nav-share"><Send size={20} aria-hidden />{t("nav.share")}</NavLink>
+        <NavLink to="/share" className={tab}><Send size={20} aria-hidden />{t("nav.share")}</NavLink>
       </nav>
     </div>
   );
