@@ -16,3 +16,5 @@ eval/.cache/
 .impeccable/build/
 .impeccable/decision-payload.json
 .impeccable/questions/
+docs/media/cover/hf/renders/
+docs/media/cover/hf/.hyperframes/

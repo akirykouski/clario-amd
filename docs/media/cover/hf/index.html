@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@500;600;700&family=Funnel+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #e9f3f6; }
+      #root { position: relative; width: 100%; height: 100%; color: #14323a; font-family: "Funnel Sans", system-ui, sans-serif; }
+      .clip { position: absolute; }
+      #hero { inset: 0; width: 1920px; height: 1080px; object-fit: cover; object-position: 78% 40%; transform-origin: 75% 45%; }
+      #veil { inset: 0; background: linear-gradient(90deg, rgba(233, 243, 246, 0.96) 0%, rgba(233, 243, 246, 0.82) 34%, rgba(233, 243, 246, 0) 58%); }
+      #brand { left: 128px; top: 150px; display: flex; align-items: center; gap: 18px; }
+      #brand h1 { font-family: "Funnel Display", system-ui, sans-serif; font-weight: 600; font-size: 168px; line-height: 0.9; letter-spacing: -0.045em; }
+      #lede { left: 132px; top: 360px; width: 760px; font-size: 40px; line-height: 1.22; letter-spacing: -0.015em; font-weight: 500; }
+      #facts { left: 132px; top: 540px; display: flex; gap: 12px; flex-wrap: wrap; width: 820px; }
+      .pill { display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 20px; border-radius: 999px; font-size: 20px; font-weight: 600;
+        background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.66)); border: 1px solid rgba(255,255,255,0.95);
+        box-shadow: 0 1px 0 0 #fff inset, 0 12px 26px -16px rgba(20, 50, 58, 0.55); }
+      .dot { width: 12px; height: 12px; border-radius: 4px; }
+      #card { left: 128px; top: 652px; width: 700px; height: 373px; border-radius: 26px; overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.95); box-shadow: 0 1px 0 0 #fff inset, 0 40px 80px -36px rgba(20, 50, 58, 0.6), 0 6px 16px -8px rgba(20, 50, 58, 0.25); }
+      #card img { width: 100%; height: 100%; object-fit: cover; object-position: 30% 22%; display: block; }
+      #stat { left: 868px; top: 880px; width: 420px; padding: 22px 26px; border-radius: 24px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.66)); border: 1px solid rgba(255,255,255,0.95);
+        box-shadow: 0 1px 0 0 #fff inset, 0 24px 48px -26px rgba(20, 50, 58, 0.55); }
+      #stat .num { font-family: "Funnel Display", system-ui, sans-serif; font-size: 52px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+      #stat .num small { font-size: 26px; color: #45616a; font-weight: 500; margin-left: 6px; }
+      #stat p { margin-top: 8px; font-size: 17px; line-height: 1.35; color: #2c4a52; }
+      #foot { left: 132px; top: 1040px; font-size: 16px; color: #3b5660; letter-spacing: 0.01em; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1920" data-height="1080">
+      <img id="hero" class="clip" data-start="0" data-duration="6" data-track-index="0" src="assets/organizer.jpg" alt="" />
+      <div id="veil" class="clip" data-start="0" data-duration="6" data-track-index="1"></div>
+      <div id="brand" class="clip" data-start="0" data-duration="6" data-track-index="2"><h1>Clario</h1></div>
+      <p id="lede" class="clip" data-start="0" data-duration="6" data-track-index="3">A private symptom diary that turns everyday words into clinical terms, each with the patient's own quote as its source.</p>
+      <div id="facts" class="clip" data-start="0" data-duration="6" data-track-index="4">
+        <span class="pill"><span class="dot" style="background:#3fb8c9"></span>Reviewed by a clinician</span>
+        <span class="pill"><span class="dot" style="background:#8a7cf0"></span>Private by design</span>
+        <span class="pill"><span class="dot" style="background:#ff8a6b"></span>English and Italian</span>
+      </div>
+      <div id="card" class="clip" data-start="0" data-duration="6" data-track-index="5"><img src="assets/app-today.png" alt="Clario Today screen: the week organizer and a note with its understood terms" /></div>
+      <div id="stat" class="clip" data-start="0" data-duration="6" data-track-index="6">
+        <div class="num">0.69 <small>vs 0.47 F1</small></div>
+        <p>Our fine-tuned Gemma 4 E4B against Gemma 4 31B on held-out synthetic notes</p>
+      </div>
+      <p id="foot" class="clip" data-start="0" data-duration="6" data-track-index="7">Demo with synthetic patients only. Clario organises information and never diagnoses.</p>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const ease = "expo.out";
+      tl.fromTo("#hero", { scale: 1.08, opacity: 0.6 }, { scale: 1, opacity: 1, duration: 5.6, ease: "power2.out" }, 0);
+      tl.fromTo("#brand", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 1.0, ease }, 0.3);
+      tl.fromTo("#lede", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 1.0, ease }, 0.6);
+      tl.fromTo("#facts .pill", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.8, ease, stagger: 0.12 }, 1.0);
+      tl.fromTo("#card", { opacity: 0, y: 90, rotate: -1.5 }, { opacity: 1, y: 0, rotate: 0, duration: 1.2, ease }, 1.4);
+      tl.fromTo("#stat", { opacity: 0, y: 40, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 1.0, ease }, 2.0);
+      tl.fromTo("#foot", { opacity: 0 }, { opacity: 1, duration: 0.8, ease }, 2.4);
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
