@@ -81,6 +81,8 @@ Caveat on that number: the corpus was written by the redactor's author, so it me
 
 **Our data.** `train/synth.py` writes diary entries whose labels come from the ontology by construction: HPO terms and the `phenotype.hpoa` annotations, with layperson phrasings (`train/lay_terms.json`), English and Italian, family history, onset and severity cues, life-event distractors and hard negatives. Code validates every row and reports reject reasons. Generation is set up to run on Gemma 4 31B on the MI300X (`bootstrap.sh --synth N`); the full set has not been generated that way yet. The generator refuses Anthropic endpoints, and Claude output never becomes a training target. `train/prep.py` splits by source disease so no disease appears in more than one of train, validation and test.
 
+**Published dataset.** The v3 set generated this way is public on Hugging Face: [m0rtyddd/clario-synth-v3](https://huggingface.co/datasets/m0rtyddd/clario-synth-v3). It has 2,992 rows (train 2,392, validation 300, test 300) and the English lay lexicon. Gemma 4 31B IT wrote it through the AMD Token Factory API on 16 and 17 October 2026. The dataset card covers how it was built and its licences.
+
 **Eval sets.**
 
 | Set | What it is | Source |
