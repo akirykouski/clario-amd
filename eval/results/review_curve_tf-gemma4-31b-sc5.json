@@ -1,0 +1,102 @@
+{
+  "label": "tf-gemma4-31b-sc5",
+  "dataset": "clario-synth-v3/test",
+  "model": "Gemma-4-31B-IT",
+  "backend": "amd-token-factory",
+  "hardware": {
+    "gpu_name": "AMD Token Factory (hosted API; GPU not disclosed, not our own GPU)",
+    "gpu_count": null,
+    "vram_total_gb": null,
+    "source": "env",
+    "provider": "AMD Token Factory"
+  },
+  "date": "2026-10-17",
+  "source_result": "extraction_tf-gemma4-31b-sc5.json",
+  "n": 150,
+  "n_entities_with_confidence": 626,
+  "n_items_scored": 124,
+  "unrouted_misses": 577,
+  "confidence_source": "self-consistency: agreement rate across n sampled answers (the signal the app routes on)",
+  "confidence_kind": "self_consistency",
+  "sc_n": 5,
+  "correctness": "HPO id as the model wrote it, plus negation and family flags (exact match with gold)",
+  "correctness_kind": "raw",
+  "ece": 0.8702875399361022,
+  "metric": "share of entities routed to review (not coverage, not accuracy)",
+  "tolerances": {
+    "1pct": {
+      "entity": {
+        "threshold": null,
+        "coverage": 0.0,
+        "review_share": 1.0,
+        "error_at_threshold": null
+      },
+      "item": {
+        "threshold": null,
+        "coverage": 0.0,
+        "review_share": 1.0,
+        "error_at_threshold": null
+      }
+    },
+    "2pct": {
+      "entity": {
+        "threshold": null,
+        "coverage": 0.0,
+        "review_share": 1.0,
+        "error_at_threshold": null
+      },
+      "item": {
+        "threshold": null,
+        "coverage": 0.0,
+        "review_share": 1.0,
+        "error_at_threshold": null
+      }
+    },
+    "5pct": {
+      "entity": {
+        "threshold": null,
+        "coverage": 0.0,
+        "review_share": 1.0,
+        "error_at_threshold": null
+      },
+      "item": {
+        "threshold": null,
+        "coverage": 0.0,
+        "review_share": 1.0,
+        "error_at_threshold": null
+      }
+    }
+  },
+  "entity_curve": [
+    {
+      "threshold": 1.0,
+      "coverage": 0.8130990415335463,
+      "error": 0.931237721021611
+    },
+    {
+      "threshold": 0.8,
+      "coverage": 0.9041533546325878,
+      "error": 0.9381625441696113
+    },
+    {
+      "threshold": 0.6,
+      "coverage": 0.9488817891373802,
+      "error": 0.9410774410774411
+    },
+    {
+      "threshold": 0.4,
+      "coverage": 0.9728434504792333,
+      "error": 0.9425287356321839
+    },
+    {
+      "threshold": 0.2,
+      "coverage": 0.9920127795527156,
+      "error": 0.9436392914653784
+    },
+    {
+      "threshold": 0.0,
+      "coverage": 1.0,
+      "error": 0.9440894568690096
+    }
+  ]
+}
