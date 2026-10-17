@@ -27,6 +27,7 @@ E4B_MODEL = "clario-e4b"  # served-model-name in serve_model.py
 
 image = (
     modal.Image.from_registry("node:20-slim", add_python="3.12")
+    .apt_install("ca-certificates")  # node:20-slim has no CA bundle: HTTPS to the clinic failed certificate checks
     .add_local_dir(ROOT / "frontend", "/web", copy=True, ignore=["node_modules", "dist", "coverage"])
     .run_commands("cd /web && npm ci --no-audit --no-fund && npm run build")
     .pip_install_from_pyproject(str(ROOT / "backend" / "pyproject.toml"))
