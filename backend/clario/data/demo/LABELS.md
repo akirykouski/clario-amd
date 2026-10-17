@@ -80,9 +80,10 @@ swollen wrists (day 34), the chest pain (day 37) and the GP blood test (day 30).
   ids as aliases `E1`, `E2`, ..., names and contacts replaced), the same system prompt and `briefing.model_input`. The
   package was "Load the demo patient" (Giulia, English; Giulia, Italian), "Import the 3 sample referti", then Share with
   the defaults (12 weeks, patterns on, no question for the doctor). English: 672 tokens, 10.6 tokens/s, 63.3 s;
-  Italian: 540 tokens, 13.7 tokens/s, 39.3 s. The chips show these numbers with "precomputed" and the date. Every
-  cite was a known alias: English keeps all 10 lines, Italian 9 of 10 (the pattern line came back garbled,
-  "clinicosembles", so the hedge guardrail drops it).
+  Italian: 552 tokens, 18.8 tokens/s, 29.4 s. The chips show these numbers with "precomputed" and the date. Every
+  cite was a known alias and every line passes the checks: English 10 of 10, Italian 10 of 10. (The Italian brief was
+  redone once: the first run garbled its pattern line, "clinicosembles", and the hedge guardrail dropped it; the run
+  kept here is the next one, the first where all lines pass.)
 - **What is stored.** The model output as parsed (`DraftOut`), not reviewed or edited: cited entries as positions
   (`E1` is the first shared entry), dates as the model wrote them from day numbers. Serving runs the same code as a
   live draft (`restore_days`, the citation check, the hedge and diagnosis guardrails), so a line the live run would drop

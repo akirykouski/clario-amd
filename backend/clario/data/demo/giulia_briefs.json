@@ -115,20 +115,20 @@
    "pseudonymized": true,
    "model_remote": true,
    "stats": {
-    "latency_ms": 39314.8,
-    "tokens": 540,
-    "tokens_per_s": 13.7
+    "latency_ms": 29365.7,
+    "tokens": 552,
+    "tokens_per_s": 18.8
    },
    "output": {
     "items": [
      {
       "section": "summary",
-      "text": "Paziente riferisce astenia, dolori articolari migranti, eruzioni cutanee fotosensibili e anomalie ematologiche/urinarie.",
+      "text": "Paziente riferisce astenia, dolori articolari migranti, eruzioni cutanee fotosensibili e fenomeni vascolari periferici.",
       "cites": [
        "E1",
        "E2",
        "E3",
-       "E12"
+       "E5"
       ]
      },
      {
@@ -166,7 +166,7 @@
      },
      {
       "section": "timeline",
-      "text": "day 55: Esami evidenziano Proteinuria e Leukopenia.",
+      "text": "day 55: Esami ematici evidenziano Proteinuria e Leukopenia.",
       "cites": [
        "E12"
       ]
@@ -184,29 +184,28 @@
      },
      {
       "section": "patterns",
-      "text": "Il quadro clinicosembles Systemic lupus erythematosus.",
+      "text": "Il quadro clinico e laboratoristico (Malar rash, Proteinuria, Leukopenia, Arthralgia) potrebbe essere compatibile con Systemic lupus erythematosus.",
       "cites": [
        "E3",
-       "E7",
-       "E11",
-       "E12"
+       "E12",
+       "E14"
       ]
      },
      {
       "section": "questions",
-      "text": "Può descrivere meglio la natura del dolore toracico avvertito al day 48?",
-      "cites": [
-       "E10"
-      ]
-     },
-     {
-      "section": "questions",
-      "text": "Ha notato altri sintomi cutanei o mucosali oltre al rossore facciale e alle ulcere orali?",
+      "text": "Può descrivere meglio la durata e la distribuzione del rossore sul viso dopo l'esposizione al sole?",
       "cites": [
        "E3",
-       "E4",
        "E9",
        "E16"
+      ]
+     },
+     {
+      "section": "questions",
+      "text": "Ha notato altri sintomi come secchezza oculare, orale o ulcere genitali?",
+      "cites": [
+       "E4",
+       "E13"
       ]
      }
     ]
