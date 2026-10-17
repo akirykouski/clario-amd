@@ -16,9 +16,11 @@ WEIGHTS = "/runs/out/merged-e4b"
 WARM = int(os.environ.get("WARM", "0"))
 
 image = (
-    modal.Image.debian_slim(python_version="3.12")
+    # devel image: vLLM's FlashInfer kernels are compiled at startup and need nvcc
+    modal.Image.from_registry("nvidia/cuda:13.0.0-devel-ubuntu22.04", add_python="3.12")
+    .entrypoint([])
     .pip_install("vllm", "hf_transfer")
-    .env({"HF_HOME": "/hf", "VLLM_LOGGING_LEVEL": "INFO", "WARM": str(WARM)})
+    .env({"HF_HOME": "/hf", "VLLM_LOGGING_LEVEL": "INFO", "WARM": str(WARM), "CUDA_HOME": "/usr/local/cuda"})
 )
 runs = modal.Volume.from_name("clario-runs")
 hf = modal.Volume.from_name("clario-hf", create_if_missing=True)
