@@ -246,7 +246,12 @@ def test_settings_default(tmp_path):
 
     assert privacy.should_pseudonymize(Settings.from_env(mode="patient", llm_base_url="https://amd.example/v1", **base))
     assert not privacy.should_pseudonymize(Settings.from_env(mode="patient", llm_base_url="http://localhost:11434/v1", **base))
-    assert not privacy.should_pseudonymize(Settings.from_env(mode="clinic", llm_base_url="https://amd.example/v1", **base))
+    # the clinic's brief prompt quotes the diary: a remote model gets it pseudonymised too
+    assert privacy.should_pseudonymize(Settings.from_env(mode="clinic", llm_base_url="https://amd.example/v1", **base))
+    assert not privacy.should_pseudonymize(Settings.from_env(mode="clinic", llm_base_url="http://127.0.0.1:8000/v1", **base))
+    assert not privacy.should_pseudonymize(Settings.from_env(mode="clinic", llm_base_url="https://amd.example/v1",
+                                                             **{**base, "offline": True}))
+    assert not privacy.should_pseudonymize(Settings.from_env(mode="clinic", pseudonymize=False, llm_base_url="https://x/v1", **base))
     assert privacy.should_pseudonymize(Settings.from_env(mode="patient", pseudonymize=True, llm_base_url="http://localhost:1/v1", **base))
     assert not privacy.should_pseudonymize(Settings.from_env(mode="patient", pseudonymize=False, llm_base_url="https://x/v1", **base))
 

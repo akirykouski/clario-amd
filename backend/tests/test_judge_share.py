@@ -149,10 +149,10 @@ def test_demo_brief_wrong_line_is_flagged_and_stays_out_of_the_patient_copy(unlo
         assert len(bad) == 1 and "fatigue first noted" in bad[0]["text"] and bad[0]["review"] == "pending"
         good = [i for i in items if i["origin"] == "ai" and not i["flag"]]
         assert any("fatigue noted" in i["text"] for i in good)  # the correct dated line passes the check
-        for i in items:
-            if i["origin"] == "ai":
-                r = "rejected" if i["flag"] else "accepted"
-                assert clinic.patch(f"/api/brief-items/{pid}/{i['id']}", json={"review": r}).status_code == 200
-        assert clinic.post(f"/api/inbox/{pid}/brief/finalize").json()["finalized"] is True
+        text = clinic.get(f"/api/inbox/{pid}/brief/text").json()["text"]
+        text = "\n".join(l for l in text.splitlines() if bad[0]["text"] not in l)  # the clinician deletes the flagged line
+        fin = clinic.post(f"/api/inbox/{pid}/brief/sign", json={"text": text, "clinician": "Dr Test"}).json()
+        assert fin["finalized"] is True
+        assert next(i for i in fin["items"] if i["id"] == bad[0]["id"])["review"] == "rejected"
         md = clinic.get(f"/api/inbox/{pid}/brief.md").text
         assert "fatigue first noted" not in md

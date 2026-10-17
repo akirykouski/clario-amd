@@ -12,7 +12,8 @@ from clario.demo import GIULIA, GIULIA_IT, persona_entries
 from clario.i18n import hpo_it, lay_it
 from clario.knowledge import Ontology
 from clario.safety import hedge_problems
-from conftest import confirm_all, settings, sse, wait_extracted
+from clario.brief_pdf import page_count
+from conftest import confirm_all, settings, sign_brief, sse, wait_extracted
 from test_integration import import_demo_pdfs
 
 
@@ -157,9 +158,12 @@ def test_brief_for_two_audiences_and_two_languages(unlocked, clinic_server, tmp_
         # patient copy only after the clinician finalized
         assert clinic.get(f"/api/inbox/{pid}/brief", params={"audience": "patient"}).status_code == 409
         assert clinic.get(f"/api/inbox/{pid}/brief", params={"audience": "nobody"}).status_code == 422
-        for i in ai:
-            assert clinic.patch(f"/api/brief-items/{pid}/{i['id']}", json={"review": "accepted"}).status_code == 200
-        assert clinic.post(f"/api/inbox/{pid}/brief/finalize").json()["finalized"] is True
+        t = clinic.get(f"/api/inbox/{pid}/brief/text").json()
+        assert t["lang"] == "it" and "## Riepilogo" in t["text"] and "## Cronologia" in t["text"]
+        assert any(w["kind"] == "citation" and "Nomina" in w["message"] for w in t["warnings"])  # Italian warnings
+        pdf = clinic.get(f"/api/inbox/{pid}/brief.pdf")
+        assert pdf.content[:5] == b"%PDF-" and page_count(pdf.content) == 1
+        assert sign_brief(clinic, pid, "Dott.ssa Maria Bianchi").json()["finalized"] is True
         p = clinic.get(f"/api/inbox/{pid}/brief", params={"audience": "patient", "lang": "it"}).json()
         ptext = " ".join(i["text"] for i in p["items"])
         assert p["audience"] == "patient" and p["lang"] == "it" and p["items"]

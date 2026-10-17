@@ -31,58 +31,72 @@ function renderPanel(items: BriefItem[], setBrief = vi.fn()) {
   return setBrief;
 }
 
-describe("brief citation check", () => {
-  const flagged = ai("f", { flag: "citation_mismatch", flag_term: "fatigue", flag_entries: ["e1"], text: "20 Sep: fatigue first noted." });
+describe("brief: generate, PDF, edit and sign", () => {
+  const draft = "## Summary\n- line a [20 Sept]\n\n## Timeline\n- 20 Sep: fatigue first noted. [20 Sept]\n";
+  const citation = { kind: "citation" as const, section: "timeline", line: "20 Sep: fatigue first noted. [20 Sept]", message: 'Names "fatigue", which none of the cited entries records.' };
 
-  it("says why a line is flagged and asks for a confirm before accepting it", () => {
-    const review = vi.spyOn(api, "reviewItem").mockResolvedValue({ ...flagged, review: "accepted" });
-    renderPanel([flagged]);
-    const why = screen.getByTestId("flag-reason");
-    expect(why).toHaveTextContent('"fatigue", but the entry it cites (entry 1, 20 Sept) does not record it');
-    expect(why).toHaveTextContent('"fatigue" is recorded on 22 Aug');
-    fireEvent.click(screen.getByRole("button", { name: /^Accept$/ }));
-    expect(review).not.toHaveBeenCalled();  // first click only opens the confirm step
-    expect(screen.getByTestId("flag-confirm")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Accept as it is" }));
-    expect(review).toHaveBeenCalledWith("pkg_1", "f", { review: "accepted" });
+  it("opens the draft as a PDF marked as an unreviewed AI draft", () => {
+    renderPanel([ai("a")]);
+    const frame = screen.getByTitle("Brief PDF");
+    expect(frame.getAttribute("src")).toMatch(/^\/api\/inbox\/pkg_1\/brief\.pdf\?v=\d+$/);
+    expect(screen.getByTestId("draft-badge")).toHaveTextContent("AI draft, not reviewed");
+    expect(screen.getByRole("link", { name: "Open PDF" })).toHaveAttribute("href", frame.getAttribute("src"));
+    expect(screen.queryByRole("button", { name: /^Accept$/ })).toBeNull();  // no per-line review any more
   });
 
-  it("accepts an unflagged line in one click and collapses it to a status with Undo", () => {
-    const plain = ai("p");
-    const review = vi.spyOn(api, "reviewItem").mockResolvedValue({ ...plain, review: "pending" });
-    renderPanel([{ ...plain, review: "accepted" }]);
-    const row = screen.getByTestId("item-decided");
-    expect(row).toHaveTextContent("accepted");
-    fireEvent.click(within(row).getByRole("button", { name: "Undo" }));
-    expect(review).toHaveBeenCalledWith("pkg_1", "p", { review: "pending" });
-  });
-});
-
-describe("finalize gate", () => {
-  it("stays off while a reading that needs a check has no decision, and says how many", () => {
-    renderPanel([ai("p", { review: "accepted" })]);
-    expect(screen.getByRole("button", { name: "Finalize brief" })).toBeDisabled();
+  it("Edit and sign shows the text with the code checks as warnings; unchecked labs block signing", async () => {
+    const text = vi.spyOn(api, "briefText").mockResolvedValue({ text: draft, warnings: [citation, { kind: "labs_pending", message: "3 lab readings" }], lang: "en", signed: false });
+    renderPanel([ai("a")]);
+    fireEvent.click(screen.getByRole("button", { name: "Edit and sign" }));
+    const box = await screen.findByLabelText("Brief text") as HTMLTextAreaElement;
+    expect(text).toHaveBeenCalledWith("pkg_1", undefined);
+    expect(box.value).toBe(draft);
+    expect(screen.getByTestId("brief-warning")).toHaveTextContent('Names "fatigue"');
+    fireEvent.change(screen.getByLabelText(/Your name/), { target: { value: "Dr Rossi" } });
+    expect(screen.getByRole("button", { name: "Sign" })).toBeDisabled();
     expect(screen.getByTestId("labs-pending")).toHaveTextContent("3");
   });
-});
 
-describe("brief item origin chips", () => {
-  it("names documents, answers to app questions and the patient's note", () => {
-    renderPanel([
-      { id: "d", section: "labs", text: "Sodium: 5 mg/dL", cites: [], origin: "document", review: "accepted", pages: [2] },
-      { id: "q", section: "symptoms", text: "Fatigue: you answered yes", cites: ["e1"], origin: "patient", review: "accepted", from_question: true },
-      { id: "n", section: "summary", text: "Is it linked?", cites: [], origin: "patient", review: "accepted", kind: "patient_note" },
-    ]);
-    expect(screen.getByText("From documents")).toBeInTheDocument();
-    expect(screen.getByText("report p.2")).toBeInTheDocument();
-    expect(screen.getByText("Asked by the app")).toBeInTheDocument();
-    expect(screen.getByText("Patient's question for this visit")).toBeInTheDocument();
+  it("checks the text again as the clinician types, and signs with name and time", async () => {
+    const clean = { ...pkg, labs: [] };
+    vi.spyOn(api, "gpu").mockResolvedValue(null);
+    vi.spyOn(api, "briefText").mockResolvedValue({ text: draft, warnings: [citation], lang: "en", signed: false });
+    const check = vi.spyOn(api, "checkBrief").mockResolvedValue({ warnings: [] });
+    const signed: Brief = { ...briefOf([ai("a", { review: "accepted" })]), finalized: true, signed_by: "Dr Rossi", finalized_at: "2026-10-17T10:00:00Z", text: "x" };
+    const sign = vi.spyOn(api, "signBrief").mockResolvedValue(signed);
+    const setBrief = vi.fn();
+    render(<MemoryRouter><BriefPanel pkg={clean} brief={briefOf([ai("a")])} setBrief={setBrief} /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Edit and sign" }));
+    const box = await screen.findByLabelText("Brief text");
+    const edited = draft.replace("- 20 Sep: fatigue first noted. [20 Sept]\n", "");
+    fireEvent.change(box, { target: { value: edited } });
+    await vi.waitFor(() => expect(check).toHaveBeenCalledWith("pkg_1", edited, undefined), { timeout: 2000 });
+    await vi.waitFor(() => expect(screen.getByText("No warnings from the code checks.")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Sign" })).toBeDisabled();  // no name yet
+    fireEvent.change(screen.getByLabelText(/Your name/), { target: { value: "  Dr Rossi " } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign" }));
+    await vi.waitFor(() => expect(sign).toHaveBeenCalled());
+    const [pid, body] = sign.mock.calls[0];
+    expect(pid).toBe("pkg_1");
+    expect(body).toMatchObject({ text: edited, clinician: "Dr Rossi", specialty: undefined });
+    expect(body.seconds).toBeGreaterThanOrEqual(0);
+    await vi.waitFor(() => expect(setBrief).toHaveBeenCalledWith(signed));
+  });
+
+  it("a signed brief shows who signed it and the signed PDF, in English and Italian", () => {
+    vi.spyOn(api, "gpu").mockResolvedValue(null);
+    const signed: Brief = { ...briefOf([ai("a", { review: "accepted" }), ai("b", { review: "rejected" })]), finalized: true,
+      signed_by: "Dr Rossi", finalized_at: "2026-10-17T10:00:00Z", review_seconds: 75, pseudonymized: true };
+    render(<MemoryRouter><BriefPanel pkg={pkg} brief={signed} setBrief={vi.fn()} /></MemoryRouter>);
+    expect(screen.getByTestId("signed-by")).toHaveTextContent("Reviewed and signed by Dr Rossi, 17 Oct 2026");
+    expect(screen.getByRole("link", { name: "Open signed PDF" })).toHaveAttribute("href", expect.stringMatching(/brief\.pdf\?v=/));
+    expect(screen.getByTestId("decision-line")).toHaveTextContent("accepted 1 · edited 0 · rejected 1 · 1 min 15 s to sign");
+    expect(screen.getByTestId("sent-pseudonymised")).toHaveTextContent("pseudonymised");
+    expect(screen.queryByRole("button", { name: "Edit and sign" })).toBeNull();
     act(() => setLang("it"));
-    expect(screen.getByText("Dai referti")).toBeInTheDocument();
-    expect(screen.getByText("referto p.2")).toBeInTheDocument();
-    expect(screen.getByText("Chiesto dall'app")).toBeInTheDocument();
+    expect(screen.getByTestId("signed-by")).toHaveTextContent("Rivisto e firmato da Dr Rossi");
+    expect(screen.getByRole("link", { name: "Apri il PDF firmato" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Riepilogo per la visita" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Vai alla nota citata 1" })).toBeInTheDocument();
   });
 });
 

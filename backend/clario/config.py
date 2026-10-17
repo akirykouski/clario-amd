@@ -83,7 +83,7 @@ class Settings:
     clinic_name: str = "Clario clinic"
     frontend_dist: Path | None = None
     auto_lock_minutes: int = 15
-    pseudonymize: bool | None = None  # None = auto: on in patient mode when the model is remote
+    pseudonymize: bool | None = None  # None = auto: on whenever the model is remote (patient and clinic mode)
     llm_vision_model: str | None = None  # chat model that reads page images (fallback, or the only path without OCR)
     llm_ocr_model: str | None = None  # LLM_OCR_MODEL: page -> markdown via POST /ocr, then the text model structures it
     doc_structure: str = "table"  # CLARIO_DOC_STRUCTURE: table = read a recognised OCR table in code; model = text model

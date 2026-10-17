@@ -116,7 +116,7 @@ export type BriefReview = "pending" | "accepted" | "rejected" | "edited";
 
 export interface BriefItem {
   id: string; section: BriefSection; text: string; cites: string[];
-  origin: "patient" | "ai" | "document"; review: BriefReview; flag?: "citation_mismatch" | null;
+  origin: "patient" | "ai" | "document" | "clinician"; review: BriefReview; flag?: "citation_mismatch" | null;
   flag_term?: string | null; flag_entries?: string[]; kind?: "patient_note" | null; pages?: number[]; from_question?: boolean;
   /** Clinician copy: specialties the line belongs to, set in code by the server; empty = general practice only */
   specialties?: Specialty[];
@@ -131,8 +131,18 @@ export interface Brief {
   package_id: string; items: BriefItem[]; model: string | null; backend: string | null;
   lang?: "en" | "it"; audience?: "clinician" | "patient";
   review_seconds?: number | null; finalized_at?: string | null;
+  /** Signing: the name the clinician typed, the signed text, the specialty it was prepared for */
+  signed_by?: string | null; text?: string | null; specialty?: Specialty | null;
+  /** Model input was pseudonymised before the call; the model ran off the clinic server */
+  pseudonymized?: boolean | null; model_remote?: boolean | null;
   finalized: boolean; stats: { latency_ms?: number; tokens_per_s?: number; tokens?: number } & Record<string, unknown>;
 }
+
+export interface BriefWarning {
+  kind: "citation" | "hedge" | "diagnosis" | "unknown_section" | "unknown_date" | "labs_pending";
+  section?: string | null; line?: string | null; message: string;
+}
+export interface BriefText { text: string; warnings: BriefWarning[]; lang: "en" | "it"; signed: boolean }
 
 export interface Health {
   ok: boolean; mode: "patient" | "clinic";

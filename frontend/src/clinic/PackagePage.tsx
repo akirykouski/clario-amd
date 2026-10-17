@@ -71,11 +71,11 @@ export default function PackagePage() {
       if (!brief?.finalized) fetchBrief();
     } catch { /* keep state */ }
   };
-  const open = brief ? brief.items.filter((i) => i.review === "pending" && i.origin === "ai").length : 0;
+  const unsigned = !!brief && !brief.finalized;  // an AI draft nobody has signed yet
   const seg = (k: "package" | "brief") => (
     <button key={k} role="tab" aria-selected={pane === k} className="btn flex-1" onClick={() => { setPane(k); window.scrollTo({ top: 0 }); }}
       style={pane === k ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
-      {k === "package" ? t("pkg.panePackage") : t("pkg.paneBrief")}{k === "brief" && open > 0 ? ` (${open})` : ""}
+      {k === "package" ? t("pkg.panePackage") : t("pkg.paneBrief")}{k === "brief" && unsigned ? ` (${t("pkg.paneDraft")})` : ""}
     </button>
   );
   return (

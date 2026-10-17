@@ -18,6 +18,7 @@ dependencies = [
   "pypdfium2>=4.30",
   "pillow>=10.4",
   "numpy>=1.26",
+  "fpdf2>=2.8",  # the clinician brief PDF (clario/brief_pdf.py)
 ]
 
 [project.optional-dependencies]

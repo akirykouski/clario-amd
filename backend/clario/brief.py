@@ -1,9 +1,11 @@
-"""Clinic side: draft a one-page clinician brief from a shared package.
+"""Clinic side: draft a one-page clinician brief from a shared package, then the clinician edits and signs it.
 
 Facts the patient recorded become `origin=patient` items straight from data (no model).
 The model drafts `origin=ai` items (summary, timeline, questions to ask, pattern notes).
 Code checks every AI item: citations must point at entries in the package, pattern and
-summary text must pass the hedge validator. Every AI item starts `pending` and needs a clinician.
+summary text must pass the hedge validator. The draft opens as a PDF marked "AI draft, not reviewed".
+The clinician edits it as plain text (`brief_text`, one "## Section" per section), sees the same code checks as
+warnings (`text_warnings`), and signs (`sign_items`): the signed text is the brief.
 """
 
 from __future__ import annotations
@@ -12,12 +14,13 @@ import json
 import re
 import uuid
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
+from difflib import SequenceMatcher
 
 from pydantic import BaseModel, Field
 
 from .i18n import hpo_it
-from .models import Brief, BriefItem, SharePackage
+from .models import Brief, BriefItem, BriefWarning, SharePackage
 from .past import when_text
 from .safety import hedge_problems
 from .share import lab_needs_check
@@ -47,14 +50,27 @@ _LOW = {"en": LOW_CONFIDENCE, "it": "lettura incerta, da verificare"}
 SECTIONS = {"summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"}
 
 
-def model_input(pkg: SharePackage, lang: str = "en") -> str:
-    entries = [{"id": e.id, "date": e.occurred_on, "text": e.text} for e in pkg.entries]
+def _day(pkg: SharePackage, iso: str) -> str:
+    """"day 12" for an ISO date: days from the first day of the shared period (day 1)."""
+    try:
+        return f"day {(date.fromisoformat(iso) - date.fromisoformat(pkg.period[0])).days + 1}"
+    except ValueError:
+        return iso
+
+
+def model_input(pkg: SharePackage, lang: str = "en", relative_dates: bool = False) -> str:
+    """The user message for the brief model. `relative_dates` (on whenever the input is pseudonymised): calendar
+    dates become day numbers in the period ("day 12"), so no date leaves the server; `restore_days` maps them back."""
+    when = (lambda d: _day(pkg, d)) if relative_dates else (lambda d: d)
+    entries = [{"id": e.id, "date": when(e.occurred_on), "text": e.text} for e in pkg.entries]
     terms = Counter((x.canonical, x.hpo_id) for x in pkg.entities if not x.negated and not x.family_history and not x.past)
     past = [{"term": x.canonical, "when": when_text(x.past, lang, around=True), "entry": x.entry_id}
             for x in pkg.entities if x.past and not x.negated and not x.family_history]
     pats = [{"name": p.disease_name, "signal": p.signal, "overlap": [m.label for m in p.matched]} for p in pkg.patterns]
-    return json.dumps({"language": "Italian" if lang == "it" else "English", "period": pkg.period,
-                       "patient_note": pkg.note, "entries": entries,
+    head = {"language": "Italian" if lang == "it" else "English", "period": [when(d) for d in pkg.period]}
+    if relative_dates:
+        head["dates"] = 'Dates are day numbers in the period ("day 1" is its first day). Write dates the same way, e.g. "day 12".'
+    return json.dumps({**head, "patient_note": pkg.note, "entries": entries,
                        "confirmed_terms": [{"term": t, "hpo": h, "times": n} for (t, h), n in terms.most_common()],
                        # past history the patient mentioned: it happened long before the note, not in the period
                        "past_history": past, "pattern_overlaps": pats,
@@ -335,9 +351,9 @@ def render_brief(pkg: SharePackage, brief: Brief, audience: str, lang: str, onto
 
     The patient copy keeps only AI items a clinician accepted or edited, drafted in the same language, that name no
     condition. Patient-origin items are rebuilt from the package in the requested wording."""
-    if audience == "clinician" and lang == brief.lang:
-        return with_labs(brief, pkg, lang).model_copy(update={"audience": "clinician"})
-    ai = [i for i in brief.items if i.origin == "ai"]
+    if audience == "clinician" and lang == brief.lang:  # a signed brief is what the clinician signed: never rebuilt
+        return (brief if brief.finalized else with_labs(brief, pkg, lang)).model_copy(update={"audience": "clinician"})
+    ai = [i for i in brief.items if i.origin in ("ai", "clinician")]
     if audience == "clinician":
         items = patient_items(pkg, lang) + ai
     else:
@@ -384,11 +400,26 @@ def localize_dates(text: str, lang: str, year: bool = False) -> str:
         else re.sub(r"\b\d{4}-\d{2}-\d{2}\b", lambda m: fdate(m.group(0), lang, year), text)
 
 
+_DAY = re.compile(r"\b(?:day|giorno)\s+(\d{1,4})\b", re.I)
+
+
+def restore_days(text: str, pkg: SharePackage) -> str:
+    """"day 12" / "giorno 12" in model text (written from relative-date input) -> the ISO date of that day in the period."""
+    start = date.fromisoformat(pkg.period[0])
+    span = (date.fromisoformat(pkg.period[1]) - start).days + 1
+
+    def iso(m: re.Match) -> str:
+        n = int(m.group(1))
+        return (start + timedelta(days=n - 1)).isoformat() if 1 <= n <= span else m.group(0)
+
+    return _DAY.sub(iso, text)
+
+
 def check_ai_items(pkg: SharePackage, draft: DraftOut, lang: str = "en") -> list[BriefItem]:
     valid = {e.id for e in pkg.entries}
     out = []
     for d in draft.items:
-        text = localize_dates(d.text.strip(), lang, pkg.period[0][:4] != pkg.period[1][:4])
+        text = localize_dates(restore_days(d.text.strip(), pkg), lang, pkg.period[0][:4] != pkg.period[1][:4])
         sec = d.section if d.section in SECTIONS else "summary"
         cites = [c for c in d.cites if c in valid]
         if not text or len(text) > 500:
@@ -440,3 +471,240 @@ def to_markdown(pkg: SharePackage, brief: Brief, audience: str = "clinician", la
         lines.append("")
     lines.append(FOOTER[(audience, lang)])
     return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------- edit and sign: the brief as plain text
+NOTE_LEAD = {"en": "Patient's question for this visit: ", "it": "Domanda del paziente per questa visita: "}
+
+
+def _year(pkg: SharePackage) -> bool:
+    return pkg.period[0][:4] != pkg.period[1][:4]
+
+
+def item_line(pkg: SharePackage, it: BriefItem, lang: str) -> str:
+    """One brief line as the editor and the PDF show it. AI and clinician lines carry their cited entries as dates in
+    brackets ("[22 Aug, 3 Sep]"); a line from the patient's data already says when."""
+    lead = NOTE_LEAD[lang] if it.kind == "patient_note" else ""
+    cite = ""
+    if it.origin in ("ai", "clinician") and it.cites:
+        dates = {e.id: e.occurred_on for e in pkg.entries}
+        ds = list(dict.fromkeys(fdate(dates[c], lang, _year(pkg)) for c in it.cites if c in dates))
+        cite = f" [{', '.join(ds)}]" if ds else ""
+    return f"{lead}{it.text}{cite}"
+
+
+def shown_items(pkg: SharePackage, brief: Brief, focus: str | None) -> list[BriefItem]:
+    """What goes into the draft text and PDF: AI lines not rejected, patient lines, and only lab lines whose every reading
+    is checked (#19), filtered and ordered for the specialty (#21)."""
+    from .specialty import focus_items
+
+    keep = [i for i in brief.items if i.review != "rejected" and not (i.origin == "document" and i.review == "pending")]
+    return focus_items(keep, focus)
+
+
+def brief_text(pkg: SharePackage, items: list[BriefItem], lang: str) -> str:
+    """The editable text: "## Section" headings in the order the items come, one "- line" per item."""
+    titles = TITLES[("clinician", lang)]
+    out: list[str] = []
+    sec = None
+    for it in items:
+        if it.section != sec:
+            if out:
+                out.append("")
+            out.append(f"## {titles[it.section]}")
+            sec = it.section
+        out.append(f"- {item_line(pkg, it, lang)}")
+    return "\n".join(out) + "\n"
+
+
+def _section_of(heading: str) -> str | None:
+    h = heading.strip().strip("#").strip().rstrip(":").lower()
+    for (aud, _lang), titles in TITLES.items():
+        if aud != "clinician":
+            continue
+        for key, title in titles.items():
+            if h in (title.lower(), key):
+                return key
+    return None
+
+
+def parse_text(text: str) -> tuple[list[tuple[str, str]], list[BriefWarning]]:
+    """(section, line) pairs from the edited text, in order. A heading is a line starting with '#' or a section title on
+    its own; lines before any heading belong to the summary. An unknown heading is a warning, its lines stay where they are."""
+    out: list[tuple[str, str]] = []
+    warns: list[BriefWarning] = []
+    sec = "summary"
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        known = _section_of(line)
+        if line.startswith("#") or (known and not line.startswith(("-", "*", "•"))):
+            if known:
+                sec = known
+            else:
+                warns.append(BriefWarning(kind="unknown_section", section=sec, line=line,
+                                          message=f"Unknown section heading; its lines stay under {sec}"))
+            continue
+        line = re.sub(r"^[-*•]\s*", "", line).strip()
+        if line:
+            out.append((sec, line))
+    return out, warns
+
+
+_CITE = re.compile(r"\s*\[([^\[\]]+)\]\s*$")
+
+
+def split_cites(pkg: SharePackage, line: str, lang: str) -> tuple[str, list[str], list[str]]:
+    """(text without the trailing date brackets, entry ids on those dates, bracket parts that are no diary date)."""
+    m = _CITE.search(line)
+    if not m:
+        return line, [], []
+    by_date: dict[str, list[str]] = {}
+    for e in pkg.entries:
+        for lg in ("en", "it"):
+            for y in (False, True):
+                by_date.setdefault(fdate(e.occurred_on, lg, y or _year(pkg)).lower(), []).append(e.id)
+                by_date.setdefault(e.occurred_on, []).append(e.id)
+    ids: list[str] = []
+    bad: list[str] = []
+    for part in re.split(r"[,;]", m.group(1)):
+        p = part.strip()
+        if not p:
+            continue
+        hit = by_date.get(p.lower())
+        if hit:
+            ids += [i for i in dict.fromkeys(hit) if i not in ids]
+        else:
+            bad.append(p)
+    if bad and not ids:  # brackets that hold no diary date at all are the clinician's own words
+        return line, [], []
+    return line[:m.start()].rstrip(), ids, bad
+
+
+def _warn_texts(lang: str) -> dict[str, str]:
+    if lang == "it":
+        return {"hedge": "Le righe sugli schemi usano parole prudenti (\"somiglia\", \"potrebbe valere la pena\").",
+                "diagnosis": "Suona come una diagnosi o una dose.",
+                "citation": "Nomina \"{term}\", che nessuna delle note citate registra.",
+                "citation_where": " È registrato il {dates}.",
+                "unknown_date": "Tra parentesi c'è una data che non è una nota del diario: {dates}.",
+                "unknown_section": "Titolo di sezione sconosciuto: le sue righe restano nella sezione precedente.",
+                "labs_pending": "{n} letture di laboratorio da verificare prima di firmare. Le righe degli esami verificati "
+                                "entrano nel testo con \"Ripristina la bozza\"."}
+    return {"hedge": "Pattern lines use hedged words (\"resembles\", \"may be worth considering\").",
+            "diagnosis": "Sounds like a diagnosis or a dose.",
+            "citation": "Names \"{term}\", which none of the cited entries records.",
+            "citation_where": " It is recorded on {dates}.",
+            "unknown_date": "A date in brackets is not a diary entry: {dates}.",
+            "unknown_section": "Unknown section heading: its lines stay in the section before it.",
+            "labs_pending": "{n} lab reading(s) need your check before signing. Lines for checked labs come into the text "
+                            "with \"Reset to draft\"."}
+
+
+def text_warnings(pkg: SharePackage, brief: Brief, text: str, lang: str, pending_labs: int = 0) -> list[BriefWarning]:
+    """The code checks that still apply to the edited text, as warnings: the citation check on lines that cite entries,
+    the hedge validator on pattern lines, diagnostic or dosing words on any line the model or the clinician wrote.
+    Lines straight from the patient's data or a checked lab report are not checked again."""
+    msgs = _warn_texts(lang)
+    from_data = {item_line(pkg, i, lang) for i in brief.items if i.origin in ("patient", "document")}
+    lines, warns = parse_text(text)
+    for w in warns:
+        w.message = msgs["unknown_section"]
+    dates = {e.id: e.occurred_on for e in pkg.entries}
+    for sec, line in lines:
+        if line in from_data:
+            continue
+        body, cites, bad = split_cites(pkg, line, lang)
+        if bad:
+            warns.append(BriefWarning(kind="unknown_date", section=sec, line=line, message=msgs["unknown_date"].format(dates=", ".join(bad))))
+        problems = hedge_problems(body)
+        if sec == "patterns" and "no hedging language" in problems:
+            warns.append(BriefWarning(kind="hedge", section=sec, line=line, message=msgs["hedge"]))
+        if any(p != "no hedging language" for p in problems):
+            warns.append(BriefWarning(kind="diagnosis", section=sec, line=line, message=msgs["diagnosis"]))
+        bad_cite = citation_problem(pkg, body, cites) if cites else None
+        if bad_cite:
+            where = sorted({dates[c] for c in bad_cite[1] if c in dates})[:3]
+            msg = msgs["citation"].format(term=bad_cite[0])
+            if where:
+                msg += msgs["citation_where"].format(dates=", ".join(fdate(d, lang, _year(pkg)) for d in where))
+            warns.append(BriefWarning(kind="citation", section=sec, line=line, message=elide_it(msg) if lang == "it" else msg))
+    if pending_labs:
+        warns.append(BriefWarning(kind="labs_pending", message=msgs["labs_pending"].format(n=pending_labs)))
+    return warns
+
+
+def sign_items(pkg: SharePackage, shown: list[BriefItem], text: str, lang: str) -> list[BriefItem]:
+    """The brief's items after the clinician signed `text`, in the order of the text. A line equal to a shown line keeps
+    that item (an AI line is then `accepted`); a changed AI line is `edited` (the closest unmatched AI line of the same
+    section); any other line is the clinician's own (`origin=clinician`). Shown AI lines that are gone are `rejected`
+    (kept for the pilot counts, never printed); patient and lab lines that are gone are dropped."""
+    by_line: dict[str, list[BriefItem]] = {}
+    for i in shown:
+        by_line.setdefault(item_line(pkg, i, lang), []).append(i)
+    used: set[str] = set()
+    out: list[BriefItem] = []
+    pending: list[tuple[str, str]] = []
+    lines, _ = parse_text(text)
+    for sec, line in lines:
+        hit = next((i for i in by_line.get(line, []) if i.id not in used), None)
+        if hit:
+            used.add(hit.id)
+            upd: dict = {"section": sec}
+            if hit.origin == "ai":
+                upd["review"] = "accepted"
+            out.append(hit.model_copy(update=upd))
+        else:
+            out.append(BriefItem(id="", section=sec, text=line))  # placeholder, resolved below
+            pending.append((sec, line))
+    free_ai = [i for i in shown if i.origin == "ai" and i.id not in used]
+    k = 0
+    for n, it in enumerate(out):
+        if it.id:
+            continue
+        sec, line = pending[k]
+        k += 1
+        body, cites, _bad = split_cites(pkg, line, lang)
+        best, score = None, 0.0
+        for a in free_ai:
+            r = SequenceMatcher(None, a.text.lower(), body.lower()).ratio() + (0.05 if a.section == sec else 0)
+            if r > score:
+                best, score = a, r
+        if best is not None and score >= 0.6:
+            free_ai.remove(best)
+            used.add(best.id)
+            out[n] = best.model_copy(update={"section": sec, "text": body, "cites": cites or best.cites, "review": "edited",
+                                             "flag": None, "flag_term": None, "flag_entries": []})
+        else:
+            lead = NOTE_LEAD[lang]
+            note = body.startswith(lead)
+            out[n] = BriefItem(id=_id(), section=sec, text=body[len(lead):] if note else body, cites=cites, origin="clinician",
+                               review="accepted", kind="patient_note" if note else None)
+    rejected = [i.model_copy(update={"review": "rejected"}) for i in shown if i.origin == "ai" and i.id not in used]
+    return out + rejected
+
+
+def to_pdf(pkg: SharePackage, brief: Brief, text: str, lang: str, focus: str | None = None) -> bytes:
+    """The brief text as a one-page PDF: the AI draft (watermarked) until the brief is signed, then the signed copy."""
+    from . import brief_pdf
+    from .specialty import LABELS, norm_focus
+
+    titles = TITLES[("clinician", lang)]
+    sections: list[tuple[str, list[str]]] = []
+    for sec, line in parse_text(text)[0]:
+        if not sections or sections[-1][0] != titles[sec]:
+            sections.append((titles[sec], []))
+        sections[-1][1].append(line)
+    w = brief_pdf.WORDS[lang]
+    sub = w["period"].format(a=fdate(pkg.period[0], lang, True), b=fdate(pkg.period[1], lang, True))
+    sub = elide_it(sub) if lang == "it" else sub
+    focus = norm_focus(focus)
+    if focus:
+        sub += " · " + w["focus"].format(sp=LABELS[lang][focus])
+    signed = None
+    if brief.finalized:
+        signed = w["signed"].format(name=brief.signed_by or "?", date=fdate((brief.finalized_at or "")[:10], lang, True))
+    return brief_pdf.render(brief_pdf.PdfBrief(
+        lang=lang, title=w["title"].format(alias=pkg.patient_alias), subtitle=sub, sections=sections, signed=signed,
+        provenance=brief_pdf.provenance(brief.backend, brief.model, brief.pseudonymized, brief.model_remote, lang)))
