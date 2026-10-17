@@ -169,6 +169,24 @@ describe("clinic package page", () => {
     await waitFor(() => expect(getDdx).toHaveBeenCalledTimes(2));
   });
 
+  it("shows the clinician why an unsure term has no code (the patient never sees this)", async () => {
+    const flagged = { id: "x9", entry_id: "e1", type: "symptom" as const, quote: "Ginocchia", canonical: "Knee redness", hpo_id: null,
+      hpo_label: null, negated: false, severity: null, family_history: false, onset_hint: null, confidence: 0.6,
+      review: "needs_review" as const, flags: ["hpo_dropped"], model: null };
+    const unsure = { ...pkg, labs: pkg.labs.map((l) => ({ ...l, needs_review: false })),
+      entries: pkg.entries.map((e) => ({ ...e, entities: [flagged] })),
+      entities: [...pkg.entities, ent("Knee redness", null, { id: "x9", quote: "Ginocchia", needs_review: true, confidence: 0.6, reviewed: false })] };
+    vi.spyOn(api, "package").mockResolvedValue(unsure);
+    vi.spyOn(api, "inbox").mockResolvedValue([]);
+    vi.spyOn(api, "decisions").mockResolvedValue({ terms: {}, answers: [] });
+    vi.spyOn(api, "termSystems").mockResolvedValue({});
+    vi.spyOn(api, "ddx").mockResolvedValue(ddx);
+    vi.spyOn(api, "overview").mockResolvedValue(overview);
+    render(<MemoryRouter initialEntries={["/p/pkg_1"]}><Routes><Route path="/p/:id" element={<PackagePage />} /></Routes></MemoryRouter>);
+    const box = await screen.findByTestId("needs-check");
+    expect(within(box).getByTestId("check-why")).toHaveTextContent("Term removed: the proposed HPO term did not match the patient's words");
+  });
+
   it("replaces an unsure term with one the clinician picks, refreshes the package and overview, and can undo", async () => {
     const unsure = { ...pkg, labs: pkg.labs.map((l) => ({ ...l, needs_review: false })),
       entities: [...pkg.entities, ent("Sun exposure", null, { id: "x7", quote: "after a sunny afternoon", type: "trigger", needs_review: true, confidence: 0.6, reviewed: false })] };

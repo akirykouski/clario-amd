@@ -48,7 +48,7 @@ class Entity(BaseModel):
     review: Review = Field("auto", description="auto: counted, nobody looked at it; needs_review: counted, confidence below "
                                                "threshold, flagged for the clinician; confirmed, corrected, rejected: decided "
                                                "by a person (rejected never counts)")
-    flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, quote_not_found")
+    flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, no_hpo, onset_dropped, quote_not_found")
     model: str | None = None
 
 

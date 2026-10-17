@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeftRight, Check, MessageSquareQuote, X } from "lucide-react";
 import { api } from "../api";
 import type { Brief, Decisions, Entry, Overview, OverviewTerm, SharedLab, SharePackage, Term, TermCorrection, TermDecision } from "../types";
-import { buildHeat, fmtDate, fmtNum, splitQuotes, weeklyMood } from "../lib";
+import { buildHeat, clinicFlagNote, fmtDate, fmtNum, splitQuotes, weeklyMood } from "../lib";
 import { ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { HeatStrip, type HeatPick } from "../components/HeatStrip";
@@ -149,6 +149,7 @@ function NeedsCheck({ pkg, decisions, onDecide, onReplace, onDecideLab, onDecide
   // a replaced term arrives already checked (it carries the clinician's term): keep it listed so it can be undone
   const items = pkg.entities.filter((e) => e.id && (e.needs_review || decisions.terms[e.id] === "corrected"));
   const fixes = decisions.corrections ?? {};
+  const flagsById = new Map(pkg.entries.flatMap((en) => en.entities.map((x) => [x.id, x.flags] as const)));
   const labs = pkg.labs.filter((l) => l.needs_review && l.id);
   if (!items.length && !labs.length) return null;
   const labDec: Record<string, TermDecision | undefined> = { ...Object.fromEntries(labs.map((l) => [l.id as string, l.decision ?? undefined])), ...decisions.labs };
@@ -174,12 +175,13 @@ function NeedsCheck({ pkg, decisions, onDecide, onReplace, onDecideLab, onDecide
       <ul className="divide-y divide-line">
         {items.map((e) => {
           const fix: TermCorrection | undefined = decisions.terms[e.id as string] === "corrected" ? fixes[e.id as string] : undefined;
+          const why = fix ? null : clinicFlagNote(flagsById.get(e.id as string) ?? []);
           return (
             <CheckRow key={e.id} decision={decisions.terms[e.id as string]} onDecide={(d) => onDecide(e.id as string, d)}
               title={`${e.negated ? "No " : ""}${fix ? termLabel(fix.to, fix.label) : termLabel(e.hpo_id, e.canonical)}`} confidence={fix ? null : e.confidence}
               replacedFrom={fix ? termLabel(fix.from, fix.from_label) : undefined}
               replace={e.family_history ? undefined : { pid: pkg.package_id, entId: e.id as string, current: e.hpo_id, onPick: (h) => onReplace(e.id as string, h) }}
-              sub={<>{t("check.wrote")}: <span className="clinic-quote">{e.quote}</span> · {fmtDate(e.occurred_on)}</>} />
+              sub={<>{t("check.wrote")}: <span className="clinic-quote">{e.quote}</span> · {fmtDate(e.occurred_on)}{why && <> · <span data-testid="check-why">{why}</span></>}</>} />
           );
         })}
         {labs.map((l) => (

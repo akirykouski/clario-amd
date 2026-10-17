@@ -8,6 +8,7 @@ fine-tuned model sees in the app exactly what it saw in training. The model prop
     the words) stays as the final gate
   * negations ("no fever", "non ho febbre") and relatives ("my mother has lupus", "mia madre ha il lupus")
     are also detected in code from the quote's left context, so a model miss cannot leak them into patterns
+  * onset_hint keeps only phrases that say when it started; a time of day or a trigger is dropped (clario/onset.py)
   * confidence is the share of n sampled answers that contain the same (term, negated) pair
     (self-consistency), or the model's own field when CLARIO_TRUST_MODEL_CONFIDENCE=1
 """
@@ -26,6 +27,7 @@ from .config import ExtractOpts  # noqa: F401 - defined in config, importable fr
 from .knowledge import Ontology, fold
 from .llm import LLM, LLMError, Stats, extract_json, merge_stats
 from .models import Entity
+from .onset import normalise_onset
 from .prompt import build_messages
 from .review import route_review
 
@@ -175,6 +177,9 @@ def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | N
         family = bool(r.family_history) or is_family_history(text, span)
         if bool(r.family_history) != family:
             flags.append("family_history_from_text")
+        onset = normalise_onset(r.onset_hint)
+        if r.onset_hint and onset is None:
+            flags.append("onset_dropped")  # a time of day or a trigger, not when it started (clario/onset.py)
         sev = r.severity
         sev = int(round(sev)) if isinstance(sev, (int, float)) and 0 <= sev <= 10 else None
         conf = r.confidence if opts.trust_model_confidence and r.confidence is not None else (
@@ -185,7 +190,7 @@ def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | N
         seen.add(key)
         out.append(Entity(id=f"ent_{uuid.uuid4().hex[:10]}", entry_id=entry_id, type=etype, quote=quote,
                           canonical=r.canonical.strip()[:120], hpo_id=hpo_id, hpo_label=hpo_label,
-                          negated=negated, family_history=family, onset_hint=r.onset_hint, severity=sev,
+                          negated=negated, family_history=family, onset_hint=onset, severity=sev,
                           confidence=conf, review=route_review(conf, opts.review_threshold),
                           flags=flags, model=model))
     return out
