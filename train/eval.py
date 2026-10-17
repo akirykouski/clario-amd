@@ -379,8 +379,17 @@ def run_records(gold, complete, concurrency=4, sc_n=0, batch_size=1):
                 recs.append({**g, "pred": parse(text), "strict": strict_valid(text), "dt": dt, "toks": toks,
                              "raw": text, "err": None})
         return recs, time.time() - t0
+    done = [0]
+
+    def tracked(g):
+        r = one(g)
+        done[0] += 1
+        if done[0] % 10 == 0 or done[0] == len(gold):
+            print(f"  {done[0]}/{len(gold)} rows, {time.time() - t0:.0f}s, errors so far "
+                  f"{sum(1 for x in [r] if x['err'])}", file=sys.stderr, flush=True)
+        return r
     with ThreadPoolExecutor(concurrency) as ex:
-        recs = list(ex.map(one, gold))
+        recs = list(ex.map(tracked, gold))
     return recs, time.time() - t0
 
 

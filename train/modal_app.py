@@ -117,6 +117,26 @@ def finish(tag: str, model: str, test_limit: int = 0, smoke: bool = False):
     return win
 
 
+@app.function(gpu="L40S", **OPTS)
+def score(model: str, label: str, adapter: str = "", limit: int = 0):
+    """One extra eval on test with the same scorer (e.g. a subset shared with API models)."""
+    _layout(False)
+    ad = f"--adapter {adapter}" if adapter else ""
+    lim = f"--limit {limit}" if limit else ""
+    _sh(f"python eval.py --hf-model {model} {ad} --label {label} {lim}")
+    runs.commit()
+
+
+@app.local_entrypoint()
+def score_subset(limit: int = 100, model: str = "google/gemma-4-E4B-it",
+                 adapter: str = "/work/train/out/e4b-r16-lr2e-4/best_adapter"):
+    """Base and fine-tuned E4B on the first `limit` test rows, in parallel."""
+    calls = [score.spawn(model, f"base-e4b-test{limit}", "", limit), score.spawn(model, f"ft-e4b-test{limit}", adapter, limit)]
+    for c in calls:
+        c.get()
+    print(f"results: modal volume get clario-runs results/extraction_base-e4b-test{limit}.json results/extraction_ft-e4b-test{limit}.json")
+
+
 @app.local_entrypoint()
 def main(tag: str = "e4b", model: str = "google/gemma-4-E4B-it", configs: str = "16:1e-4,16:2e-4,32:1e-4,32:2e-4",
          gpu: str = "L40S", epochs: float = 3, bsz: int = 8, ga: int = 2, val_limit: int = 100, smoke: bool = False,

@@ -1,0 +1,1323 @@
+{
+  "label": "tf-deepseek-v4-flash-test100",
+  "dataset": "v3-test",
+  "model": "DeepSeek-V4-Flash",
+  "backend": "amd-token-factory",
+  "date": "2026-10-17",
+  "n": 100,
+  "entity_precision": 0.38672768878718533,
+  "entity_recall": 0.4152334152334152,
+  "entity_f1": 0.4004739336492891,
+  "fuzzy_precision": 0.39816933638443935,
+  "fuzzy_recall": 0.4275184275184275,
+  "fuzzy_f1": 0.41232227488151657,
+  "hpo_id_accuracy": 0.24173027989821882,
+  "n_gold_with_hpo_id": 393,
+  "negated_recall": 0.7586206896551724,
+  "n_negated_gold": 29,
+  "family_history_recall": 0.045454545454545456,
+  "n_family_history_gold": 22,
+  "negation_accuracy": 0.9965034965034965,
+  "family_history_accuracy": 0.9965034965034965,
+  "onset_accuracy": 0.782608695652174,
+  "severity_accuracy": 0.423728813559322,
+  "json_validity_rate": 1.0,
+  "schema_valid_rate": 0.71,
+  "quote_grounding_rate": 0.9954233409610984,
+  "n_predicted_entities": 437,
+  "ece": 0.45915032679738566,
+  "brier": 0.4286111111111111,
+  "n_confidence_entities": 153,
+  "confidence_coverage": 0.3501144164759725,
+  "tp": 169,
+  "fp": 268,
+  "fn": 238,
+  "n_gold_entities": 407,
+  "n_matched_pairs": 286,
+  "gold_complete": true,
+  "per_item": [
+    {
+      "id": "b17c51d1f253",
+      "n_gold": 5,
+      "n_pred": 3,
+      "entities": []
+    },
+    {
+      "id": "220427d273ae",
+      "n_gold": 5,
+      "n_pred": 7,
+      "entities": []
+    },
+    {
+      "id": "ea01a236f067",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": []
+    },
+    {
+      "id": "c91198359563",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "e1ab37eb049c",
+      "n_gold": 6,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.6,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "38c50eb08e3f",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "2bd7ae4590d5",
+      "n_gold": 3,
+      "n_pred": 3,
+      "entities": []
+    },
+    {
+      "id": "76175bf14c83",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "90e329ad74d1",
+      "n_gold": 6,
+      "n_pred": 6,
+      "entities": []
+    },
+    {
+      "id": "57093c61db15",
+      "n_gold": 4,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "58276817ca14",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.95,
+          "correct": 0
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "46df39a74951",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "df9a1c92972d",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "45c3cf470a02",
+      "n_gold": 7,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.7,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "18915133fd76",
+      "n_gold": 7,
+      "n_pred": 8,
+      "entities": []
+    },
+    {
+      "id": "fd4866b2c953",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "a918f23328a9",
+      "n_gold": 6,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "41cf079c4421",
+      "n_gold": 6,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "d42e4ab86169",
+      "n_gold": 6,
+      "n_pred": 8,
+      "entities": []
+    },
+    {
+      "id": "1103d3659ed1",
+      "n_gold": 3,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "a748c52aa2ff",
+      "n_gold": 3,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "98353100424b",
+      "n_gold": 7,
+      "n_pred": 7,
+      "entities": []
+    },
+    {
+      "id": "4fe1d50fb695",
+      "n_gold": 5,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "ec43dadf9e64",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "1b051c094806",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "2e5a5dd0a09a",
+      "n_gold": 7,
+      "n_pred": 8,
+      "entities": []
+    },
+    {
+      "id": "f4bcdcfe4cd7",
+      "n_gold": 3,
+      "n_pred": 3,
+      "entities": []
+    },
+    {
+      "id": "8180e40ccb3a",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "880206bbeafb",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "346e20ec2168",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "a2800a19794a",
+      "n_gold": 3,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "0d1800069488",
+      "n_gold": 4,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "5b81470912ca",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "a0bcf38861c8",
+      "n_gold": 6,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.6,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "1d7984604855",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "5172b98503db",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": []
+    },
+    {
+      "id": "dda0f72d2e5e",
+      "n_gold": 6,
+      "n_pred": 7,
+      "entities": []
+    },
+    {
+      "id": "ca78098039a2",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "fd8ee4a13436",
+      "n_gold": 5,
+      "n_pred": 6,
+      "entities": []
+    },
+    {
+      "id": "80882592d704",
+      "n_gold": 3,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.95,
+          "correct": 0
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.6,
+          "correct": 0
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "5270840b7c9e",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.7,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "380a02a1105e",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "84d256b6e1fc",
+      "n_gold": 4,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.6,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "259ac4c9b1a8",
+      "n_gold": 7,
+      "n_pred": 7,
+      "entities": []
+    },
+    {
+      "id": "c50f2c583224",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.85,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "bd048fb984b4",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "8cb24f33eeee",
+      "n_gold": 3,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "ebaba6c11137",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "37bdbab0802b",
+      "n_gold": 6,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "e353abc5d823",
+      "n_gold": 4,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "bcf560587fce",
+      "n_gold": 5,
+      "n_pred": 8,
+      "entities": [
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.6,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "cfa1fd4b33b6",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "f458d76d5146",
+      "n_gold": 6,
+      "n_pred": 7,
+      "entities": []
+    },
+    {
+      "id": "acf4ee277293",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "33d401ae382a",
+      "n_gold": 5,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "25fe2d5d7de9",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "c231f5eef110",
+      "n_gold": 3,
+      "n_pred": 3,
+      "entities": []
+    },
+    {
+      "id": "5e2fcbc54006",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "984eade72e12",
+      "n_gold": 4,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "9b127d02c3eb",
+      "n_gold": 5,
+      "n_pred": 6,
+      "entities": []
+    },
+    {
+      "id": "972bf559541b",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "676511f342cf",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "c33090722cd5",
+      "n_gold": 5,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.85,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "9063825a8040",
+      "n_gold": 5,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "22ca84a38883",
+      "n_gold": 3,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "1a7c87ae00f0",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "2b56e22bdad2",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "b176dd7c3e16",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.85,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "ecab9279b9e3",
+      "n_gold": 3,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "517e0141504c",
+      "n_gold": 6,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.6,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "0228022e58ec",
+      "n_gold": 7,
+      "n_pred": 8,
+      "entities": []
+    },
+    {
+      "id": "3a8b82adb843",
+      "n_gold": 4,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "3047489cb42c",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "a6cbefa6dde6",
+      "n_gold": 8,
+      "n_pred": 8,
+      "entities": []
+    },
+    {
+      "id": "84d14936a7a2",
+      "n_gold": 7,
+      "n_pred": 8,
+      "entities": []
+    },
+    {
+      "id": "41777d723268",
+      "n_gold": 3,
+      "n_pred": 6,
+      "entities": []
+    },
+    {
+      "id": "475af06dac45",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.85,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "01b1efa1e78d",
+      "n_gold": 6,
+      "n_pred": 8,
+      "entities": [
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "dddefaada50a",
+      "n_gold": 7,
+      "n_pred": 6,
+      "entities": []
+    },
+    {
+      "id": "1c19c81b6460",
+      "n_gold": 4,
+      "n_pred": 6,
+      "entities": []
+    },
+    {
+      "id": "adb2af19506d",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": []
+    },
+    {
+      "id": "cad6c27976eb",
+      "n_gold": 5,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 1.0,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "40ac57b9dc9a",
+      "n_gold": 3,
+      "n_pred": 2,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "64518dbf7b99",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "8f5aa36182f2",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "b6b8b0ec736e",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "827af385b794",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "4d2cbc729e32",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": []
+    },
+    {
+      "id": "9888179ddb83",
+      "n_gold": 5,
+      "n_pred": 6,
+      "entities": []
+    },
+    {
+      "id": "1c76d63179d3",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.95,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "9a2a54e4e9b1",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": []
+    },
+    {
+      "id": "1ba1338aeaa0",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "494439d7a2de",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "741f8580c4e4",
+      "n_gold": 6,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "38e479fd9ac5",
+      "n_gold": 3,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "29d6b894586a",
+      "n_gold": 4,
+      "n_pred": 5,
+      "entities": []
+    },
+    {
+      "id": "c47f329ca4d3",
+      "n_gold": 7,
+      "n_pred": 6,
+      "entities": []
+    },
+    {
+      "id": "004133cda426",
+      "n_gold": 9,
+      "n_pred": 8,
+      "entities": []
+    },
+    {
+      "id": "0e3822439a07",
+      "n_gold": 6,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.85,
+          "correct": 1
+        },
+        {
+          "confidence": 0.95,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.85,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "34cb27a5d428",
+      "n_gold": 6,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.95,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.85,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.6,
+          "correct": 0
+        }
+      ]
+    }
+  ],
+  "resolved_entity_precision": 0.4782608695652174,
+  "resolved_entity_recall": 0.5135135135135135,
+  "resolved_entity_f1": 0.495260663507109,
+  "resolved_hpo_id_accuracy": 0.2926208651399491,
+  "resolved_tp": 209,
+  "resolved_fp": 228,
+  "resolved_fn": 198,
+  "resolver": "clario.extract.resolve_hpo (ontology check, no model pick)",
+  "latency_p50_s": 18.379804849624634,
+  "latency_p95_s": 93.970627784729,
+  "tokens_per_s": 32.824705985892834,
+  "wall_s": 851.401380777359,
+  "errors": 0,
+  "concurrency": 3,
+  "dry_run": false,
+  "confidence_prompt": false,
+  "base_url": "https://developer.amd.com.cn/radeon/api/v1",
+  "sc_n": 0,
+  "confidence_source": null,
+  "samples": [
+    {
+      "diary": "Mar 12 Mar. Mi sono svegliata con un forte mal di testa che non mi passa. Sento ancora i dolori alle articolazioni dallo scorso fine settimana e ho questa strana rigidit\u00e0 alle mani da circa due settimane che mi rende difficile fare colazione. Il dottore dice che \u00e8 per l'usura delle cartilagini. Spero che passi perch\u00e9 non riesco a fare nulla con queste articolazioni malate.",
+      "raw": "{\"entities\":[{\"quote\":\"mal di testa\",\"canonical\":\"Headache\",\"hpo_id\":\"HP:0002315\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":null,\"severity\":null,\"confidence\":null},{\"quote\":\"dolori alle articolazioni\",\"canonical\":\"Arthralgia\",\"hpo_id\":\"HP:0002829\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":\"dallo scorso fine settimana\",\"severity\":null,\"confidence\":null},{\"quote\":\"rigidit\u00e0 alle mani\",\"canonical\":\"Hand stiffness\",\"hpo_id\":\"HP:0032154\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":\"da circa due settimane\",\"severity\":null,",
+      "err": null
+    },
+    {
+      "diary": "Tue 10 Oct: My head hurts so bad today and I can't focus on these emails. The car is at the garage again, such a pain. Wed 11 Oct: Woke up and my fingers are just stiff, it's hard to move my joints. No breathing difficulty though. Thu 12 Oct: Still dealing with this joint disease for three days now. Doc says there's some wearing down of the cartilage 4/10. Just want to get through the week.",
+      "raw": "{\n  \"entities\": [\n    {\n      \"quote\": \"head hurts\",\n      \"canonical\": \"Headache\",\n      \"hpo_id\": \"HP:0002315\",\n      \"type\": \"symptom\",\n      \"negated\": false,\n      \"family_history\": false,\n      \"onset_hint\": null,\n      \"severity\": null,\n      \"confidence\": null\n    },\n    {\n      \"quote\": \"can't focus\",\n      \"canonical\": \"Concentration impairment\",\n      \"hpo_id\": \"HP:0100543\",\n      \"type\": \"symptom\",\n      \"negated\": false,\n      \"family_history\": false,\n      \"onset_hint\": null,\n      \"severity\": null,\n      \"confidence\": null\n    },\n    {\n      \"quote\": \"fingers are just stiff\",\n  ",
+      "err": null
+    },
+    {
+      "diary": "Lun 4 Mar: Mi sono svegliata e ho notato ancora pi\u00f9 capelli sul cuscino, dir\u00f2 7/10 come intensit\u00e0 della perdita. Le articolazioni per\u00f2 stanno bene, niente infiammazioni. Mar 5 Mar: Ho provato a pettinarmi ma i capelli si spezzano facilmente da marted\u00ec. Che stress, oggi ho pure litigato col capo. Mer 6 Mar: Mi guardo allo specchio e vedo proprio delle zone senza capelli sulla testa, \u00e8 terribile.",
+      "raw": "{\"entities\":[{\"quote\":\"pi\u00f9 capelli sul cuscino\",\"canonical\":\"Hair loss\",\"hpo_id\":\"HP:0001596\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":null,\"severity\":7,\"confidence\":null},{\"quote\":\"i capelli si spezzano facilmente\",\"canonical\":\"Brittle hair\",\"hpo_id\":\"HP:0002299\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":\"da marted\u00ec\",\"severity\":null,\"confidence\":null},{\"quote\":\"zone senza capelli sulla testa\",\"canonical\":\"Alopecia\",\"hpo_id\":\"HP:0001596\",\"type\":\"symptom\",\"negated\":false,\"family_history\":false,\"onset_hint\":null,\"severity\":null,\"confidence\":",
+      "err": null
+    }
+  ],
+  "hardware": {
+    "gpu_name": "AMD Token Factory (hosted, hardware not reported by the API)",
+    "gpu_count": null,
+    "vram_total_gb": null,
+    "source": "api developer.amd.com.cn/radeon/api/v1"
+  }
+}
