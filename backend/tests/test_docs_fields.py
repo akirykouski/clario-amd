@@ -23,7 +23,6 @@ def test_placeholders_use_the_exact_field_names_the_scripts_write():
     train_src, eval_src = src("train", "train_rocm.py"), src("train", "eval.py")
     curve_src = src("eval", "review_curve.py")
     seen = placeholders()
-    assert seen
     for ph in sorted(seen):
         parts = ph.split(".")
         kind, field = parts[0], parts[-1]
@@ -38,6 +37,11 @@ def test_placeholders_use_the_exact_field_names_the_scripts_write():
         elif kind == "review_curve":
             assert parts[1] == "tolerances" and re.fullmatch(r"(1|2|5)pct", parts[2]) and field == "review_share", ph
             assert '"review_share"' in curve_src, ph
+
+
+def test_talk_docs_carry_no_unfilled_placeholders():
+    for d in DOCS + ["DEMO_SCRIPT.md"]:
+        assert "{{" not in (ROOT / d).read_text(), d
 
 
 def test_review_curve_is_labelled_as_routing_by_self_reported_confidence():

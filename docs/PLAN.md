@@ -12,7 +12,7 @@ We have **AMD Token Factory** (team key, OpenAI-compatible API, Gemma-4-31B-IT p
 Patient device (laptop)                         AMD Token Factory (Gemma 4 31B on AMD)
   React PWA + FastAPI "patient" :8765            ├─ data factory: lay lexicon + 2,992 diaries (done)
    ├─ encrypted vault (Argon2id + AES-GCM)       ├─ extraction for the public demo
-   ├─ extraction: fine-tuned Gemma 4 E4B (local) ├─ CASCADE: verifies what the small model doubts
+   ├─ extraction: fine-tuned Gemma 4 E4B (local) ├─ (cascade dropped 17 Oct, see below)
    ├─ pseudonymiser before any remote call ────► ├─ clinician brief
    └─ share: select, seal, expire                └─ lab report pages (vision model)
 Clinic console: FastAPI "clinic" :8800 ─────────►  same API
@@ -49,7 +49,7 @@ Owners are proposals: confirm in the team chat. "Claude" = done with the coding 
 |---|---|---|---|---|
 | T1 | **Fine-tune Gemma 4 E4B** on the v3 set (own GPU or Kaggle), eval base vs LoRA, plus the Gemma 4 31B (Token Factory) comparison row | Maksim / Arseniy | 17 Oct 20:00 | `eval/results/extraction_base-e4b.json`, `extraction_ft-e4b-r16.json`, `train_e4b-r16.json`, `extraction_tf-gemma4-31b.json` committed; adapter on HF |
 | T2 | **Wire the app to Token Factory**: base URL, key, `Gemma-4-31B-IT` for clinic and the public patient demo; label "Gemma 4 31B · AMD Token Factory" instead of "AMD Instinct MI300X · vLLM"; GPU chip only when telemetry exists | Valentina + Claude | 17 Oct 14:00 | Clinic brief and patient extraction run against Token Factory; header label correct; tests green |
-| T3 | **Cascade** (killer feature K1, spec below) | Valentina + Claude | 17 Oct 19:00 | Demo shows "Gemma 4 31B on AMD resolved N of M doubts, X left for you"; eval numbers in `eval/results/cascade_*.json` |
+| T3 | **Cascade** (killer feature K1, spec below). **Dropped 17 Oct**: the benchmark (`eval/RESULTS.md`) puts the fine-tuned E4B ahead of every larger model we ran, so there is nothing to escalate to; the small model extracts, the clinician reviews | Valentina + Claude | 17 Oct 19:00 | Demo shows "Gemma 4 31B on AMD resolved N of M doubts, X left for you"; eval numbers in `eval/results/cascade_*.json` |
 | T4 | **Lab import on AMD vision**: try Gemma-4-31B with images, else MinerU2.5-Pro or MiniCPM-V-4.7-35B (`LLM_VISION_MODEL`) | Claude | 17 Oct 15:00 | Three demo referti import through Token Factory, values land in Labs, pages/s shown |
 | T5 | **Public deploy**: patient demo and clinic console with `CLARIO_DEMO_INSTANCE=1`, models on Token Factory (no GPU needed; e.g. two Hugging Face Docker Spaces or one small VPS) | Arseniy | 17 Oct 22:00 | Two public HTTPS URLs; share from patient to clinic works end to end from outside |
 | T6 | **Numbers for the slide**: real conformal threshold and review-routing curve via Token Factory (today's `conformal_threshold.json` is a dry run), bench against Token Factory (latency, tokens/s, self-consistency cost) | Maksim + Claude | 17 Oct 22:00 | `eval/results/conformal_threshold.json` with a real model, `eval/results/bench_tf-*.json` |
@@ -63,7 +63,7 @@ Owners are proposals: confirm in the team chat. "Claude" = done with the coding 
 
 ## Killer features (what makes judges stop)
 
-### K1. Cascade: device model → Gemma 4 31B on AMD → clinician (must have)
+### K1. Cascade: device model → Gemma 4 31B on AMD → clinician (dropped 17 Oct, kept for the record)
 The small fine-tuned model reads every note on the patient's device. Only what it doubts goes further, and only after the pseudonymiser.
 1. **Device:** fine-tuned Gemma 4 E4B (Ollama, `clario-extract`) extracts terms with self-consistency confidence. Confident terms are done.
 2. **AMD:** each low-confidence term is sent, pseudonymised, to Gemma 4 31B on Token Factory with the quote and the ontology candidates. 31B confirms, rejects or picks another candidate, sampled a few times; agreement becomes its confidence.
