@@ -31,7 +31,7 @@ image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install("torch==2.8.0", index_url="https://download.pytorch.org/whl/cu128")
     .pip_install_from_requirements(str(ROOT / "train" / "requirements-cuda.txt"))
-    .pip_install("hf_transfer", "pydantic>=2.8", "fastapi>=0.115", "httpx>=0.27")  # the eval resolver imports clario
+    .pip_install("hf_transfer", "pydantic>=2.8", "fastapi>=0.115", "httpx>=0.27", "cryptography>=43", "argon2-cffi>=23.1", "pynacl>=1.5")  # the eval resolver imports clario
     .env({"HF_HOME": "/hf", "HF_HUB_ENABLE_HF_TRANSFER": "1", "PYTHONUNBUFFERED": "1"})
     .add_local_dir(ROOT / "train", "/work/train", ignore=["data", "out", "out-*", "__pycache__", ".venv*", "*.pyc"])
     .add_local_dir(ROOT / "backend" / "clario", "/work/backend/clario", ignore=["__pycache__", "*.pyc"])
