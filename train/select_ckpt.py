@@ -47,7 +47,8 @@ def score_run(a):
         path = os.path.join(out_dir, f"extraction_{label}.json")
         if not os.path.exists(path):  # resumable: a scored checkpoint is not scored again
             cmd = [sys.executable, os.path.join(HERE, "eval.py"), "--hf-model", a.hf_model, "--adapter", ck, "--data", a.val,
-                   "--label", label, "--out-dir", out_dir, "--limit", str(a.limit), "--batch-size", str(a.batch_size)]
+                   "--label", label, "--out-dir", out_dir, "--limit", str(a.limit), "--batch-size", str(a.batch_size),
+                   "--max-tokens", str(a.max_tokens)]
             if a.load_in_4bit:
                 cmd.append("--load-in-4bit")
             subprocess.run(cmd, check=True)
@@ -102,6 +103,7 @@ def main(argv=None):
     ap.add_argument("--val", default=os.path.join(HERE, "data", "v3", "val.jsonl"))
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--batch-size", type=int, default=16)
+    ap.add_argument("--max-tokens", type=int, default=1024, help="generation cap per diary while scoring checkpoints")
     ap.add_argument("--load-in-4bit", action="store_true")
     ap.add_argument("--metric", default=METRIC)
     ap.add_argument("--summary", action="store_true"); ap.add_argument("--tag", default="e4b")

@@ -6,7 +6,8 @@
 #   bash sweep.sh                                   # Gemma 4 E4B, 4 configs
 #   MODEL=google/gemma-4-26B-A4B-it TAG=a4b CONFIGS="32:1e-4" BSZ=4 GA=4 bash sweep.sh
 #
-# Env: MODEL, TAG, CONFIGS ("rank:lr" list), EPOCHS (3), BSZ (8), GA (2), VAL_LIMIT (200), Q4=1 for 4-bit QLoRA.
+# Env: MODEL, TAG, CONFIGS ("rank:lr" list), EPOCHS (3), BSZ (8), GA (2), VAL_LIMIT (200), Q4=1 for 4-bit QLoRA,
+#      EVAL_EVERY (0.5 epochs between checkpoints), SEL_MAX_TOKENS (1024, generation cap while picking checkpoints).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -14,6 +15,7 @@ MODEL="${MODEL:-google/gemma-4-E4B-it}"
 TAG="${TAG:-e4b}"
 CONFIGS="${CONFIGS:-16:1e-4 16:2e-4 32:1e-4 32:2e-4}"
 EPOCHS="${EPOCHS:-3}"; BSZ="${BSZ:-8}"; GA="${GA:-2}"; VAL_LIMIT="${VAL_LIMIT:-200}"
+EVAL_EVERY="${EVAL_EVERY:-0.5}"; SEL_MAX_TOKENS="${SEL_MAX_TOKENS:-1024}"
 Q=(); [ "${Q4:-0}" = 1 ] && Q=(--load-in-4bit)
 PY="${PYTHON:-python}"
 
@@ -32,9 +34,9 @@ for cfg in $CONFIGS; do
   if [ -f "out/$run/best.json" ]; then echo "skip $run (done)"; continue; fi
   if [ ! -f "out/$run/adapter/adapter_config.json" ]; then
     "$PY" train_rocm.py --model "$MODEL" ${Q[@]+"${Q[@]}"} --out "out/$run" --rank "$r" --alpha "$r" --lr "$lr" \
-      --epochs "$EPOCHS" --bsz "$BSZ" --grad-accum "$GA"
+      --epochs "$EPOCHS" --bsz "$BSZ" --grad-accum "$GA" --eval-every "$EVAL_EVERY"
   fi
-  "$PY" select_ckpt.py --run "out/$run" --hf-model "$MODEL" ${Q[@]+"${Q[@]}"} --limit "$VAL_LIMIT"
+  "$PY" select_ckpt.py --run "out/$run" --hf-model "$MODEL" ${Q[@]+"${Q[@]}"} --limit "$VAL_LIMIT" --max-tokens "$SEL_MAX_TOKENS"
 done
 
 "$PY" select_ckpt.py --summary --tag "$TAG"
