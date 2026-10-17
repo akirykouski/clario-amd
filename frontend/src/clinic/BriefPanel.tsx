@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ExternalLink, FileText, PenLine, RotateCcw } from "lucide-react";
+import { ExternalLink, FileText, PenLine } from "lucide-react";
 import { api } from "../api";
-import type { Brief, BriefItem, BriefSection, BriefWarning, SharePackage, Specialty } from "../types";
+import type { Brief, BriefItem, BriefSection, SharePackage, Specialty } from "../types";
 import { fmtDate, fmtNum } from "../lib";
 import { ErrorBox, Spinner } from "../components/ui";
-import { tn, useT, type Key } from "../i18n";
+import { useT, type Key } from "../i18n";
+import { BriefEditor } from "./BriefEditor";
 import { useRun } from "./useRun";
 import { DecisionLine } from "./Metrics";
 import { tokenFactoryLabel } from "../components/compute";
@@ -45,7 +46,7 @@ export function jumpTo(entryId: string) {
 const OFFLINE = "offline-fixtures";
 
 /** Persistent run facts for the clinic screen: model, speed, latency and the GPU. Offline fixtures say so and show no speed. */
-export function RunChips({ model, backend, tokensPerS, latencyMs }: { model?: string | null; backend?: string | null; tokensPerS?: number; latencyMs?: number }) {
+export function RunChips({ model, backend, tokensPerS, latencyMs, precomputed }: { model?: string | null; backend?: string | null; tokensPerS?: number; latencyMs?: number; precomputed?: string | null }) {
   const { t } = useT();
   const [gpu, setGpu] = useState<Record<string, unknown> | null>(null);
   useEffect(() => { api.gpu().then(setGpu).catch(() => setGpu(null)); }, [tokensPerS, latencyMs]);
@@ -55,23 +56,19 @@ export function RunChips({ model, backend, tokensPerS, latencyMs }: { model?: st
   const util = gpu && typeof gpu.util_pct === "number" ? ` ${Math.round(gpu.util_pct)}%` : "";
   return (
     <div className="no-print flex flex-wrap gap-1.5" data-testid="run-chips">
-      <span className="chip text-xs">{offline ? t("brief.chipDemo") : tokenFactoryLabel(backend, model) ?? [backend, model].filter(Boolean).join(" · ")}</span>
+      <span className="chip text-xs" data-testid="run-chip-model">
+        {offline ? t("brief.chipDemo") : precomputed
+          ? t("brief.chipPrecomputed", { model: tokenFactoryLabel(backend, model) ?? [backend, model].filter(Boolean).join(" · "), date: fmtDate(precomputed, { day: "numeric", month: "short", year: "numeric" }) })
+          : tokenFactoryLabel(backend, model) ?? [backend, model].filter(Boolean).join(" · ")}
+      </span>
       {!offline && tokensPerS ? <span className="chip text-xs">{t("brief.chipRate", { n: fmtNum(tokensPerS, 1) })}</span> : null}
       {!offline && latencyMs ? <span className="chip text-xs">{t("brief.chipLatency", { s: fmtNum(latencyMs / 1000, 1) })}</span> : null}
-      {name && <span className="chip text-xs">{t("brief.chipGpu", { name })}{util}</span>}
+      {name && !precomputed && <span className="chip text-xs">{t("brief.chipGpu", { name })}{util}</span>}
     </div>
   );
 }
 
-const NAME_KEY = "clario.clinicianName";
-function savedName(): string {
-  try { return localStorage.getItem(NAME_KEY) ?? ""; } catch { return ""; }
-}
-function saveName(n: string) {
-  try { localStorage.setItem(NAME_KEY, n); } catch { /* private window: the name is typed again */ }
-}
-
-/** Generate brief -> one-page PDF marked "AI draft, not reviewed" -> Edit and sign (plain text, code checks as warnings)
+/** Generate brief -> one-page PDF marked "AI draft, not reviewed" -> Edit and sign (cards, code checks on their lines)
  *  -> signed PDF. The PDF is rendered by the clinic server; the selected specialty filters what goes into it. */
 export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief: Brief | null; setBrief: (b: Brief) => void }) {
   const pendingLabs = pkg.labs.filter((l) => l.needs_review && !l.decision).length;
@@ -100,14 +97,14 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
   const modelLabel = state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.clinicModel");
 
   return (
-    <aside className="lg:sticky lg:top-4 space-y-4" aria-label={t("brief.title")} data-tour="brief">
+    <aside className={`${editing ? "" : "lg:sticky lg:top-4"} space-y-4`} aria-label={t("brief.title")} data-tour="brief">
       <div className="no-print flex items-center justify-between gap-3">
         <h2 className="text-2xl">{t("brief.title")}</h2>
-        {!signed && !editing && (
-          <button className="btn btn-primary" onClick={() => start(pkg.package_id, lang)} disabled={state.status === "running"}>
+        {!signed && !editing && (shown?.precomputed
+          ? <button className="btn" onClick={() => start(pkg.package_id, lang, true)} disabled={state.status === "running"}>{t("brief.regenerateLive")}</button>
+          : <button className="btn btn-primary" onClick={() => start(pkg.package_id, lang)} disabled={state.status === "running"}>
             {shown ? t("brief.draftAgain") : t("brief.draft")}
-          </button>
-        )}
+          </button>)}
       </div>
 
       <div aria-live="polite" className="no-print">
@@ -119,11 +116,13 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
           </div>
         )}
         {state.status === "error" && <ErrorBox error={state.error ?? t("brief.error")} retry={() => start(pkg.package_id, lang)} />}
-        {state.status === "done" && !signed && <p className="text-sm text-muted">{t("brief.draftedBy", { model: modelLabel, rate: state.backend !== OFFLINE && state.tokensPerS ? t("brief.draftedRate", { n: fmtNum(state.tokensPerS, 1) }) : "" })}</p>}
+        {state.status === "done" && !signed && shown?.precomputed && <p className="text-sm text-muted" data-testid="drafted-precomputed">{t("brief.draftedPrecomputed", { model: tokenFactoryLabel(shown.backend, shown.model) ?? shown.model ?? "", date: fmtDate(shown.precomputed, { day: "numeric", month: "short", year: "numeric" }) })}</p>}
+        {state.status === "done" && !signed && !shown?.precomputed && <p className="text-sm text-muted">{t("brief.draftedBy", { model: modelLabel, rate: state.backend !== OFFLINE && state.tokensPerS ? t("brief.draftedRate", { n: fmtNum(state.tokensPerS, 1) }) : "" })}</p>}
       </div>
       {err && <ErrorBox error={err} />}
       <RunChips model={state.model ?? shown?.model} backend={state.backend ?? shown?.backend}
-        tokensPerS={state.tokensPerS ?? shown?.stats?.tokens_per_s} latencyMs={state.latencyMs ?? shown?.stats?.latency_ms} />
+        tokensPerS={state.tokensPerS ?? shown?.stats?.tokens_per_s} latencyMs={state.latencyMs ?? shown?.stats?.latency_ms}
+        precomputed={shown?.precomputed} />
       {shown?.pseudonymized && <p className="no-print text-xs text-muted" data-testid="sent-pseudonymised">{t("brief.sentPseudo")}</p>}
 
       {!shown && state.status === "idle" && <p className="text-muted no-print">{t("brief.none")}</p>}
@@ -140,7 +139,7 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
       )}
 
       {shown && !signed && editing && (
-        <BriefEditor pkg={pkg} focus={focus} pendingLabs={pendingLabs} onCancel={() => setEditing(false)}
+        <BriefEditor pkg={pkg} specialty={specialtyOf(focus)} focusLabel={focus === "general" ? undefined : t(`brief.specialty.${focus}` as Key)} pendingLabs={pendingLabs} onCancel={() => setEditing(false)}
           onSigned={(b) => { setBrief(b); setEditing(false); }} openedAt={openedAt.current} />
       )}
 
@@ -180,84 +179,6 @@ function PdfView({ url, badge }: { url: string; badge?: string }) {
     <div className="relative">
       {badge && <span className="chip text-xs absolute top-2 left-2 z-10" style={{ borderColor: "var(--moderate)", background: "var(--amber-bg)", color: "var(--ink)" }} data-testid="draft-badge">{badge}</span>}
       <iframe title={t("brief.pdfTitle")} src={url} className="w-full rounded-lg border border-line bg-panel" style={{ height: "min(78vh, 900px)" }} />
-    </div>
-  );
-}
-
-/** Plain text editor for the draft: sections kept as "## Title", one "- line" per item. Code checks (citation check,
- *  hedge validator, diagnostic or dosing words) run on the server as the clinician types and show as warnings; only
- *  lab readings that still need a check block signing. */
-function BriefEditor({ pkg, focus, pendingLabs, onCancel, onSigned, openedAt }: {
-  pkg: SharePackage; focus: Focus; pendingLabs: number; onCancel: () => void; onSigned: (b: Brief) => void; openedAt: number;
-}) {
-  const { t } = useT();
-  const [text, setText] = useState<string | null>(null);
-  const [warnings, setWarnings] = useState<BriefWarning[]>([]);
-  const [name, setName] = useState(savedName);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const first = useRef(true);
-  const load = () => {
-    setErr(null);
-    api.briefText(pkg.package_id, specialtyOf(focus))
-      .then((r) => { first.current = true; setText(r.text); setWarnings(r.warnings); })
-      .catch((x: Error) => setErr(x.message));
-  };
-  useEffect(load, [pkg.package_id, focus]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (text === null) return;
-    if (first.current) { first.current = false; return; }  // the loaded text came with its warnings
-    const id = setTimeout(() => {
-      api.checkBrief(pkg.package_id, text, specialtyOf(focus)).then((r) => setWarnings(r.warnings)).catch(() => undefined);
-    }, 400);
-    return () => clearTimeout(id);
-  }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const sign = async () => {
-    if (text === null) return;
-    setBusy(true); setErr(null);
-    try {
-      saveName(name.trim());
-      onSigned(await api.signBrief(pkg.package_id, { text, clinician: name.trim(), specialty: specialtyOf(focus), seconds: (Date.now() - openedAt) / 1000 }));
-    } catch (x) { setErr((x as Error).message); }
-    setBusy(false);
-  };
-  if (text === null) return err ? <ErrorBox error={err} retry={load} /> : <Spinner label={t("common.loading")} />;
-  const shownWarnings = warnings.filter((w) => w.kind !== "labs_pending");
-  return (
-    <div className="space-y-3 no-print" data-testid="brief-editor">
-      {focus !== "general" && <p className="text-sm text-muted">{t("brief.focusFixed", { sp: t(`brief.specialty.${focus}` as Key) })}</p>}
-      <div>
-        <label htmlFor="brief-text" className="label">{t("brief.editorLabel")}</label>
-        <p className="text-sm text-muted mb-1">{t("brief.editorHint")}</p>
-        <textarea id="brief-text" className="input font-mono text-[13px] leading-snug" style={{ minHeight: "min(60vh, 640px)" }}
-          value={text} onChange={(e) => setText(e.target.value)} spellCheck />
-      </div>
-      <section aria-label={t("brief.warnings")} aria-live="polite" data-testid="brief-warnings" className="space-y-1.5">
-        {shownWarnings.length === 0
-          ? <p className="text-sm text-muted">{t("brief.noWarnings")}</p>
-          : shownWarnings.map((w, i) => (
-            <div key={i} className="rounded-lg border p-2 text-sm" style={{ borderColor: "var(--moderate)", background: "var(--amber-bg)" }} role="note" data-testid="brief-warning">
-              <p className="flex gap-1.5 items-start"><AlertTriangle size={15} className="shrink-0 mt-0.5" aria-hidden /><span>{w.message}</span></p>
-              {w.line && <p className="text-muted mt-0.5 truncate" title={w.line}>{w.line}</p>}
-            </div>
-          ))}
-      </section>
-      <div>
-        <label htmlFor="brief-signer" className="label">{t("brief.signName")}</label>
-        <input id="brief-signer" className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-      </div>
-      {err && <ErrorBox error={err} />}
-      <div className="flex gap-2 flex-wrap items-start">
-        <div>
-          <button className="btn btn-primary" onClick={sign} disabled={busy || !name.trim() || !text.trim() || pendingLabs > 0}>
-            <PenLine size={16} aria-hidden /> {t("brief.sign")}
-          </button>
-          {pendingLabs > 0 && <p className="text-sm text-muted mt-1" aria-live="polite" data-testid="labs-pending">{tn("pkg.labsPending", pendingLabs)}</p>}
-        </div>
-        <button className="btn" onClick={load} disabled={busy}><RotateCcw size={16} aria-hidden /> {t("brief.reset")}</button>
-        <button className="btn" onClick={onCancel} disabled={busy}>{t("common.cancel")}</button>
-      </div>
     </div>
   );
 }

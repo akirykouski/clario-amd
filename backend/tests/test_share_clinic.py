@@ -84,12 +84,52 @@ def test_share_draft_edit_sign(unlocked, clinic_server, tmp_path):
         assert "text" not in m["briefs"][0]
         md = clinic.get(f"/api/inbox/{pid}/brief.md").text
         assert flagged["text"] not in md and "and since when." in md and "may be worth discussing" in md
-        assert clinic.get(f"/api/inbox/{pid}/brief/text").json() == {"text": fin["text"], "warnings": [], "lang": "en", "signed": True}
+        assert clinic.get(f"/api/inbox/{pid}/brief/text").json() == {"text": fin["text"], "items": [], "sections": [], "warnings": [],
+                                                                     "lang": "en", "signed": True}
 
         signed = clinic.get(f"/api/inbox/{pid}/brief.pdf")
         assert page_count(signed.content) == 1 and "signed" in signed.headers["content-disposition"]
         assert clinic.post(f"/api/inbox/{pid}/brief/sign", json={"text": edited, "clinician": "Dr Rossi"}).status_code == 409
         assert clinic.get("/api/inbox").json()[0]["brief_state"] == "final"
+
+
+def test_share_edit_sign_cards(unlocked, clinic_server, tmp_path):
+    """The card editor: lines by id, warnings on the line they belong to, exact kept/edited/removed counts."""
+    unlocked.post("/api/demo", json={"persona": "giulia"})
+    wait_extracted(unlocked)
+    confirm_all(unlocked)
+    pid = unlocked.post("/api/share", json=share_body(clinic_server)).json()["package_id"]
+    with TestClient(create_app(settings(tmp_path, "clinic"))) as clinic:
+        sse(clinic, clinic.post(f"/api/inbox/{pid}/brief").json()["run_id"])
+        t = clinic.get(f"/api/inbox/{pid}/brief/text").json()
+        items = t["items"]
+        assert [s["key"] for s in t["sections"]] == ["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"]
+        assert [i["id"] for i in items] and all(set(i) >= {"id", "section", "text", "cites", "origin"} for i in items)
+        cit = next(w for w in t["warnings"] if w["kind"] == "citation")
+        flagged = items[cit["item"]]
+        assert flagged["origin"] == "ai" and flagged["text"] in cit["line"]
+        ai = [i for i in items if i["origin"] == "ai"]
+        edit = next(i for i in ai if i["id"] != flagged["id"])
+        lines = [{"id": i["id"], "section": i["section"], "text": i["text"], "cites": i["cites"]} for i in items if i["id"] != flagged["id"]]
+        for ln in lines:
+            if ln["id"] == edit["id"]:
+                ln["text"] = "Completely rewritten by the clinician."  # far from the draft: still `edited`, by id
+        lines.append({"section": "patterns", "text": "You have lupus."})
+        w = clinic.post(f"/api/inbox/{pid}/brief/check", json={"items": lines}).json()["warnings"]
+        assert {x["kind"] for x in w if x.get("item") == len(lines) - 1} >= {"hedge", "diagnosis"}
+        assert not any(x["kind"] == "citation" for x in w)
+        lines[-1]["text"] = "Joint pain and rash together may be worth discussing."
+        assert clinic.post(f"/api/inbox/{pid}/brief/check", json={"items": lines}).json()["warnings"] == []
+        pv = clinic.post(f"/api/inbox/{pid}/brief/preview.pdf", json={"items": lines})
+        assert pv.status_code == 200 and pv.content[:5] == b"%PDF-" and page_count(pv.content) == 1
+        assert clinic.post(f"/api/inbox/{pid}/brief/sign", json={"items": [], "clinician": "Dr Rossi"}).status_code == 422
+        fin = clinic.post(f"/api/inbox/{pid}/brief/sign", json={"items": lines, "clinician": "Dr Rossi"}).json()
+        by_id = {i["id"]: i for i in fin["items"]}
+        assert by_id[flagged["id"]]["review"] == "rejected" and by_id[edit["id"]]["review"] == "edited"
+        assert "Completely rewritten by the clinician." in fin["text"] and flagged["text"] not in fin["text"]
+        assert "## Patterns software noticed (not a diagnosis)" in fin["text"] and "may be worth discussing" in fin["text"]
+        assert clinic.get("/api/clinic/metrics").json()["totals"] == {"accepted": len(ai) - 2, "edited": 1, "rejected": 1}
+        assert clinic.post(f"/api/inbox/{pid}/brief/preview.pdf", json={"items": lines}).status_code == 409
 
 
 def test_clinic_rejects_foreign_and_expired_packages(tmp_path):

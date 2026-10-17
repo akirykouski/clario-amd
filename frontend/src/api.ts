@@ -1,5 +1,5 @@
 import type {
-  AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefText, BriefWarning, ClinicMetrics, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
+  AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefLine, BriefText, BriefWarning, ClinicMetrics, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
   ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition, Overview, Profile, LabCorrection, Specialty,
   Care, Comparison,
 } from "./types";
@@ -75,14 +75,25 @@ export const api = {
   /** Decide many readings that need a check in one call: no filter is every one, `test_key` one test, `page` + `entry_id` one report page. */
   decideLabs: (pkg: string, b: { decision: TermDecision; test_key?: string; page?: number; entry_id?: string | null }) =>
     request<SharePackage>("POST", `/inbox/${encodeURIComponent(pkg)}/labs/decide`, { body: b }),
-  startBrief: (id: string, lang?: string) => request<{ run_id: string }>("POST", `/inbox/${encodeURIComponent(id)}/brief${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
+  /** Draft the brief; the demo persona's unchanged package gets its stored draft at once unless `live` ("Regenerate live"). */
+  startBrief: (id: string, lang?: string, live?: boolean) =>
+    request<{ run_id: string; precomputed?: boolean }>("POST", `/inbox/${encodeURIComponent(id)}/brief`, { params: { lang, live: live ? "true" : undefined } }),
   brief: (id: string, v?: BriefView) => request<Brief>("GET", `/inbox/${encodeURIComponent(id)}/brief`, { params: v }),
   briefText: (id: string, specialty?: Specialty) =>
     request<BriefText>("GET", `/inbox/${encodeURIComponent(id)}/brief/text`, { params: { specialty } }),
-  checkBrief: (id: string, text: string, specialty?: Specialty) =>
-    request<{ warnings: BriefWarning[] }>("POST", `/inbox/${encodeURIComponent(id)}/brief/check`, { body: { text, specialty } }),
-  signBrief: (id: string, b: { text: string; clinician: string; specialty?: Specialty; seconds?: number }) =>
+  /** Code checks on the card editor's lines; each warning's `item` indexes `items`. */
+  checkBrief: (id: string, items: BriefLine[], specialty?: Specialty) =>
+    request<{ warnings: BriefWarning[] }>("POST", `/inbox/${encodeURIComponent(id)}/brief/check`, { body: { items, specialty } }),
+  signBrief: (id: string, b: { items: BriefLine[]; clinician: string; specialty?: Specialty; seconds?: number }) =>
     request<Brief>("POST", `/inbox/${encodeURIComponent(id)}/brief/sign`, { body: b }),
+  /** The edited lines as the PDF they would sign (still watermarked as a draft), as a blob URL to open. */
+  previewBrief: async (id: string, items: BriefLine[], specialty?: Specialty): Promise<string> => {
+    const res = await fetch(buildUrl(`/inbox/${encodeURIComponent(id)}/brief/preview.pdf`), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, specialty }),
+    });
+    if (!res.ok) throw new ApiError(res.status, res.statusText || `HTTP ${res.status}`);
+    return URL.createObjectURL(await res.blob());
+  },
   /** One-page PDF: the AI draft (watermarked, for `specialty`) until signed, then the signed brief. `v` busts the cache. */
   briefPdfUrl: (id: string, v?: { specialty?: Specialty; v?: string }) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.pdf`, v),
   clinicMetrics: () => request<ClinicMetrics>("GET", "/clinic/metrics"),

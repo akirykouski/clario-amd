@@ -5,7 +5,7 @@ import { api } from "../api";
 import { setLang } from "../i18n";
 import { BriefPanel } from "../clinic/BriefPanel";
 import PackagePage from "../clinic/PackagePage";
-import type { Brief, BriefItem, SharedLab, SharePackage } from "../types";
+import type { Brief, BriefEditorItem, BriefItem, BriefWarning, SharedLab, SharePackage } from "../types";
 
 afterEach(() => { vi.restoreAllMocks(); act(() => setLang("en")); });
 
@@ -32,8 +32,15 @@ function renderPanel(items: BriefItem[], setBrief = vi.fn()) {
 }
 
 describe("brief: generate, PDF, edit and sign", () => {
-  const draft = "## Summary\n- line a [20 Sept]\n\n## Timeline\n- 20 Sep: fatigue first noted. [20 Sept]\n";
-  const citation = { kind: "citation" as const, section: "timeline", line: "20 Sep: fatigue first noted. [20 Sept]", message: 'Names "fatigue", which none of the cited entries records.' };
+  const items: BriefEditorItem[] = [
+    { id: "s1", section: "summary", text: "Joint pain and rash over five weeks.", cites: ["e2"], origin: "ai" },
+    { id: "t1", section: "timeline", text: "20 Sep: fatigue first noted.", cites: ["e2"], origin: "ai" },
+    { id: "lab", section: "labs", text: "CRP: 12 mg/L, high", cites: [], origin: "document", rows: [
+      { test: "CRP", value: "12 mg/L", flag: "high", abnormal: true, date: "2026-09-15", page: 2, range: "up to 5", corrected: false }] },
+  ];
+  const sections = (["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"] as const).map((key) => ({ key, title: key.toUpperCase() }));
+  const citation = { kind: "citation" as const, section: "timeline", line: "20 Sep: fatigue first noted. [20 Sept]", item: 1, message: 'Names "fatigue", which none of the cited entries records.' };
+  const textOf = (warnings: BriefWarning[]) => ({ text: "x", items, sections, warnings, lang: "en" as const, signed: false });
 
   it("opens the draft as a PDF marked as an unreviewed AI draft", () => {
     renderPanel([ai("a")]);
@@ -44,43 +51,107 @@ describe("brief: generate, PDF, edit and sign", () => {
     expect(screen.queryByRole("button", { name: /^Accept$/ })).toBeNull();  // no per-line review any more
   });
 
-  it("Edit and sign shows the text with the code checks as warnings; unchecked labs block signing", async () => {
-    const text = vi.spyOn(api, "briefText").mockResolvedValue({ text: draft, warnings: [citation, { kind: "labs_pending", message: "3 lab readings" }], lang: "en", signed: false });
+  it("Edit and sign shows one card per section, the warning on its line, labs as a table; flagged lines and unchecked labs block signing", async () => {
+    const text = vi.spyOn(api, "briefText").mockResolvedValue(textOf([citation, { kind: "labs_pending", message: "3 lab readings" }]));
     renderPanel([ai("a")]);
     fireEvent.click(screen.getByRole("button", { name: "Edit and sign" }));
-    const box = await screen.findByLabelText("Brief text") as HTMLTextAreaElement;
+    await screen.findByTestId("brief-editor");
     expect(text).toHaveBeenCalledWith("pkg_1", undefined);
-    expect(box.value).toBe(draft);
-    expect(screen.getByTestId("brief-warning")).toHaveTextContent('Names "fatigue"');
-    fireEvent.change(screen.getByLabelText(/Your name/), { target: { value: "Dr Rossi" } });
+    expect(screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"))).toEqual(sections.map((s) => s.title));
+    const flagged = within(screen.getByTestId("brief-section-timeline")).getByTestId("brief-line");
+    expect(flagged).toHaveAttribute("data-flagged", "true");
+    expect(within(flagged).getByTestId("brief-warning")).toHaveTextContent('Names "fatigue"');
+    expect(within(flagged).getByText("AI")).toBeInTheDocument();
+    expect(within(screen.getByTestId("brief-labs")).getByRole("table")).toHaveTextContent("CRP12 mg/LHigh");
+    fireEvent.mouseOver(within(flagged).getByRole("button", { name: /Diary note/ }));
+    expect(within(flagged).getByRole("tooltip")).toHaveTextContent("Knees");
+    expect(screen.getByTestId("attention")).toHaveTextContent("1 line needs attention");
+    fireEvent.change(screen.getByLabelText("Reviewed and signed by"), { target: { value: "Dr Rossi" } });
     expect(screen.getByRole("button", { name: "Sign" })).toBeDisabled();
     expect(screen.getByTestId("labs-pending")).toHaveTextContent("3");
   });
 
-  it("checks the text again as the clinician types, and signs with name and time", async () => {
+  it("edits inline, removes with undo, adds a line, keeps a flagged line anyway, and signs the cards with name and time", async () => {
     const clean = { ...pkg, labs: [] };
     vi.spyOn(api, "gpu").mockResolvedValue(null);
-    vi.spyOn(api, "briefText").mockResolvedValue({ text: draft, warnings: [citation], lang: "en", signed: false });
-    const check = vi.spyOn(api, "checkBrief").mockResolvedValue({ warnings: [] });
+    vi.spyOn(api, "briefText").mockResolvedValue(textOf([citation]));
+    const check = vi.spyOn(api, "checkBrief").mockImplementation(async (_id, lines) =>
+      ({ warnings: lines.some((l) => l.id === "t1") ? [{ ...citation, item: lines.findIndex((l) => l.id === "t1") }] : [] }));
     const signed: Brief = { ...briefOf([ai("a", { review: "accepted" })]), finalized: true, signed_by: "Dr Rossi", finalized_at: "2026-10-17T10:00:00Z", text: "x" };
     const sign = vi.spyOn(api, "signBrief").mockResolvedValue(signed);
     const setBrief = vi.fn();
     render(<MemoryRouter><BriefPanel pkg={clean} brief={briefOf([ai("a")])} setBrief={setBrief} /></MemoryRouter>);
     fireEvent.click(screen.getByRole("button", { name: "Edit and sign" }));
-    const box = await screen.findByLabelText("Brief text");
-    const edited = draft.replace("- 20 Sep: fatigue first noted. [20 Sept]\n", "");
-    fireEvent.change(box, { target: { value: edited } });
-    await vi.waitFor(() => expect(check).toHaveBeenCalledWith("pkg_1", edited, undefined), { timeout: 2000 });
-    await vi.waitFor(() => expect(screen.getByText("No warnings from the code checks.")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Sign" })).toBeDisabled();  // no name yet
-    fireEvent.change(screen.getByLabelText(/Your name/), { target: { value: "  Dr Rossi " } });
+    await screen.findByTestId("brief-editor");
+    fireEvent.change(screen.getByLabelText("Reviewed and signed by"), { target: { value: "  Dr Rossi " } });
+    // edit the summary line in place
+    const summary = screen.getByTestId("brief-section-summary");
+    fireEvent.click(within(summary).getByRole("button", { name: "Edit line" }));
+    const box = within(summary).getByLabelText("Edit line");
+    fireEvent.change(box, { target: { value: "Joint pain and rash over five weeks, worse in the sun." } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(within(summary).getByText("edited")).toBeInTheDocument();
+    // remove the flagged line, then undo: it needs attention again; keep it anyway
+    const timeline = screen.getByTestId("brief-section-timeline");
+    fireEvent.click(within(timeline).getAllByRole("button", { name: "Remove" })[0]);
+    expect(within(timeline).getByTestId("line-removed")).toBeInTheDocument();
+    await vi.waitFor(() => expect(screen.getByTestId("attention")).toHaveTextContent("Code checks pass."), { timeout: 2000 });
+    fireEvent.click(within(timeline).getByRole("button", { name: "Undo" }));
+    await vi.waitFor(() => expect(screen.getByTestId("attention")).toHaveTextContent("1 line needs attention"), { timeout: 2000 });
+    expect(screen.getByRole("button", { name: "Sign" })).toBeDisabled();
+    fireEvent.click(within(timeline).getByRole("button", { name: "Keep anyway" }));
+    // add a line of one's own
+    const patterns = screen.getByTestId("brief-section-patterns");
+    fireEvent.click(within(patterns).getByRole("button", { name: "Add line" }));
+    const own = within(patterns).getByLabelText("Edit line");
+    fireEvent.change(own, { target: { value: "Rash after sun may be worth discussing." } });
+    fireEvent.keyDown(own, { key: "Enter" });
+    await vi.waitFor(() => expect(check).toHaveBeenLastCalledWith("pkg_1", expect.arrayContaining([{ section: "patterns", text: "Rash after sun may be worth discussing.", cites: [] }]), undefined), { timeout: 2000 });
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Sign" })).toBeEnabled(), { timeout: 2000 });
     fireEvent.click(screen.getByRole("button", { name: "Sign" }));
     await vi.waitFor(() => expect(sign).toHaveBeenCalled());
     const [pid, body] = sign.mock.calls[0];
     expect(pid).toBe("pkg_1");
-    expect(body).toMatchObject({ text: edited, clinician: "Dr Rossi", specialty: undefined });
+    expect(body).toMatchObject({ clinician: "Dr Rossi", specialty: undefined, items: [
+      { id: "s1", section: "summary", text: "Joint pain and rash over five weeks, worse in the sun.", cites: ["e2"] },
+      { id: "t1", section: "timeline", text: "20 Sep: fatigue first noted.", cites: ["e2"] },
+      { id: "lab", section: "labs", text: "CRP: 12 mg/L, high", cites: [] },
+      { section: "patterns", text: "Rash after sun may be worth discussing.", cites: [] },
+    ] });
     expect(body.seconds).toBeGreaterThanOrEqual(0);
     await vi.waitFor(() => expect(setBrief).toHaveBeenCalledWith(signed));
+  });
+
+  it("speaks Italian in the editor", async () => {
+    act(() => setLang("it"));
+    vi.spyOn(api, "briefText").mockResolvedValue(textOf([citation]));
+    renderPanel([ai("a")]);
+    fireEvent.click(screen.getByRole("button", { name: "Modifica e firma" }));
+    await screen.findByTestId("brief-editor");
+    expect(screen.getByTestId("attention")).toHaveTextContent("1 riga da controllare");
+    expect(screen.getAllByText("IA").length).toBe(2);
+    expect(screen.getByRole("button", { name: "Tieni comunque" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Rivisto e firmato da")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Anteprima PDF" })).toBeInTheDocument();
+  });
+
+  it("a precomputed demo draft says so in the chips, with the original speed, and Regenerate live calls the model", async () => {
+    const pre: Brief = { ...briefOf([ai("a")]), model: "Gemma-4-31B-IT", backend: "amd-token-factory", precomputed: "2026-10-17",
+      stats: { tokens_per_s: 17.6, latency_ms: 52462.8, tokens: 925 }, pseudonymized: true };
+    const startBrief = vi.spyOn(api, "startBrief").mockResolvedValue({ run_id: "r1", precomputed: false });
+    vi.spyOn(api, "runEventsUrl").mockReturnValue("/api/runs/r1/events");
+    vi.stubGlobal("EventSource", class { onmessage = null; onerror = null; addEventListener() {} close() {} });
+    vi.spyOn(api, "gpu").mockResolvedValue(null);
+    render(<MemoryRouter><BriefPanel pkg={pkg} brief={pre} setBrief={vi.fn()} /></MemoryRouter>);
+    expect(screen.getByTestId("run-chip-model")).toHaveTextContent("precomputed · Gemma 4 31B · AMD Token Factory · 17 Oct 2026");
+    expect(screen.getByTestId("run-chips")).toHaveTextContent("17.6 tokens/s");
+    expect(screen.getByTestId("run-chips")).toHaveTextContent("52.5 s");
+    expect(screen.queryByRole("button", { name: "Generate again" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate live" }));
+    await vi.waitFor(() => expect(startBrief).toHaveBeenCalledWith("pkg_1", "en", true));
+    act(() => setLang("it"));
+    expect(screen.getByTestId("run-chip-model")).toHaveTextContent("precalcolato · Gemma 4 31B · AMD Token Factory");
+    vi.unstubAllGlobals();
   });
 
   it("a signed brief shows who signed it and the signed PDF, in English and Italian", () => {

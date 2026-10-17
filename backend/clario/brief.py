@@ -20,7 +20,7 @@ from difflib import SequenceMatcher
 from pydantic import BaseModel, Field
 
 from .i18n import hpo_it
-from .models import Brief, BriefItem, BriefWarning, SharePackage
+from .models import Brief, BriefItem, BriefLine, BriefWarning, SharePackage
 from .past import when_text
 from .safety import hedge_problems
 from .share import lab_needs_check
@@ -602,6 +602,28 @@ def _warn_texts(lang: str) -> dict[str, str]:
                             "with \"Reset to draft\"."}
 
 
+def _line_warnings(pkg: SharePackage, sec: str, line: str, msgs: dict[str, str], lang: str) -> list[BriefWarning]:
+    """The code checks on one line the model or the clinician wrote (text as the editor shows it, dates in brackets)."""
+    dates = {e.id: e.occurred_on for e in pkg.entries}
+    warns: list[BriefWarning] = []
+    body, cites, bad = split_cites(pkg, line, lang)
+    if bad:
+        warns.append(BriefWarning(kind="unknown_date", section=sec, line=line, message=msgs["unknown_date"].format(dates=", ".join(bad))))
+    problems = hedge_problems(body)
+    if sec == "patterns" and "no hedging language" in problems:
+        warns.append(BriefWarning(kind="hedge", section=sec, line=line, message=msgs["hedge"]))
+    if any(p != "no hedging language" for p in problems):
+        warns.append(BriefWarning(kind="diagnosis", section=sec, line=line, message=msgs["diagnosis"]))
+    bad_cite = citation_problem(pkg, body, cites) if cites else None
+    if bad_cite:
+        where = sorted({dates[c] for c in bad_cite[1] if c in dates})[:3]
+        msg = msgs["citation"].format(term=bad_cite[0])
+        if where:
+            msg += msgs["citation_where"].format(dates=", ".join(fdate(d, lang, _year(pkg)) for d in where))
+        warns.append(BriefWarning(kind="citation", section=sec, line=line, message=elide_it(msg) if lang == "it" else msg))
+    return warns
+
+
 def text_warnings(pkg: SharePackage, brief: Brief, text: str, lang: str, pending_labs: int = 0) -> list[BriefWarning]:
     """The code checks that still apply to the edited text, as warnings: the citation check on lines that cite entries,
     the hedge validator on pattern lines, diagnostic or dosing words on any line the model or the clinician wrote.
@@ -611,28 +633,104 @@ def text_warnings(pkg: SharePackage, brief: Brief, text: str, lang: str, pending
     lines, warns = parse_text(text)
     for w in warns:
         w.message = msgs["unknown_section"]
-    dates = {e.id: e.occurred_on for e in pkg.entries}
     for sec, line in lines:
-        if line in from_data:
-            continue
-        body, cites, bad = split_cites(pkg, line, lang)
-        if bad:
-            warns.append(BriefWarning(kind="unknown_date", section=sec, line=line, message=msgs["unknown_date"].format(dates=", ".join(bad))))
-        problems = hedge_problems(body)
-        if sec == "patterns" and "no hedging language" in problems:
-            warns.append(BriefWarning(kind="hedge", section=sec, line=line, message=msgs["hedge"]))
-        if any(p != "no hedging language" for p in problems):
-            warns.append(BriefWarning(kind="diagnosis", section=sec, line=line, message=msgs["diagnosis"]))
-        bad_cite = citation_problem(pkg, body, cites) if cites else None
-        if bad_cite:
-            where = sorted({dates[c] for c in bad_cite[1] if c in dates})[:3]
-            msg = msgs["citation"].format(term=bad_cite[0])
-            if where:
-                msg += msgs["citation_where"].format(dates=", ".join(fdate(d, lang, _year(pkg)) for d in where))
-            warns.append(BriefWarning(kind="citation", section=sec, line=line, message=elide_it(msg) if lang == "it" else msg))
+        if line not in from_data:
+            warns += _line_warnings(pkg, sec, line, msgs, lang)
     if pending_labs:
         warns.append(BriefWarning(kind="labs_pending", message=msgs["labs_pending"].format(n=pending_labs)))
     return warns
+
+
+# ---------------------------------------------------------------- edit and sign: the brief as cards (structured lines)
+def lab_rows(pkg: SharePackage, lang: str) -> dict[str, list[dict]]:
+    """Lab item id -> its readings for the editor's read-only table: test, value, flag, date, page (as `lab_items` groups them)."""
+    groups: dict[str, list] = {}
+    for l in pkg.labs:
+        groups.setdefault(l.test_key or l.test_name, []).append(l)
+    out: dict[str, list[dict]] = {}
+    for key, rows in groups.items():
+        rows = sorted(rows, key=lambda r: (r.date, r.page))
+        name = rows[0].name_en if lang == "en" and rows[0].name_en else rows[0].test_name
+        out[f"bi_lab_{key}"[:60]] = [
+            {"test": name, "value": f"{_lab_value(r, lang)} {r.unit}".strip(), "flag": r.flag, "abnormal": r.abnormal,
+             "date": r.date, "page": r.page, "range": _range_text(r.ref_low, r.ref_high, lang) if (r.ref_low is not None or r.ref_high is not None) else None,
+             "corrected": bool(r.corrected_from)}
+            for r in rows]
+    return out
+
+
+def editor_items(pkg: SharePackage, shown: list[BriefItem], lang: str) -> list[dict]:
+    """The draft as the card editor shows it: one entry per line, cited entries as ids (the UI shows their dates and
+    quotes), lab lines with their readings as rows."""
+    rows = lab_rows(pkg, lang)
+    out = []
+    for i in shown:
+        d = {"id": i.id, "section": i.section, "text": i.text, "cites": [c for c in i.cites if any(e.id == c for e in pkg.entries)],
+             "origin": i.origin, "kind": i.kind, "pages": i.pages, "specialties": i.specialties}
+        if i.origin == "document" and i.id in rows:
+            d["rows"] = rows[i.id]
+        out.append(d)
+    return out
+
+
+def _clean_cites(pkg: SharePackage, cites: list[str]) -> list[str]:
+    known = {e.id for e in pkg.entries}
+    return [c for c in dict.fromkeys(cites) if c in known]
+
+
+def lines_items(pkg: SharePackage, shown: list[BriefItem], lines: list[BriefLine], lang: str) -> list[tuple[int, BriefItem]]:
+    """(index in `lines`, item) for each non-empty line, mapped by id: a drafted AI line unchanged is `accepted`, changed
+    (text, citations or section) `edited`; a patient or lab line unchanged keeps its origin, changed it becomes the
+    clinician's; a line without a known id is the clinician's own (`origin=clinician`). An id used twice counts once."""
+    by_id = {i.id: i for i in shown}
+    used: set[str] = set()
+    out: list[tuple[int, BriefItem]] = []
+    for n, ln in enumerate(lines):
+        text = " ".join((ln.text or "").split())
+        if not text:
+            continue
+        body, typed, _bad = split_cites(pkg, text, lang)
+        cites = _clean_cites(pkg, list(ln.cites) + typed)
+        base = by_id.get(ln.id or "") if (ln.id or "") not in used else None
+        if base is not None:
+            used.add(base.id)
+            same = body == base.text and cites == _clean_cites(pkg, base.cites) and ln.section == base.section
+            if base.origin == "ai":
+                upd = {"review": "accepted"} if same else {"section": ln.section, "text": body, "cites": cites, "review": "edited",
+                                                         "flag": None, "flag_term": None, "flag_entries": []}
+                out.append((n, base.model_copy(update=upd)))
+                continue
+            if same:
+                out.append((n, base.model_copy()))
+                continue
+        lead = NOTE_LEAD[lang]
+        note = base is None and body.startswith(lead)
+        out.append((n, BriefItem(id=_id(), section=ln.section, text=body[len(lead):] if note else body, cites=cites,
+                                 origin="clinician", review="accepted", kind="patient_note" if note else None)))
+    return out
+
+
+def lines_warnings(pkg: SharePackage, shown: list[BriefItem], lines: list[BriefLine], lang: str, pending_labs: int = 0) -> list[BriefWarning]:
+    """`text_warnings` for the card editor: the same checks, each warning carrying `item`, the index of its line."""
+    msgs = _warn_texts(lang)
+    warns: list[BriefWarning] = []
+    for n, it in lines_items(pkg, shown, lines, lang):
+        if it.origin in ("patient", "document"):
+            continue
+        for w in _line_warnings(pkg, it.section, item_line(pkg, it, lang), msgs, lang):
+            w.item = n
+            warns.append(w)
+    if pending_labs:
+        warns.append(BriefWarning(kind="labs_pending", message=msgs["labs_pending"].format(n=pending_labs)))
+    return warns
+
+
+def sign_lines(pkg: SharePackage, shown: list[BriefItem], lines: list[BriefLine], lang: str) -> list[BriefItem]:
+    """The brief's items after the clinician signed the cards, in their order; drafted AI lines that are gone are
+    `rejected` (kept for the pilot counts, never printed); patient and lab lines that are gone are dropped."""
+    kept = [it for _n, it in lines_items(pkg, shown, lines, lang)]
+    used = {i.id for i in kept}
+    return kept + [i.model_copy(update={"review": "rejected"}) for i in shown if i.origin == "ai" and i.id not in used]
 
 
 def sign_items(pkg: SharePackage, shown: list[BriefItem], text: str, lang: str) -> list[BriefItem]:

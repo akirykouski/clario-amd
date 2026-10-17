@@ -307,6 +307,8 @@ class Brief(BaseModel):
     specialty: str | None = Field(None, description="Specialty focus the signed text was prepared for (rheumatology, nephrology); null = general practice")
     pseudonymized: bool | None = Field(None, description="Whether the model input was pseudonymised before the call (names, contacts, ids, dates)")
     model_remote: bool | None = Field(None, description="Whether the model ran off this server (AMD Token Factory or another remote endpoint)")
+    precomputed: str | None = Field(None, description="Demo persona only: the date the draft was generated live and stored "
+                                    "(data/demo/LABELS.md); `stats` are that run's. Null for a draft made now")
 
 
 class BriefWarning(BaseModel):
@@ -315,7 +317,18 @@ class BriefWarning(BaseModel):
     kind: Literal["citation", "hedge", "diagnosis", "unknown_section", "unknown_date", "labs_pending"]
     section: str | None = None
     line: str | None = Field(None, description="The line of the text the warning is about")
+    item: int | None = Field(None, description="Structured editor: index of the line in the `items` sent (or returned) the warning is about")
     message: str
+
+
+class BriefLine(BaseModel):
+    """One line of the brief as the card editor sends it. `id` is the drafted item it comes from (absent for a line the
+    clinician added); `cites` are entry ids. A trailing "[22 Aug]" in `text` is read as citations too."""
+
+    id: str | None = None
+    section: Literal["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"]
+    text: str
+    cites: list[str] = Field(default_factory=list)
 
 
 class DecisionCounts(BaseModel):

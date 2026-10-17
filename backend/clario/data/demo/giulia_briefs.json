@@ -1,0 +1,235 @@
+{
+ "about": "Precomputed brief drafts for the demo persona, see LABELS.md",
+ "drafts": [
+  {
+   "fingerprint": "b35acb1819291534afd8554c37cb1965b24fbfbd5793affb413daf2088fe4b19",
+   "lang": "en",
+   "persona": "giulia",
+   "model": "Gemma-4-31B-IT",
+   "backend": "amd-token-factory",
+   "generated": "2026-10-17",
+   "pseudonymized": true,
+   "model_remote": true,
+   "stats": {
+    "latency_ms": 52462.8,
+    "tokens": 925,
+    "tokens_per_s": 17.6
+   },
+   "output": {
+    "items": [
+     {
+      "section": "summary",
+      "text": "Patient reports a multi-systemic onset of fatigue, joint pain, and photosensitive skin rashes, with a family history of lupus.",
+      "cites": [
+       "e_demo_15",
+       "e_demo_19",
+       "e_demo_22",
+       "e_demo_40"
+      ]
+     },
+     {
+      "section": "summary",
+      "text": "Clinical findings include proteinuria and leukopenia noted during blood and urine tests.",
+      "cites": [
+       "e_demo_55"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 15-19: Onset of severe fatigue and morning stiffness in knees and finger joints.",
+      "cites": [
+       "E1",
+       "E2"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 22-30: Development of butterfly-shaped facial rash after sun exposure, recurrent oral ulcers, and Raynaud phenomenon in cold temperatures.",
+      "cites": [
+       "E3",
+       "E4",
+       "E5"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 37-48: Observed hair loss in clumps and an episode of sharp pleuritic chest pain.",
+      "cites": [
+       "E7",
+       "E10"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 51-64: Low-grade fever, swollen wrists, proteinuria, leukopenia, and ankle edema.",
+      "cites": [
+       "E11",
+       "E12",
+       "E13",
+       "E14"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 72-80: Recurrence of photosensitive rash, Raynaud phenomenon, and persistent alopecia.",
+      "cites": [
+       "E16",
+       "E17",
+       "E18"
+      ]
+     },
+     {
+      "section": "patterns",
+      "text": "The combination of malar rash, joint stiffness, alopecia, proteinuria, and leukopenia resembles Systemic lupus erythematosus.",
+      "cites": [
+       "e_demo_22",
+       "e_demo_19",
+       "e_demo_37",
+       "e_demo_55"
+      ]
+     },
+     {
+      "section": "questions",
+      "text": "Could you describe the frequency and triggers of the facial redness and the cold-induced finger discoloration?",
+      "cites": [
+       "e_demo_22",
+       "E5",
+       "e_demo_72"
+      ]
+     },
+     {
+      "section": "questions",
+      "text": "Are you experiencing any other symptoms like dry eyes, dry mouth, or new skin lesions?",
+      "cites": [
+       "E19"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "fingerprint": "bb90cae6dda9fbdfd1ca3034021c8aef0a5ab91baf15c7238ed02e236ab992af",
+   "lang": "it",
+   "persona": "giulia_it",
+   "model": "Gemma-4-31B-IT",
+   "backend": "amd-token-factory",
+   "generated": "2026-10-17",
+   "pseudonymized": true,
+   "model_remote": true,
+   "stats": {
+    "latency_ms": 51503.4,
+    "tokens": 982,
+    "tokens_per_s": 19.1
+   },
+   "output": {
+    "items": [
+     {
+      "section": "summary",
+      "text": "Paziente riferisce astenia, dolori articolari migranti, eruzioni cutanee fotosensibili e fenomeni vascolari periferici.",
+      "cites": [
+       "E1",
+       "e_demo_f[RECORD_NO]",
+       "E3",
+       "E5"
+      ]
+     },
+     {
+      "section": "summary",
+      "text": "Riferita familiarità per lupus (madre).",
+      "cites": [
+       "E8"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 15-19: Insorgenza di Fatigue intensa e Joint stiffness mattutina a ginocchia e dita.",
+      "cites": [
+       "E1",
+       "e_demo_f[RECORD_NO]"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 22-30: Comparsa di Malar rash dopo esposizione solare, Oral ulcer ricorrenti e Raynaud phenomenon in risposta al freddo.",
+      "cites": [
+       "E3",
+       "E4",
+       "E5"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 37-51: Riferita Alopecia, Pleuritic chest pain, febbre (37,9) e Joint swelling ai polsi.",
+      "cites": [
+       "E7",
+       "E10",
+       "E11"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 55-64: Esami evidenziano Proteinuria e Leukopenia; riportati Ankle swelling e rigidità articolare.",
+      "cites": [
+       "E12",
+       "E13",
+       "E14"
+      ]
+     },
+     {
+      "section": "timeline",
+      "text": "day 72-80: Recidiva di Malar rash (sole), Raynaud phenomenon (freddo) e persistenza di Alopecia e Arthralgia.",
+      "cites": [
+       "e_demo_72",
+       "e_demo_76",
+       "e_demo_80"
+      ]
+     },
+     {
+      "section": "symptoms",
+      "text": "Malar rash fotosensibile, Arthralgia (ginocchia, polsi), Joint stiffness, Alopecia, Oral ulcer, Raynaud phenomenon, Pleuritic chest pain, febbre.",
+      "cites": [
+       "E3",
+       "e_demo_f[RECORD_NO]",
+       "E7",
+       "E4",
+       "E5",
+       "E10",
+       "E11"
+      ]
+     },
+     {
+      "section": "labs",
+      "text": "Proteinuria e Leukopenia.",
+      "cites": [
+       "E12"
+      ]
+     },
+     {
+      "section": "patterns",
+      "text": "Il quadro clinico e laboratoristico (Malar rash, Proteinuria, Leukopenia, Arthralgia) potrebbe essere compatibile con Systemic lupus erythematosus.",
+      "cites": [
+       "E3",
+       "E12",
+       "e_demo_f[RECORD_NO]"
+      ]
+     },
+     {
+      "section": "questions",
+      "text": "Può descrivere meglio la natura delle ulcere orali e se sono state associate a dolore?",
+      "cites": [
+       "E4",
+       "E13"
+      ]
+     },
+     {
+      "section": "questions",
+      "text": "Ha notato altri sintomi cutanei o cambiamenti della pressione arteriosa in concomitanza con il gonfiore alle caviglie?",
+      "cites": [
+       "E13"
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

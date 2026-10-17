@@ -40,8 +40,9 @@ from .demo import (DEMO_ENTRY_PREFIX, DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, 
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
 from .knowledge import Ontology, fold
+from . import demo_brief
 from .llm import extract_json, make_llm
-from .models import (AnswerResult, Brief, BriefDecisions, ClinicMetrics, DecisionCounts, Differential, Entity, Entry, LabResult,
+from .models import (AnswerResult, Brief, BriefDecisions, BriefLine, ClinicMetrics, DecisionCounts, Differential, Entity, Entry, LabResult,
                      NextQuestion, ShareRequest, SharePackage, Term, Timeline, TimelineDay, TimelineTerm)
 from .next_question import as_ranked_patterns, next_question, template_question
 from .patterns import counts_as_evidence, evidence_from, patient_label, patient_patterns, score_patterns
@@ -120,12 +121,14 @@ class LabBulkIn(BaseModel):
 
 
 class BriefTextIn(BaseModel):
-    text: str
+    text: str | None = None  # the brief as plain text, or
+    items: list[BriefLine] | None = None  # the card editor's lines (warnings then carry `item`)
     specialty: str | None = None
 
 
 class SignIn(BaseModel):
-    text: str  # the brief as the clinician edited it (sections as "## Title", lines as "- ...")
+    text: str | None = None  # the brief as the clinician edited it (sections as "## Title", lines as "- ..."), or
+    items: list[BriefLine] | None = None  # the card editor's lines, mapped to the draft by id (exact pilot counts)
     clinician: str  # the name printed under "Reviewed and signed by"
     specialty: str | None = None  # the focus the text was prepared for (#21)
     seconds: float | None = None  # opening the package to signing, measured in the clinic UI
@@ -1013,12 +1016,31 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         except Exception as e:  # noqa: BLE001
             await runs.emit(rid, "error", f"Could not draft the brief: {e}")
 
+    async def precomputed_draft(rid: str, pkg: SharePackage, lang: str, rec: dict) -> None:
+        """The demo persona's unchanged package: the draft generated live once and stored (demo_brief.py), served at once."""
+        try:
+            parsed = demo_brief.draft_out(rec, pkg)
+            items = specialty.tag(pkg, briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed, lang), onto)
+            b = save_brief(Brief(package_id=pkg.package_id, items=items, model=rec["model"], backend=rec["backend"],
+                                 stats=rec.get("stats") or {}, lang=lang,  # type: ignore[arg-type]
+                                 pseudonymized=rec.get("pseudonymized"), model_remote=rec.get("model_remote"),
+                                 precomputed=rec["generated"]))
+            await runs.emit(rid, "done", "Brief drafted (precomputed demo draft): AI draft, not reviewed. Edit and sign it.", 1.0,
+                            backend=rec["backend"], model=rec["model"], precomputed=rec["generated"],
+                            **{k: v for k, v in (rec.get("stats") or {}).items() if k in ("tokens", "tokens_per_s", "latency_ms")},
+                            payload=b.model_dump(mode="json"))
+        except Exception as e:  # noqa: BLE001
+            await runs.emit(rid, "error", f"Could not draft the brief: {e}")
+
     @app.post("/api/inbox/{pid}/brief")
-    async def start_brief(pid: str, lang: str = "en"):
+    async def start_brief(pid: str, lang: str = "en", live: bool = False):
+        """Draft the brief. The demo persona's unchanged package gets the stored draft at once unless `live`."""
         pkg = decided(open_pkg(pid), drop_rejected=True)
+        lang = norm_lang(lang)
         rid = runs.new()
-        spawn(draft(rid, pkg, norm_lang(lang)))
-        return {"run_id": rid}
+        rec = None if live else demo_brief.lookup(pkg, lang)
+        spawn(precomputed_draft(rid, pkg, lang, rec) if rec else draft(rid, pkg, lang))
+        return {"run_id": rid, "precomputed": bool(rec)}
 
     def view(pid: str, audience: str | None, lang: str | None) -> tuple[SharePackage, Brief, str, str]:
         if audience not in (None, "clinician", "patient"):
@@ -1049,26 +1071,39 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         pending = sum(1 for l in pkg.labs if lab_needs_check(l))
         return pkg, b, briefing.shown_items(pkg, b, specialty_), pending
 
+    def sections_for(focus: str | None, lang: str) -> list[dict]:
+        titles = briefing.TITLES[("clinician", lang)]
+        order = specialty.FOCUS_SECTIONS.get(specialty.norm_focus(focus) or "", specialty.SECTION_ORDER)
+        return [{"key": k, "title": titles[k]} for k in order]
+
     @app.get("/api/inbox/{pid}/brief/text")
     def brief_text(pid: str, specialty: str | None = None) -> dict:
-        """The draft as plain text for "Edit and sign" (sections kept), with the code checks as warnings."""
+        """The draft for "Edit and sign": as plain text (sections kept) and as `items` for the card editor, with the
+        code checks as warnings (`item` indexes `items`) and the sections in the specialty's order."""
         pkg, b, shown, pending = draft_view(pid, specialty)
         if b.finalized:
-            return {"text": b.text or "", "warnings": [], "lang": b.lang, "signed": True}
+            return {"text": b.text or "", "items": [], "sections": [], "warnings": [], "lang": b.lang, "signed": True}
         text = briefing.brief_text(pkg, shown, b.lang)
-        warns = briefing.text_warnings(pkg, b, text, b.lang, pending)
-        return {"text": text, "warnings": [w.model_dump() for w in warns], "lang": b.lang, "signed": False}
+        items = briefing.editor_items(pkg, shown, b.lang)
+        lines = [BriefLine(id=i["id"], section=i["section"], text=i["text"], cites=i["cites"]) for i in items]
+        warns = briefing.lines_warnings(pkg, shown, lines, b.lang, pending)
+        return {"text": text, "items": items, "sections": sections_for(specialty, b.lang),
+                "warnings": [w.model_dump() for w in warns], "lang": b.lang, "signed": False}
 
     @app.post("/api/inbox/{pid}/brief/check")
     def brief_check(pid: str, body: BriefTextIn) -> dict:
-        """Warnings for the edited text: citation check, hedge validator, diagnostic or dosing words, labs to check."""
-        pkg, b, _shown, pending = draft_view(pid, body.specialty)
-        return {"warnings": [w.model_dump() for w in briefing.text_warnings(pkg, b, body.text, b.lang, pending)]}
+        """Warnings for the edited text or cards: citation check, hedge validator, diagnostic or dosing words, labs to check."""
+        pkg, b, shown, pending = draft_view(pid, body.specialty)
+        if body.items is not None:
+            warns = briefing.lines_warnings(pkg, shown, body.items, b.lang, pending)
+        else:
+            warns = briefing.text_warnings(pkg, b, body.text or "", b.lang, pending)
+        return {"warnings": [w.model_dump() for w in warns]}
 
     @app.post("/api/inbox/{pid}/brief/sign")
     def sign(pid: str, body: SignIn) -> Brief:
-        """The clinician signs the edited text: it becomes the brief (and the signed PDF). 409 while a lab reading still
-        needs a check or once signed; 422 without a name or text. Appends the pilot counts to `decisions.jsonl`."""
+        """The clinician signs the edited text or cards: it becomes the brief (and the signed PDF). 409 while a lab
+        reading still needs a check or once signed; 422 without a name or text. Appends the pilot counts to `decisions.jsonl`."""
         pkg, b, shown, pending = draft_view(pid, body.specialty)
         if b.finalized:
             raise HTTPException(409, "Brief is final")
@@ -1077,10 +1112,16 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         name = " ".join((body.clinician or "").split())[:120]
         if not name:
             raise HTTPException(422, "Sign with the clinician's name")
-        text = (body.text or "").strip()
+        if body.items is not None:
+            signed = briefing.sign_lines(pkg, shown, body.items, b.lang)
+            text = briefing.brief_text(pkg, [i for i in signed if i.review != "rejected"], b.lang).strip() \
+                if any(i.review != "rejected" for i in signed) else ""
+        else:
+            text = (body.text or "").strip()
+            signed = briefing.sign_items(pkg, shown, text, b.lang) if text else []
         if not briefing.parse_text(text)[0]:
             raise HTTPException(422, "The brief text is empty")
-        items = specialty.tag(pkg, briefing.sign_items(pkg, shown, text, b.lang), onto)
+        items = specialty.tag(pkg, signed, onto)
         secs = body.seconds
         b = b.model_copy(update={"items": items, "finalized": True, "finalized_at": now_iso(), "signed_by": name,
                                  "text": text + "\n", "specialty": specialty.norm_focus(body.specialty),
@@ -1106,6 +1147,21 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             data = briefing.to_pdf(pkg, b, briefing.brief_text(pkg, shown, b.lang), b.lang, specialty)
         name = f"clario-brief-{pid}-{'signed' if b.finalized else 'draft'}.pdf"
         return Response(data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{name}"',
+                                                                      "Cache-Control": "no-store"})
+
+    @app.post("/api/inbox/{pid}/brief/preview.pdf")
+    def brief_preview(pid: str, body: BriefTextIn):
+        """The edited text or cards as the PDF they would sign, still watermarked "AI draft, not reviewed". 409 once signed."""
+        pkg, b, shown, _pending = draft_view(pid, body.specialty)
+        if b.finalized:
+            raise HTTPException(409, "Brief is final")
+        if body.items is not None:
+            kept = [i for i in briefing.sign_lines(pkg, shown, body.items, b.lang) if i.review != "rejected"]
+            text = briefing.brief_text(pkg, kept, b.lang) if kept else ""
+        else:
+            text = body.text or ""
+        data = briefing.to_pdf(pkg, b, text, b.lang, body.specialty)
+        return Response(data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="clario-brief-{pid}-preview.pdf"',
                                                                       "Cache-Control": "no-store"})
 
     @app.get("/api/clinic/metrics")

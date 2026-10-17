@@ -135,14 +135,30 @@ export interface Brief {
   signed_by?: string | null; text?: string | null; specialty?: Specialty | null;
   /** Model input was pseudonymised before the call; the model ran off the clinic server */
   pseudonymized?: boolean | null; model_remote?: boolean | null;
+  /** Demo persona: date the stored draft was generated live; `stats` are that run's. */
+  precomputed?: string | null;
   finalized: boolean; stats: { latency_ms?: number; tokens_per_s?: number; tokens?: number } & Record<string, unknown>;
 }
 
 export interface BriefWarning {
   kind: "citation" | "hedge" | "diagnosis" | "unknown_section" | "unknown_date" | "labs_pending";
   section?: string | null; line?: string | null; message: string;
+  /** Card editor: index of the line (in the items sent or returned) the warning is about. */
+  item?: number | null;
 }
-export interface BriefText { text: string; warnings: BriefWarning[]; lang: "en" | "it"; signed: boolean }
+/** One reading of a lab line, for the editor's read-only table. */
+export interface BriefLabRow { test: string; value: string; flag: LabFlag | null; abnormal: boolean; date: string; page: number; range: string | null; corrected: boolean }
+/** A drafted line as the card editor gets it; `rows` on lab lines. */
+export interface BriefEditorItem {
+  id: string; section: BriefSection; text: string; cites: string[]; origin: BriefItem["origin"]; kind?: "patient_note" | null;
+  pages?: number[]; specialties?: string[]; rows?: BriefLabRow[];
+}
+/** A line the card editor sends: `id` of the drafted line it comes from, absent for a new one. */
+export interface BriefLine { id?: string; section: BriefSection; text: string; cites: string[] }
+export interface BriefText {
+  text: string; warnings: BriefWarning[]; lang: "en" | "it"; signed: boolean;
+  items?: BriefEditorItem[]; sections?: { key: BriefSection; title: string }[];
+}
 
 export interface Health {
   ok: boolean; mode: "patient" | "clinic";
@@ -179,7 +195,7 @@ export interface InboxRow {
 
 export interface RunEvent {
   stage: string; message?: string; progress?: number; backend?: string; model?: string;
-  tokens_per_s?: number; latency_ms?: number; payload?: unknown;
+  tokens_per_s?: number; latency_ms?: number; payload?: unknown; precomputed?: string;
 }
 
 export type LabReview = "auto" | "needs_review" | "confirmed" | "corrected" | "rejected";

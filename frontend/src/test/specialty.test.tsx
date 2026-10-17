@@ -28,7 +28,7 @@ const items: BriefItem[] = [
 describe("specialty focus", () => {
   it("the selector picks what the server puts into the draft PDF and the editor text", async () => {
     vi.spyOn(api, "gpu").mockResolvedValue(null);
-    const text = vi.spyOn(api, "briefText").mockResolvedValue({ text: "## Summary\n- x\n", warnings: [], lang: "en", signed: false });
+    const text = vi.spyOn(api, "briefText").mockResolvedValue({ text: "## Summary\n- x\n", items: [], sections: [], warnings: [], lang: "en", signed: false });
     const brief: Brief = { package_id: "pkg_1", items, model: null, backend: null, finalized: false, stats: {} };
     render(<MemoryRouter><BriefPanel pkg={pkg} brief={brief} setBrief={vi.fn()} /></MemoryRouter>);
     const select = screen.getByLabelText("Specialty") as HTMLSelectElement;
@@ -37,7 +37,7 @@ describe("specialty focus", () => {
     fireEvent.change(select, { target: { value: "rheumatology" } });
     expect(screen.getByTitle("Brief PDF").getAttribute("src")).toContain("specialty=rheumatology");
     fireEvent.click(screen.getByRole("button", { name: "Edit and sign" }));
-    await screen.findByLabelText("Brief text");
+    await screen.findByTestId("brief-editor");
     expect(text).toHaveBeenCalledWith("pkg_1", "rheumatology");
     expect(screen.getByText("Prepared for Rheumatology")).toBeInTheDocument();
     expect(screen.queryByLabelText("Specialty")).toBeNull();  // fixed while editing: the text was made for it

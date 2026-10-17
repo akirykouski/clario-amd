@@ -14,11 +14,11 @@ export function useRun() {
     (event) => dispatch({ type: "event", event }),
     () => dispatch({ type: "fail", error: t("brief.lost") }),
   );
-  const start = useCallback(async (pkgId: string, lang?: string) => {
+  const start = useCallback(async (pkgId: string, lang?: string, live?: boolean) => {
     setUrl(null);
     dispatch({ type: "start" });
     try {
-      const { run_id } = await api.startBrief(pkgId, lang);
+      const { run_id } = await api.startBrief(pkgId, lang, live);
       setUrl(api.runEventsUrl(run_id));
     } catch (x) { dispatch({ type: "fail", error: (x as Error).message }); }
   }, []);
