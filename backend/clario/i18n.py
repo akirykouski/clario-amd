@@ -31,8 +31,15 @@ def lay_it() -> dict[str, str]:
     return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
 
 
+# Findings the extractor keeps without an HPO id (no fitting term), named in Italian for the patient.
+CANONICAL_IT = {"Burning sensation": "Sensazione di bruciore", "Sun exposure": "Esposizione al sole",
+                "Cold exposure": "Esposizione al freddo"}
+
+
 def term_label(hpo_id: str | None, label: str, lang: str) -> str:
-    return hpo_it().get(hpo_id or "", label) if lang == "it" else label
+    if lang != "it":
+        return label
+    return hpo_it().get(hpo_id or "") or CANONICAL_IT.get(label, label)
 
 
 # Condition names the patient may open under "what this pattern resembles". Others keep the published English name.

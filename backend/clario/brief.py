@@ -19,7 +19,7 @@ from difflib import SequenceMatcher
 
 from pydantic import BaseModel, Field
 
-from .i18n import hpo_it
+from .i18n import hpo_it, term_label
 from .models import Brief, BriefItem, BriefLine, BriefWarning, SharePackage
 from .past import when_text
 from .safety import hedge_problems
@@ -209,9 +209,7 @@ def _note_text(note: str) -> str:
 
 
 def _label(x, lang: str) -> str:
-    if lang == "it" and x.hpo_id and hpo_it().get(x.hpo_id):
-        return hpo_it()[x.hpo_id]
-    return x.canonical
+    return term_label(x.hpo_id, x.canonical, lang)
 
 
 # Review-of-systems names for the organ-system keys of `clinic_ddx.system_key` ("other" gets no prefix)

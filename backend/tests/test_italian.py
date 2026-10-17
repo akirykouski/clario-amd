@@ -194,3 +194,11 @@ def test_brief_for_two_audiences_and_two_languages(unlocked, clinic_server, tmp_
         assert clinic.get(f"/api/inbox/{pid}/brief.md", params={"audience": "patient"}).text.startswith("# Riepilogo clinico")
         mdc = clinic.get(f"/api/inbox/{pid}/brief.md").text
         assert mdc.startswith("# Riepilogo clinico") and "HP:0002829" in mdc and "bozza IA, rivista" in mdc
+
+
+def test_findings_without_hpo_id_get_an_italian_name():
+    from clario.i18n import term_label
+
+    assert term_label(None, "Burning sensation", "it") == "Sensazione di bruciore"
+    assert term_label(None, "Burning sensation", "en") == "Burning sensation"
+    assert term_label(None, "Something unlisted", "it") == "Something unlisted"
