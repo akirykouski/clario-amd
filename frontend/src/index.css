@@ -2,11 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Two apps, one codebase. App.tsx sets <html data-app="patient|clinic"> from /api/health.
+   Patient (default): teal accent on a warm paper. Clinic: indigo accent on a cool paper.
+   Every accent passes WCAG AA (4.5:1) on --panel, --paper, --app-tint and --app-badge in both themes. */
 :root {
-  --paper: #F7F8F7; --panel: #FFFFFF; --ink: #1C2321; --muted: #5A6663; --line: #DCE1DF;
+  --paper: #F8F7F4; --panel: #FFFFFF; --ink: #1C2321; --muted: #5A6663; --line: #DCE1DF;
   --accent: #1F6F78; --accent-ink: #FFFFFF;
   --weak: #5B6B78; --moderate: #B7791F; --strong: #A23B52; --mark: #CFE6E8;
   --danger-bg: #FBEFF1; --amber-bg: #FBF1DC;
+}
+:root[data-app="clinic"] {
+  --paper: #F5F6FA; --ink: #1B1F2B; --muted: #585F72; --line: #DADDE8;
+  --accent: #3B4BA0; --accent-ink: #FFFFFF; --mark: #DDE2F6;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -15,6 +22,16 @@
     --weak: #9FB0BD; --moderate: #E0A23F; --strong: #E27C93; --mark: #20474C;
     --danger-bg: #2A171C; --amber-bg: #33281A;
   }
+  :root[data-app="clinic"] {
+    --paper: #11131A; --panel: #191C26; --ink: #E7E9F0; --muted: #9AA1B5; --line: #2B3040;
+    --accent: #9AA8F2; --accent-ink: #0E1120; --mark: #283062;
+  }
+}
+/* Derived per app: header tint, its accent edge, and the role badge fill. */
+:root {
+  --app-tint: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  --app-edge: color-mix(in srgb, var(--accent) 28%, var(--line));
+  --app-badge: color-mix(in srgb, var(--accent) 14%, var(--panel));
 }
 html { -webkit-text-size-adjust: 100%; }
 body { background: var(--paper); color: var(--ink); font-family: "Atkinson Hyperlegible", system-ui, sans-serif; font-size: 17px; line-height: 1.55; }
@@ -34,6 +51,14 @@ h1, h2, h3 { font-family: Newsreader, Georgia, serif; font-weight: 500; letter-s
   .quote { background: var(--mark); border-radius: 3px; padding: 0 2px; }
   .redact { background: transparent; color: var(--ink); border-radius: 3px; padding: 0 3px; font-weight: 700; box-shadow: inset 0 0 0 2px var(--moderate); }
 }
+.app-header { background: var(--app-tint); border-bottom: 1px solid var(--app-edge); box-shadow: inset 0 3px 0 var(--accent); }
+.app-role {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 999px;
+  background: var(--app-badge); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  font-family: "Atkinson Hyperlegible", system-ui, sans-serif; font-size: 13px; font-weight: 700; line-height: 1.2; letter-spacing: 0.02em; white-space: nowrap;
+}
+.app-role-lg { font-size: 15px; padding: 4px 11px 4px 9px; }
+@media (max-width: 639px) { .app-role:not(.app-role-lg) { padding: 2px 8px; font-size: 12.5px; } }
 .clinic-quote { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .print-only { display: none; }
 @media print {

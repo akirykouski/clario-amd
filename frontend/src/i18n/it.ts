@@ -4,6 +4,9 @@ import type { Key } from "./en";
 export const it: Record<Key, string> = {
   "app.connecting": "Mi collego",
   "app.cannotReach": "Non riesco a raggiungere il server di Clario. {err}",
+  "app.role.patient": "Paziente",
+  "app.role.clinic": "Clinica",
+  "app.tabTitle": "Clario {role}",
   "common.loading": "Caricamento",
   "common.working": "Un momento",
   "common.tryAgain": "Riprova",

@@ -6,6 +6,7 @@ import type { VaultState } from "../types";
 import { ErrorBox, Loading } from "../components/ui";
 import { LangSwitch } from "../components/LangSwitch";
 import { PATIENT_TOUR, TourButton } from "../components/Tour";
+import { AppMark } from "../components/AppIdentity";
 import { useT } from "../i18n";
 import { Vault } from "./Vault";
 import Today from "./Today";
@@ -46,9 +47,9 @@ export default function PatientApp() {
 
   return (
     <div className="min-h-screen pb-24 lg:pb-8">
-      <header data-tour-inset="top" className="sticky top-[var(--demo-h,0px)] z-20 bg-paper/95 backdrop-blur border-b border-line">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4 lg:gap-8">
-          <span className="font-display text-xl sm:text-2xl shrink-0">Clario</span>
+      <header data-tour-inset="top" className="app-header sticky top-[var(--demo-h,0px)] z-20">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-2 sm:gap-4 lg:gap-8">
+          <span className="shrink-0"><AppMark role="patient" /></span>
           <nav className="hidden lg:flex flex-1 min-w-0 gap-6 text-[15px] font-bold whitespace-nowrap" aria-label={t("nav.main")}>
             {([["/", t("nav.today")], ["/timeline", t("nav.timeline")], ["/patterns", t("nav.patterns")], ["/labs", t("nav.labs")], ["/share", t("nav.share")]] as const).map(([to, l]) => (
               <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => (isActive ? "text-accent" : "text-muted")}>{l}</NavLink>

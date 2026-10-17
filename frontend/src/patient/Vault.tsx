@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { LangSwitch } from "../components/LangSwitch";
 import { useT } from "../i18n";
+import { AppMark } from "../components/AppIdentity";
 
 export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () => void }) {
   const { t } = useT();
@@ -23,7 +24,7 @@ export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () =
   return (
     <main className="min-h-screen max-w-md mx-auto px-5 py-10 flex flex-col justify-center relative">
       <div className="absolute top-4 right-5"><LangSwitch /></div>
-      <h1 className="text-4xl mb-2">Clario</h1>
+      <h1 className="mb-3"><AppMark role="patient" size="lg" /></h1>
       <p className="text-muted mb-6">{setup ? t("vault.setupIntro") : t("vault.unlockIntro")}</p>
       <form onSubmit={submit} className="space-y-4">
         <div>

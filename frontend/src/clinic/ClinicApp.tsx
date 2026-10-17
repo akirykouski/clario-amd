@@ -9,6 +9,7 @@ import PrivacyPage from "../patient/PrivacyPage";
 import { LangSwitch } from "../components/LangSwitch";
 import { CLINIC_TOUR, TourButton } from "../components/Tour";
 import { useT } from "../i18n";
+import { AppMark } from "../components/AppIdentity";
 import { tokenFactoryLabel } from "../components/compute";
 
 export function ComputeBadge({ llm }: { llm: Health["llm"] }) {
@@ -30,9 +31,9 @@ export default function ClinicApp({ health }: { health: Health }) {
   const key = useAsync(() => api.clinicKey(), []);
   return (
     <div className="min-h-screen">
-      <header className="no-print border-b border-line bg-panel">
+      <header className="app-header no-print">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-2 min-h-14 flex items-center justify-between gap-x-4 gap-y-2 flex-wrap">
-          <Link to="/" className="font-display text-2xl">Clario <span className="text-muted text-base">{t("clinic.name")}</span></Link>
+          <Link to="/" className="shrink-0"><AppMark role="clinic" /></Link>
           <div className="flex items-center gap-x-4 gap-y-2 flex-wrap justify-end">
             <Link to="/privacy" className="text-sm font-bold text-accent underline underline-offset-4">{t("clinic.callLog")}</Link>
             <LangSwitch />

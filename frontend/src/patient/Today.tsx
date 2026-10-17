@@ -42,7 +42,7 @@ export default function Today() {
     setText((prev) => (prev.trim() ? `${prev.trimEnd()} ${spoken}` : spoken));
   }, []);
 
-  useEffect(() => { document.title = `${t("today.title")} · Clario`; }, [t, lang]);
+  useEffect(() => { document.title = `${t("today.title")} · ${t("app.tabTitle", { role: t("app.role.patient") })}`; }, [t, lang]);
   const entries: Entry[] = data ?? [];
   // The onboarding tour points at a note with an unsure (dashed) term, else one with terms, else the newest.
   const unsure = entries.findIndex((e) => e.entities?.some((x) => x.review === "needs_review"));

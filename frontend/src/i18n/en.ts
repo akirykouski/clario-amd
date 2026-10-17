@@ -3,6 +3,9 @@
 export const en = {
   "app.connecting": "Connecting",
   "app.cannotReach": "Cannot reach the Clario server. {err}",
+  "app.role.patient": "Patient",
+  "app.role.clinic": "Clinic",
+  "app.tabTitle": "Clario {role}",
   "common.loading": "Loading",
   "common.working": "Working",
   "common.tryAgain": "Try again",

@@ -7,6 +7,7 @@ import { useT } from "./i18n";
 import PatientApp from "./patient/PatientApp";
 import { DemoBanner } from "./patient/DemoBanner";
 import ClinicApp from "./clinic/ClinicApp";
+import { useAppIdentity } from "./components/AppIdentity";
 
 export default function App() {
   const { t } = useT();
@@ -14,6 +15,7 @@ export default function App() {
   const [err, setErr] = useState<string | null>(null);
   const load = () => { setErr(null); api.health().then(setHealth).catch((e: Error) => setErr(e.message)); };
   useEffect(load, []);
+  useAppIdentity(health ? (health.mode === "clinic" ? "clinic" : "patient") : null);
   if (err) return <div className="max-w-md mx-auto p-6 space-y-3"><LangSwitch /><ErrorBox error={t("app.cannotReach", { err })} retry={load} /></div>;
   if (!health) return <Loading label={t("app.connecting")} />;
   return (
