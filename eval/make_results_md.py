@@ -54,11 +54,12 @@ def render(results_dir):
          "Every number below is read from the file named in its row.", ""]
     L += ["## Extraction (model runs)", ""]
     if runs:
-        L += ["| file | model | backend | dataset | n | date | entity F1 | HPO-ID acc | negation acc | family acc | grounding | JSON valid | ECE | p50 / p95 s | hardware |",
-              "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+        L += ["| file | model | backend | dataset | n | date | entity F1 | F1 after resolver | HPO-ID acc | negation acc | family acc | grounding | JSON valid | ECE | p50 / p95 s | hardware |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for n, r in runs:
             lat = f"{r['latency_p50_s']:.2f} / {r['latency_p95_s']:.2f}" if "latency_p50_s" in r else "n/a"
             L.append(f"| {n} | {r['model']} | {r['backend']} | {r['dataset']} | {r['n']} | {r['date']} | {f3(r.get('entity_f1'))} | "
+                     f"{f3(r.get('resolved_entity_f1'))} | "
                      f"{f3(r.get('hpo_id_accuracy'))} | {f3(r.get('negation_accuracy'))} | {f3(r.get('family_history_accuracy'))} | "
                      f"{f3(r.get('quote_grounding_rate'))} | {f3(r.get('json_validity_rate'))} | {f3(r.get('ece'))} | {lat} | {hw(r)} |")
         partial = [n for n, r in runs if r.get("gold_complete") is False]

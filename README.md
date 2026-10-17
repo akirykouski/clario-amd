@@ -126,20 +126,18 @@ Haiku is used for evaluation only: it drafts gold candidates for a person to rev
 
 Every number below is read from the file named next to it. All files are in `eval/results/` and rendered by `python eval/make_results_md.py` into `eval/RESULTS.md`. Offline and dry-run files are labelled there and are not results.
 
-**Extraction.** Test diaries are synthetic, from the same generator as the training data, and held out by disease: no disease in the test set appears in training. The larger models run zero-shot on our output format with the same prompt. Entity F1 counts an entity as correct only when its HPO code, negation and family flags all match.
+**Extraction.** Same 100 held-out test rows (407 gold entities). Test diaries are synthetic, from the same generator as the training data, and held out by disease. The larger models run zero-shot with the same prompt. A prediction counts as correct only when its HPO code, negation and family flags all match. Precision, recall and F1 below are after the app's HPO check (`clario.extract.resolve_hpo`), which is what Clario stores. Jev picks codes from the ontology, so its checked and raw numbers are the same. Qwen3.8-27B is left out: it returned empty answers on 85 of 100 rows. Raw F1, latency and hardware are in `docs/BENCHMARK_4B.md`.
 
-| Model | Test rows | Entity F1 | HPO-ID accuracy | Grounding | JSON valid | p50 / p95 s | Where it ran | File |
-|---|---|---|---|---|---|---|---|---|
-| Gemma 4 E4B + LoRA (ours) | 300 | 0.629 | 0.497 | 0.998 | 1.000 | 1.64 / 2.26 | Modal NVIDIA L40S | `extraction_ft-e4b.json` |
-| Gemma 4 E4B, base | 300 | 0.003 | 0.001 | 0.992 | 1.000 | 1.33 / 1.72 | Modal NVIDIA L40S | `extraction_base-e4b.json` |
-| Gemma 4 E4B + LoRA (ours) | 100 | 0.604 | 0.478 | 1.000 | 1.000 | 1.45 / 1.64 | Modal NVIDIA L40S | `extraction_ft-e4b-test100.json` |
-| Gemma 4 E4B + LoRA, served (vLLM) | 100 | 0.607 | 0.483 | 1.000 | 1.000 | 11.52 / 18.47 | Modal NVIDIA L4 | `extraction_ft-e4b-vllm-test100.json` |
-| DeepSeek-V4-Flash | 100 | 0.400 | 0.242 | 0.995 | 1.000 | 18.38 / 93.97 | AMD Token Factory | `extraction_tf-deepseek-v4-flash-test100.json` |
-| Jev 1.13 (TypeSafe), retrieve-then-decide | 100 | 0.324 | n/a | n/a | 1.000 | n/a | TypeSafe API | `extraction_jev-test100.json` |
-| Gemma 4 31B IT | 100 | 0.048 | 0.031 | 0.993 | 1.000 | 20.59 / 81.65 | AMD Token Factory | `extraction_tf-gemma-4-31b-it-test100.json` |
-| Gemma 4 E4B, base | 100 | 0.002 | 0.000 | 0.991 | 1.000 | 2.18 / 2.27 | Modal NVIDIA L40S | `extraction_base-e4b-test100.json` |
+| Model | Precision | Recall | F1 | Source file |
+|---|---|---|---|---|
+| Clario fine-tuned E4B, served on Modal | 0.693 | 0.693 | 0.693 | `extraction_ft-e4b-vllm-test100.json` |
+| Clario fine-tuned E4B, training eval | 0.686 | 0.688 | 0.687 | `extraction_ft-e4b-test100.json` |
+| DeepSeek-V4-Flash | 0.478 | 0.514 | 0.495 | `extraction_tf-deepseek-v4-flash-test100.json` |
+| Gemma 4 31B | 0.459 | 0.484 | 0.471 | `extraction_tf-gemma-4-31b-it-test100.json` |
+| Base Gemma 4 E4B | 0.349 | 0.364 | 0.356 | `extraction_base-e4b-test100.json` |
+| Jev, retrieve-then-decide | 0.335 | 0.314 | 0.324 | `extraction_jev-test100.json` |
 
-On the same 100 test rows, the fine-tuned 4B model scores 0.60 entity F1 against 0.40 for DeepSeek-V4-Flash, 0.32 for Jev and 0.05 for Gemma 4 31B. Most of the larger models' gap is HPO codes: after the app's deterministic ontology check (`resolved_entity_f1` in the same files), the fine-tuned model scores 0.687 against 0.495 for DeepSeek-V4-Flash and 0.471 for Gemma 4 31B. The weak spot is family history: relative recall 0.139 on 300 rows (`extraction_ft-e4b.json`). Jev returns no quotes, so grounding and per-span HPO-ID accuracy do not apply to it (its file records 0.000). Latencies are not one comparable measure (batching, a shared API key); see `docs/BENCHMARK_4B.md`. These numbers say nothing yet about real patient text.
+On all 300 test rows, F1 after the HPO check is 0.353 for the base E4B and 0.701 for the fine-tune (`extraction_base-e4b.json`, `extraction_ft-e4b.json`). Raw F1 on those 300 rows is 0.003 and 0.629. The weak spot is family history: relative recall 0.139 on 300 rows (`extraction_ft-e4b.json`). Jev returns no quotes, so grounding does not apply to it. Latencies are not one comparable measure (batching, a shared API key); see `docs/BENCHMARK_4B.md`. These numbers say nothing yet about real patient text.
 
 **Review queue.** With Gemma 4 31B and self-consistency over 5 samples, keeping the auto-accepted rest within 1, 2 or 5 percent error would send every entity to review: share 1.000 at each tolerance (`eval/results/review_curve_tf-gemma4-31b-sc5.json`, 150 test diaries). It measures how many entities go to a person, not accuracy or coverage; the file says which confidence it used in `confidence_source`.
 
