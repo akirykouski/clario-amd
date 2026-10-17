@@ -1,13 +1,9 @@
 # Demo video script (about 4:00)
 
-Record on the public deploy (patient app and clinic console from `deploy/modal/apps.py`), with the clinic model on AMD Token Factory. Localhost with `CLARIO_OFFLINE=1` shows fixtures, not a model, so it is not used. Persona: Giulia, 29, Milan, synthetic. The synthetic-data banner stays visible. Phone-width window for the patient app (390 px), desktop width for the clinic console. English UI; button names below are the exact English labels.
-
-Before recording: set up the vault, open "Demo data (synthetic)", pick "Giulia (EN)" and tap "Load diary". Do not import the referti yet; that happens on screen in scene 5. The video may run past 3:00.
-
-Numbers spoken or shown come only from the files named in the caption. Live chips in the app (tokens per second, latency) may be on screen, but nobody reads them out as a result.
-
 | # | Time | Screen (route) | Action | Voice-over | On-screen caption |
 |---|---|---|---|---|---|
+How many of those stories have you scrolled past on social media this year? Probably more than you can remember. These aren't outliers. There are 300 million people living right now in the world with a rare disease. Half of them are children. And the average time for a diagnosis is over 5 years, 10 if you are a teenager. But here is what's cruel about this. An answer is usually already there. It lieas in the photos, voice memos, notes. Rare diseases hide in plain side. One symptom looks like a flu, the other like stress. The pattern is there. It just has to be seen all at once.
+
 | 1 | 0:00 to 0:12 | Cover image, then patient app Today (`/`) | Title card cut to Today, demo banner visible | "Giulia has had joint pain, a rash after sun and mouth sores for ten weeks. She is about to see a specialist and remembers the last three days." | "Clario. A private diary that ends in a signed brief" |
 | 2 | 0:12 to 0:30 | Today (`/`): "How was today?" | Type: "I remembered I had knee surgery 5 years ago. My knees ache today and the mouth sore is back." Tap "Save note" | "She writes the way she talks. The diary stays on her device, in a vault locked with her passphrase." | "Encrypted on the device. No recovery by design" |
 | 3 | 0:30 to 0:55 | Entry page (`/entry/:id`), "What we understood" | Show the terms, each with its quote. The knee surgery shows as past history ("From the past, about 5 years ago. Not counted as something happening now."). Tap "Not right" on one term, "Fix term" on another | "Each clinical term quotes her exact words. A term with no quote is dropped. Something from years ago is kept as past history, not as today's symptom. She taps "Not right" on anything wrong." | "Every term quotes the patient's words" |
