@@ -2,7 +2,7 @@
 
 **[Вступление]**
 
-How many of those stories have you scrolled past on social media this year? Probably more than you can remember. These aren't outliers. There are 300 million people living right now in the world with a rare disease. Half of them are children. And the average time for a diagnosis is over 5 years, 10 if you are a teenager. But here is what's cruel about this. An answer is usually already there. It lies in the photos, voice memos, notes. Rare diseases hide in plain sight. One symptom looks like a flu, the other like stress. The pattern is there. It just has to be seen all at once.
+How many of those stories have you scrolled past on social media this year? Probably more than you can remember. These aren't outliers. There are 300 million people living right now in the world with a rare disease. Half of them are children. And the average time to a diagnosis is almost five years. But here is what's cruel about this. An answer is usually already there. It lies in the photos, voice memos, notes. Rare diseases hide in plain sight. One symptom looks like a flu, the other like stress. The pattern is there. It just has to be seen all at once.
 
 ---
 
@@ -54,13 +54,13 @@ One click, and Gemma 4 31B, running on AMD Token Factory, drafts a one-page brie
 
 **[Финал: под капотом, поверх слайда]**
 
-Under the hood, Clario runs on Gemma 4 from end to end. We used Gemma 4 31B on AMD Token Factory to generate almost three thousand synthetic patient diaries, and published them as an open dataset. On that data we fine-tuned the small Gemma 4 E4B. On diseases it never saw in training, it scores 0.69 F1, against 0.47 for Gemma 4 31B and 0.36 for the model before fine-tuning. A model six times smaller beats the big one, and it's small enough to run offline, on the patient's own laptop.
+Under the hood, Clario runs on Gemma 4 from end to end. We used Gemma 4 31B on AMD Token Factory to generate almost three thousand synthetic patient diaries, and published them as an open dataset. On that data we fine-tuned the small Gemma 4 E4B. On diseases it never saw in training, it scores 0.69 F1, against 0.47 for Gemma 4 31B with the same prompt and 0.36 for the model before fine-tuning. A four-billion-parameter model beats the 31-billion one, and it's small enough to run offline, on the patient's own laptop.
 
 Clario organises the evidence. The doctor decides.
 
 ---
 
 **Перед записью проверь:**
+- **Цифра во вступлении.** 4.7 года, как на слайде 2 (EURORDIS Rare Barometer, 2024).
 - **Модель в заметке.** Если деплой запущен с `PATIENT_LLM=modal`, заметку читает наш дообученный E4B, и можно сказать «Our fine-tuned Gemma 4 reads the note».
-- **Ibuprofen.** Строка про ибупрофен нужна только если в клинике виден блок «Already tried». Он показывается у пакета второго мнения; если его не будет в кадре, этот абзац выкидываем.
-- **Цифры в финале.** Они из `eval/results`: одни и те же 100 отложенных синтетических записей, F1 посчитан после проверки HPO-кодов (`extraction_ft-e4b-vllm-test100.json`, `extraction_tf-gemma-4-31b-it-test100.json`, `extraction_base-e4b-test100.json`). «В шесть раз меньше»: 31B против примерно 4–5 млрд параметров у E4B.
+- **Цифры в финале.** Они из `eval/results`: одни и те же 100 отложенных синтетических записей, F1 посчитан после проверки HPO-кодов (`extraction_ft-e4b-vllm-test100.json`, `extraction_tf-gemma-4-31b-it-test100.json`, `extraction_base-e4b-test100.json`).
