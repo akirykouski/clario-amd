@@ -235,6 +235,8 @@ class BriefItem(BaseModel):
     kind: Literal["patient_note"] | None = Field(None, description="patient_note: `text` is the patient's own question, the UI adds the label")
     pages: list[int] = Field(default_factory=list, description="Lab lines: report pages the values were read from")
     from_question: bool = Field(False, description="Symptom line the patient confirmed by answering a question the app asked")
+    specialties: list[str] = Field(default_factory=list, description="Clinician copy: specialties the line belongs to "
+                                   "(rheumatology, nephrology), set in code from HPO organ systems and lab tests (clario/specialty.py); empty means general practice only")
 
 
 class Brief(BaseModel):

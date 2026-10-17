@@ -30,6 +30,7 @@ from . import privacy
 from . import doc_routes
 from . import gpu as gpumetrics
 from . import share as sharing
+from . import specialty
 from .config import Settings
 from .share import lab_needs_check, now_iso
 from . import documents as docs
@@ -901,7 +902,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             return
         pkg = decided(open_pkg(pid), drop_rejected=True)
         kept = [i for i in b.items if i.origin == "ai" or (i.origin == "document" and i.section != "labs")]
-        save_brief(b.model_copy(update={"items": briefing.patient_items(pkg, b.lang) + kept}))
+        save_brief(b.model_copy(update={"items": specialty.tag(pkg, briefing.patient_items(pkg, b.lang) + kept, onto)}))
 
     @app.get("/api/inbox/{pid}/terms/{ent_id}/candidates")
     def term_candidates(pid: str, ent_id: str, lang: str = "en") -> list[Term]:
@@ -968,7 +969,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
                     await runs.emit(rid, "draft", "Drafting brief", min(0.9, 0.1 + n / 600), backend=llm.backend,
                                     model=llm.model, tokens=n, tokens_per_s=round(n / el, 1) if el else None)
             parsed = briefing.DraftOut.model_validate(extract_json(text))
-            items = briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed, lang)
+            items = specialty.tag(pkg, briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed, lang), onto)
             b = save_brief(Brief(package_id=pkg.package_id, items=items, model=llm.model, backend=llm.backend,
                                  stats=stats.as_dict() if stats else {}, lang=lang))  # type: ignore[arg-type]
             await runs.emit(rid, "done", "Brief drafted. Review each AI item.", 1.0, backend=llm.backend,
@@ -1000,7 +1001,8 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     @app.get("/api/inbox/{pid}/brief")
     def get_brief(pid: str, audience: str | None = None, lang: str | None = None) -> Brief:
         pkg, b, aud, lg = view(pid, audience, lang)
-        return briefing.render_brief(pkg, b, aud, lg, onto)
+        out = briefing.render_brief(pkg, b, aud, lg, onto)
+        return specialty.tag_brief(pkg, out, onto) if aud == "clinician" else out
 
     @app.patch("/api/brief-items/{pid}/{item_id}")
     def review(pid: str, item_id: str, body: ReviewIn):
@@ -1037,7 +1039,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         pending = [i for i in b.items if i.review == "pending" and i.section != "labs"]
         if pending:
             raise HTTPException(409, f"{len(pending)} AI item(s) still need review")
-        b = briefing.with_labs(b, dpkg, b.lang)
+        b = specialty.tag_brief(dpkg, briefing.with_labs(b, dpkg, b.lang), onto)
         b.finalized = True
         b.finalized_at = now_iso()
         secs = body.seconds if body else None

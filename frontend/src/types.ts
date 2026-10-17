@@ -96,7 +96,11 @@ export interface BriefItem {
   id: string; section: BriefSection; text: string; cites: string[];
   origin: "patient" | "ai" | "document"; review: BriefReview; flag?: "citation_mismatch" | null;
   flag_term?: string | null; flag_entries?: string[]; kind?: "patient_note" | null; pages?: number[]; from_question?: boolean;
+  /** Clinician copy: specialties the line belongs to, set in code by the server; empty = general practice only */
+  specialties?: Specialty[];
 }
+
+export type Specialty = "rheumatology" | "nephrology";
 
 export type Persona = "giulia" | "giulia_it";
 export type BriefView = { audience?: "clinician" | "patient"; lang?: "en" | "it" };
