@@ -141,7 +141,7 @@ export default function LabsPage() {
   ); };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-tour="labs">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl">{t("labs.title")}</h1>

@@ -7,7 +7,7 @@ import { en } from "../i18n/en";
 import { it as itDict } from "../i18n/it";
 import PatientApp from "../patient/PatientApp";
 import ClinicApp from "../clinic/ClinicApp";
-import { CLINIC_TOUR, PATIENT_TOUR, TourButton, clinicTour, type TourStep } from "../components/Tour";
+import { CLINIC_TOUR, PATIENT_TOUR, TOUR_DATA_EVENT, TourButton, clinicTour, patientTour, type TourStep } from "../components/Tour";
 import type { Health } from "../types";
 
 // jsdom has no layout: give every element a box so tour targets count as visible.
@@ -54,7 +54,7 @@ function renderFake(start = "/elsewhere", steps: TourStep[] = STEPS) {
       </Routes>
     </MemoryRouter>,
   );
-  return screen.getByRole("button", { name: "How it works" });
+  return screen.getByTestId("tour-open");
 }
 const where = () => screen.getByTestId("where").textContent;
 
@@ -146,13 +146,35 @@ describe("tour engine", () => {
     expect(document.getElementById("driver-dummy-element")).not.toBeNull();
     expect(document.querySelector(".clario-tour-blur")).not.toBeNull();
     expect(screen.getByTestId("tour-spotlight")).not.toHaveClass("is-on");
+    // no padded hole around the zero-size stand-in (it showed as a dot mid-screen)
+    await waitFor(() => expect(document.querySelector(".driver-overlay path")?.getAttribute("d")).toMatch(/^M0 0H\d+V\d+H0Z$/), WAIT);
+  });
+
+  it("?tour=1 opens the tour on arrival in the linked language and drops the flags from the address", async () => {
+    renderFake("/?tour=1&lang=it&pkg=pkg_1");
+    expect(await dialog()).toHaveTextContent(itDict["tour.p1.title"]);
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(/^\/$/), WAIT);
   });
 });
 
 describe("tour content", () => {
-  it("patient steps open Today, Timeline, Share and What left this device", () => {
-    expect(PATIENT_TOUR.map((s) => s.route)).toEqual(["/", "/", "/timeline", "/share", "/privacy"]);
-    expect(PATIENT_TOUR.map((s) => s.target)).toEqual(["today-write", "today-recent", "timeline-heat", "share-period", "privacy-log"]);
+  it("patient steps walk every screen: Today, Timeline, To discuss, Labs, Share, What left this device", () => {
+    const steps = patientTour({ empty: false });
+    expect(steps.map((s) => s.route)).toEqual(["/", "/", "/timeline", "/patterns", "/labs", "/share", "/privacy"]);
+    expect(steps.map((s) => s.target)).toEqual(["today-write", "today-recent", "timeline-heat", "patterns", "labs", "share-period", "privacy-log"]);
+  });
+
+  it("an empty diary points steps 2 and 3 at where terms and weeks will appear", () => {
+    const steps = patientTour({ empty: true });
+    expect(steps[1]).toMatchObject({ target: "today-understood", body: "tour.p2.bodyEmpty" });
+    expect(steps[2]).toMatchObject({ target: "timeline-heat", body: "tour.p3.bodyEmpty", ready: undefined });
+  });
+
+  it("hands over to the clinic as the last step when the server knows its clinic", () => {
+    expect(patientTour({ empty: false }).some((s) => s.action)).toBe(false);
+    const steps = patientTour({ empty: false, clinic: "https://clinic.example/", demo: true });
+    expect(steps[steps.length - 1]).toMatchObject({ title: "tour.p6.title", body: "tour.p6.bodyDemo", action: { label: "tour.toClinic" } });
+    expect(patientTour({ empty: false, clinic: "https://c.example" }).slice(-1)[0]?.body).toBe("tour.p6.body");
   });
 
   it("clinic steps open the first package, and the brief pane last", () => {
@@ -162,18 +184,80 @@ describe("tour content", () => {
     expect(clinicTour(null).map((s) => s.title)).toEqual(["tour.c0.title"]);
   });
 
-  it("has at most five steps and no condition names on patient steps", () => {
-    expect(PATIENT_TOUR.length).toBeLessThanOrEqual(5);
+  it("has at most eight steps and no condition names on patient steps", () => {
+    const all = [...patientTour({ empty: false, clinic: "c", demo: true }), ...patientTour({ empty: true, clinic: "c" })];
+    expect(all.length).toBeLessThanOrEqual(16);
     expect(clinicTour("x").length).toBeLessThanOrEqual(5);
-    for (const s of PATIENT_TOUR) for (const d of [en, itDict]) {
+    for (const s of all) for (const d of [en, itDict]) {
       expect(d[s.title]).not.toMatch(/diagnos|condition|condizion|lupus|disease|malattia/i);
       expect(d[s.body]).not.toMatch(/diagnos|condition|condizion|lupus|disease|malattia/i);
     }
   });
 
-  it("says decision support, not a diagnosis, in both languages", () => {
-    expect(en["tour.c4.body"]).toMatch(/not a diagnosis/);
-    expect(itDict["tour.c4.body"]).toMatch(/non una diagnosi/);
+  it("says the diagnosis stays with the clinician, in both languages", () => {
+    expect(en["tour.c4.body"]).toMatch(/the diagnosis stays yours/);
+    expect(itDict["tour.c4.body"]).toMatch(/la diagnosi resta tua/);
+  });
+});
+
+describe("hand-over to the clinic", () => {
+  const health = (demo: boolean) => ({ ok: true, mode: "patient", llm: {}, demo_instance: demo, clinic_url: "https://clinic.example/" }) as unknown as Health;
+  const plan = (p: typeof PATIENT_TOUR) => (typeof p === "function" ? p({}) : Promise.resolve(p));
+
+  it("an empty diary on the demo server loads the demo patient, refreshes Today and shares only that diary", async () => {
+    vi.spyOn(api, "health").mockResolvedValue(health(true));
+    vi.spyOn(api, "entries").mockResolvedValue([]);
+    const demo = vi.spyOn(api, "demo").mockResolvedValue({ ok: true, entries: 19, persona: "giulia", lang: "en" });
+    const fired = vi.fn();
+    window.addEventListener(TOUR_DATA_EVENT, fired);
+    const steps = await plan(PATIENT_TOUR);
+    window.removeEventListener(TOUR_DATA_EVENT, fired);
+    expect(demo).toHaveBeenCalledWith("giulia");
+    expect(fired).toHaveBeenCalledTimes(1);
+    expect(steps[1].target).toBe("today-recent");
+    expect(steps[steps.length - 1].body).toBe("tour.p6.bodyDemo");
+  });
+
+  it("a diary with a note someone typed is never sent from the tour", async () => {
+    vi.spyOn(api, "health").mockResolvedValue(health(true));
+    vi.spyOn(api, "entries").mockResolvedValue([{ id: "e_abc" }, { id: "e_demo_1" }] as never);
+    const demo = vi.spyOn(api, "demo");
+    const steps = await plan(PATIENT_TOUR);
+    expect(demo).not.toHaveBeenCalled();
+    expect(steps[steps.length - 1].body).toBe("tour.p6.body");
+    const share = vi.spyOn(api, "share");
+    const tab = { location: { href: "" }, close: vi.fn() };
+    vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    expect(await steps[steps.length - 1].action!.run()).toBeNull();
+    expect(share).not.toHaveBeenCalled();
+    expect(tab.location.href).toBe("https://clinic.example/?tour=1&lang=en");
+  });
+
+  it("sends the demo diary and opens the clinic on that package", async () => {
+    const share = vi.spyOn(api, "share").mockResolvedValue({ package_id: "pkg_42" } as never);
+    const tab = { location: { href: "" }, close: vi.fn() };
+    vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    const last = patientTour({ empty: false, clinic: "https://clinic.example/", demo: true }).slice(-1)[0];
+    expect(await last.action!.run()).toBeNull();
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ clinic_url: "https://clinic.example", expires_hours: 72 }));
+    expect(tab.location.href).toBe("https://clinic.example/?tour=1&lang=en&pkg=pkg_42");
+  });
+
+  it("a failed share closes the new tab and says why", async () => {
+    vi.spyOn(api, "share").mockRejectedValue(new Error("timeout"));
+    const tab = { location: { href: "" }, close: vi.fn() };
+    vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    const last = patientTour({ empty: false, clinic: "https://clinic.example", demo: true }).slice(-1)[0];
+    expect(await last.action!.run()).toBe(en["tour.shareFailed"]);
+    expect(tab.close).toHaveBeenCalled();
+    expect(tab.location.href).toBe("");
+  });
+
+  it("the clinic tour opens the linked package when it is in the inbox, else the newest", async () => {
+    vi.spyOn(api, "inbox").mockResolvedValue([{ package_id: "pkg_new" }, { package_id: "pkg_mine" }] as never);
+    const build = CLINIC_TOUR as (o: { pkg?: string }) => Promise<TourStep[]>;
+    expect((await build({ pkg: "pkg_mine" }))[1].route).toBe("/p/pkg_mine");
+    expect((await build({ pkg: "pkg_gone" }))[1].route).toBe("/p/pkg_new");
   });
 });
 
@@ -189,7 +273,7 @@ describe("tour in the apps", () => {
     render(<MemoryRouter><PatientApp /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: "How it works" }));
     expect(await dialog()).toHaveTextContent(en["tour.p1.title"]);
-    await count("1 of 5");
+    await count("1 of 7");
     await waitFor(() => expect(document.querySelector('[data-tour="today-write"]')).toHaveClass("driver-active-element"), WAIT);
   });
 
@@ -199,7 +283,7 @@ describe("tour in the apps", () => {
     render(<MemoryRouter><PatientApp /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: "Come funziona" }));
     expect(await dialog()).toHaveTextContent(itDict["tour.p1.title"]);
-    await count("1 di 5");
+    await count("1 di 7");
     expect(screen.getByRole("button", { name: "Avanti" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Chiudi" })).toBeInTheDocument();
   });

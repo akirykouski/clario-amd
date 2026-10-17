@@ -120,7 +120,7 @@ export default function PatternsPage() {
   if (loading && !data) return <Loading />;
   if (error || !data) return <ErrorBox error={error ?? t("common.noData")} retry={reload} />;
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-tour="patterns">
       <header>
         <h1 className="text-3xl">{t("patterns.title")}</h1>
         <p className="text-muted mt-1">{t("patterns.intro")}</p>

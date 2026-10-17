@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { ChevronRight, X } from "lucide-react";
 import { WeekOrganizer } from "./Week";
 import { entityName } from "../i18n";
+import { TOUR_DATA_EVENT } from "../components/Tour";
 
 export default function Today() {
   const { t, tn, lang } = useT();
@@ -28,6 +29,10 @@ export default function Today() {
   const [pii, setPii] = useState<Record<string, number>>({});
   const n = data?.length ?? 0;
   useEffect(() => { api.privacyCounts().then(setPii).catch(() => setPii({})); }, [n]);
+  useEffect(() => {
+    window.addEventListener(TOUR_DATA_EVENT, reload);
+    return () => window.removeEventListener(TOUR_DATA_EVENT, reload);
+  }, [reload]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +99,7 @@ export default function Today() {
             <button className="btn btn-primary w-full sm:w-auto sm:min-w-[220px] min-h-[52px] text-base" disabled={busy || !text.trim()}>{busy ? t("today.saving") : t("today.save")}</button>
           </div>
         </form>
-        <aside aria-label={t("today.understood")} className="lg:border-l lg:pl-10 min-w-0" style={{ borderColor: "var(--glass-rim)" }}>
+        <aside aria-label={t("today.understood")} data-tour="today-understood" className="lg:border-l lg:pl-10 min-w-0" style={{ borderColor: "var(--glass-rim)" }}>
           <h2 className="text-xl">{t("today.understood")}</h2>
             <motion.div key={date} initial={{ opacity: 0.55, y: 6 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }} className="mt-4">

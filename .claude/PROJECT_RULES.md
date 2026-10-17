@@ -90,3 +90,6 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 - Gateway behaviour seen 2026-10-17: about 18 s even for a 5-token reply (queueing), and 429 `token_concurrency_rate_limit_exceeded` (no Retry-After) at 6 in flight. Plan about 8 to 10 requests per minute in practice, not 20.
 ## Doctor verify (demo)
 - `backend/clario/doctor_verify.py` + `/api/verify/*` (docs/API.md "Doctor verify"). Demo register fixture of synthetic doctors, never a real site. Conclusions (`care.previous`) go only to the doctor tab (`/doctor/:code`, skips the vault gate in App.tsx), never to a patient response or screen; tests assert it. In-memory single session; doctor token in component state only.
+## Onboarding tour (Tour.tsx)
+- `patientTour({empty, clinic, demo})` builds the patient steps; `PATIENT_TOUR` loads the demo persona first when the diary is empty on a demo server, and adds a hand-over step when health.clinic_url is set (demo: shares the demo diary, then opens `<clinic>/?tour=1`, which auto-starts the clinic tour).
+- Verify tour flows in headless Playwright Chromium, not the Chrome extension tab: that tab can report `visibilityState: hidden`, which stops requestAnimationFrame and makes every step look stuck or blank.

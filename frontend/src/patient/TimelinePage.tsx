@@ -38,7 +38,7 @@ export default function TimelinePage() {
   useEffect(() => { if (pick) panel.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }); }, [pick]);
   if (loading) return <Loading />;
   if (error || !data) return <ErrorBox error={error ?? t("common.noData")} retry={reload} />;
-  if (data.days.length === 0) return <Empty title={t("timeline.emptyTitle")}>{t("timeline.emptyText")}</Empty>;
+  if (data.days.length === 0) return <div data-tour="timeline-heat"><Empty title={t("timeline.emptyTitle")}>{t("timeline.emptyText")}</Empty></div>;
   const dates: Record<string, string> = {};
   const byId: Record<string, Entry> = {};
   data.days.forEach((d) => d.entries.forEach((e) => { dates[e.id] = d.date; byId[e.id] = e; }));

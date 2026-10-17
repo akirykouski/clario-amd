@@ -5,7 +5,8 @@ import { driver, type Driver, type DriveStep, type PopoverDOM, type State } from
 import "driver.js/dist/driver.css";
 import "./tour.css";
 import { api } from "../api";
-import { t, useT, type Key } from "../i18n";
+import { getLang, setLang, t, useT, type Key } from "../i18n";
+import { daysAgo, today } from "../lib";
 
 /** One onboarding step: the screen it lives on and the `data-tour` element it spotlights there. */
 export interface TourStep {
@@ -17,10 +18,21 @@ export interface TourStep {
   target?: string;
   /** Extra selector for content that loads after the target (the spotlight waits for it, then sizes once). */
   ready?: string;
+  /**
+   * Last step only: its button gets this label and runs `run` when clicked (the patient tour hands over to the clinic).
+   * `run` resolves to null when done, which ends the tour, or to an error to show on the card.
+   */
+  action?: { label: Key; run: () => Promise<string | null> };
 }
 
-/** A tour is a fixed list or one built when "?" is pressed (the clinic needs its inbox first). */
-export type TourPlan = TourStep[] | (() => Promise<TourStep[]>);
+/** Fired after the tour loads the demo diary, so screens that already fetched their data fetch it again. */
+export const TOUR_DATA_EVENT = "clario:tour-data";
+
+/** Id prefix of the demo persona's diary entries (backend `demo.DEMO_ENTRY_PREFIX`). */
+const DEMO_ENTRY_PREFIX = "e_demo_";
+
+/** A tour is a fixed list or one built when it opens (the clinic needs its inbox first). `pkg`: from a `?pkg=` link. */
+export type TourPlan = TourStep[] | ((opts: { pkg?: string }) => Promise<TourStep[]>);
 
 const PAD = 10;
 const RADIUS = 14;
@@ -167,6 +179,7 @@ export function startTour(steps: TourStep[], opts: { navigate: (to: string) => v
     p.wrapper.dataset.testid = "tour";
     p.wrapper.setAttribute("aria-modal", "true");
     if (shownIndex < 0) p.wrapper.classList.add("is-first");
+    p.wrapper.classList.toggle("is-centred", !steps[i]?.target);
     const top = document.createElement("div");
     top.className = "clario-tour-top";
     const dots: HTMLElement[] = [];
@@ -204,6 +217,7 @@ export function startTour(steps: TourStep[], opts: { navigate: (to: string) => v
       popover: {
         title: t(s.title), description: t(s.body),
         showButtons: i === 0 ? ["next", "close"] : ["next", "previous", "close"],
+        ...(s.action ? { doneBtnText: t(s.action.label) } : {}),
       },
     })),
     animate: animated,
@@ -220,8 +234,25 @@ export function startTour(steps: TourStep[], opts: { navigate: (to: string) => v
     prevBtnText: t("tour.back"),
     doneBtnText: t("tour.done"),
     onPopoverRender: decorate,
-    onHighlighted: () => { d.getState("popover")?.nextButton?.focus(); },
-    onNextClick: () => { const i = d.getActiveIndex() ?? 0; if (i >= total - 1) end(); else void go(i + 1); },
+    // focus for Enter and screen readers, without the keyboard ring when the tour opened from a click or a link
+    onHighlighted: () => { d.getState("popover")?.nextButton?.focus({ focusVisible: false } as FocusOptions); },
+    onNextClick: () => {
+      const i = d.getActiveIndex() ?? 0;
+      if (i < total - 1) { void go(i + 1); return; }
+      const action = steps[i].action;
+      if (!action) { end(); return; }
+      const pop = d.getState("popover") as PopoverDOM | undefined;
+      if (pop) { pop.nextButton.disabled = true; pop.previousButton.disabled = true; }
+      // started inside the click, so a new tab it opens is not blocked
+      void action.run().then((err) => {
+        if (!err) { end(); return; }
+        if (pop) {
+          pop.description.textContent = err;
+          pop.description.setAttribute("role", "alert");
+          pop.nextButton.disabled = false; pop.previousButton.disabled = false;
+        }
+      });
+    },
     onPrevClick: () => { const i = d.getActiveIndex() ?? 0; if (i > 0) void go(i - 1); },
     onCloseClick: () => end(),
     onDestroyStarted: () => end(), // Esc and a click on the dimmed page
@@ -253,9 +284,15 @@ export function startTour(steps: TourStep[], opts: { navigate: (to: string) => v
         const r = el!.getBoundingClientRect();
         if (Math.abs(r.x - pos.x) > 0.5 || Math.abs(r.y - pos.y) > 0.5 || Math.abs(r.width - pos.width) > 0.5 || Math.abs(r.height - pos.height) > 0.5) d.refresh();
       }
-    } else if (last !== "c") {
-      blur.style.clipPath = "";
-      ring.classList.remove("is-on");
+    } else {
+      if (last !== "c") {
+        blur.style.clipPath = "";
+        ring.classList.remove("is-on");
+      }
+      // driver.js cuts a padded hole around its zero-size stand-in, which shows as a dot mid-screen: fill it
+      const hole = document.querySelector<SVGPathElement>(".driver-overlay path");
+      const full = `M0 0H${window.innerWidth}V${window.innerHeight}H0Z`;
+      if (hole && hole.getAttribute("d") !== full) hole.setAttribute("d", full);
     }
     last = key;
     raf = requestAnimationFrame(tick);
@@ -317,10 +354,26 @@ export function TourButton({ steps }: { steps: TourPlan }) {
   const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => () => run.current?.stop(), []);
 
-  const open = async () => {
+  // `?tour=1` (the patient tour's hand-over link, with `pkg` = the package it sent) opens the tour once the screen
+  // loads, then leaves the address clean
+  useEffect(() => {
+    const q = new URLSearchParams(loc.search);
+    if (q.get("tour") !== "1") return;
+    const pkg = q.get("pkg") ?? undefined;
+    const lang = q.get("lang");
+    if (lang === "en" || lang === "it") setLang(lang);
+    q.delete("tour"); q.delete("pkg"); q.delete("lang");
+    const rest = q.toString();
+    here.current = loc.pathname + (rest ? `?${rest}` : "");
+    nav(here.current, { replace: true });
+    void open(pkg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const open = async (pkg?: string) => {
     if (run.current) return;
     run.current = { stop: () => {} };
-    const list = typeof steps === "function" ? await steps() : steps;
+    const list = typeof steps === "function" ? await steps({ pkg }) : steps;
     run.current = startTour(list, {
       navigate: (to) => navRef.current(to),
       where: () => here.current,
@@ -329,20 +382,77 @@ export function TourButton({ steps }: { steps: TourPlan }) {
   };
 
   return (
-    <button ref={btn} type="button" className="btn !px-0 w-11 text-lg no-print" onClick={open}
+    <button ref={btn} type="button" className="btn !px-0 w-11 text-lg no-print" onClick={() => void open()}
       aria-label={tt("tour.open")} title={tt("tour.open")} aria-haspopup="dialog" data-testid="tour-open">
       <CircleHelp size={18} aria-hidden />
     </button>
   );
 }
 
-export const PATIENT_TOUR: TourStep[] = [
-  { title: "tour.p1.title", body: "tour.p1.body", route: "/", target: "today-write" },
-  { title: "tour.p2.title", body: "tour.p2.body", route: "/", target: "today-recent" },
-  { title: "tour.p3.title", body: "tour.p3.body", route: "/timeline", target: "timeline-heat", ready: '[data-testid="heat-cell"]' },
-  { title: "tour.p4.title", body: "tour.p4.body", route: "/share", target: "share-period" },
-  { title: "tour.p5.title", body: "tour.p5.body", route: "/privacy", target: "privacy-log" },
-];
+/**
+ * Patient steps. `empty`: no notes yet, so steps 2 and 3 point at where terms and weeks will appear. `clinic`: the
+ * clinic this server shares with; a last step hands over to its console, where the clinic tour starts. `demo`: the
+ * diary holds only the synthetic demo patient, so the hand-over shares it first and the clinic opens that package.
+ * Anything else is never sent from the tour: the person shares it on the Share screen.
+ */
+export function patientTour({ empty, clinic, demo }: { empty: boolean; clinic?: string | null; demo?: boolean }): TourStep[] {
+  const steps: TourStep[] = [
+    { title: "tour.p1.title", body: "tour.p1.body", route: "/", target: "today-write" },
+    empty
+      ? { title: "tour.p2.title", body: "tour.p2.bodyEmpty", route: "/", target: "today-understood" }
+      : { title: "tour.p2.title", body: "tour.p2.body", route: "/", target: "today-recent" },
+    { title: "tour.p3.title", body: empty ? "tour.p3.bodyEmpty" : "tour.p3.body", route: "/timeline", target: "timeline-heat",
+      ready: empty ? undefined : '[data-testid="heat-cell"]' },
+    { title: "tour.pd.title", body: "tour.pd.body", route: "/patterns", target: "patterns" },
+    { title: "tour.pl.title", body: "tour.pl.body", route: "/labs", target: "labs" },
+    { title: "tour.p4.title", body: "tour.p4.body", route: "/share", target: "share-period" },
+    { title: "tour.p5.title", body: "tour.p5.body", route: "/privacy", target: "privacy-log" },
+  ];
+  const base = clinic?.replace(/\/+$/, "");
+  if (!base) return steps;
+  steps.push({
+    title: "tour.p6.title", body: demo ? "tour.p6.bodyDemo" : "tour.p6.body", route: "/share",
+    action: {
+      label: "tour.toClinic",
+      run: async () => {
+        const tab = window.open("", "_blank"); // opened inside the click; the address is set once the package is sent
+        let to = `${base}/?tour=1&lang=${getLang()}`; // the clinic is another origin: carry the language over
+        if (demo) {
+          try {
+            const sent = await api.share({ clinic_url: base, since: daysAgo(84), until: today(), include_patterns: true,
+                                           expires_hours: 72, include_profile: true });
+            to += `&pkg=${encodeURIComponent(sent.package_id)}`;
+          } catch (x) {
+            tab?.close();
+            console.error("tour hand-over: share failed", x);
+            return t("tour.shareFailed");
+          }
+        }
+        if (tab) tab.location.href = to; else window.location.assign(to);
+        return null;
+      },
+    },
+  });
+  return steps;
+}
+
+/** With an empty diary on the demo server the tour loads the synthetic demo patient first, so every step has content. */
+export const PATIENT_TOUR: TourPlan = async () => {
+  const [health, entries] = await Promise.all([api.health().catch(() => null), api.entries().catch(() => [])]);
+  const onDemo = !!health?.demo_instance;
+  let empty = entries.length === 0;
+  // only the persona's own notes (ids from POST /api/demo) count as the demo diary; a note someone typed does not
+  let demoOnly = !empty && entries.every((e) => e.id.startsWith(DEMO_ENTRY_PREFIX));
+  if (empty && onDemo) {
+    try {
+      await api.demo(getLang() === "it" ? "giulia_it" : "giulia");
+      empty = false;
+      demoOnly = true;
+      window.dispatchEvent(new Event(TOUR_DATA_EVENT));
+    } catch { /* the empty-diary steps still explain each screen */ }
+  }
+  return patientTour({ empty, clinic: health?.clinic_url, demo: onDemo && demoOnly });
+};
 
 /** Clinic steps open the first package in the inbox. With an empty inbox the card says how to get one. */
 export function clinicTour(packageId: string | null): TourStep[] {
@@ -357,7 +467,9 @@ export function clinicTour(packageId: string | null): TourStep[] {
   ];
 }
 
-export const CLINIC_TOUR: TourPlan = async () => {
+/** Opens the package a hand-over link names when it is in the inbox, else the newest one. */
+export const CLINIC_TOUR: TourPlan = async ({ pkg } = {}) => {
   const rows = await api.inbox().catch(() => []);
-  return clinicTour(rows[0]?.package_id ?? null);
+  const pick = rows.find((r) => r.package_id === pkg) ?? rows[0];
+  return clinicTour(pick?.package_id ?? null);
 };

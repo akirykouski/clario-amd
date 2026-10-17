@@ -19,7 +19,7 @@ export function DemoBanner() {
     return () => { ro?.disconnect(); document.documentElement.style.removeProperty("--demo-h"); };
   }, []);
   return (
-    <div ref={ref} role="status" data-testid="demo-banner" className="no-print sticky top-0 z-40 w-full px-4 py-2 flex items-center justify-center gap-2 text-sm font-semibold text-center border-b"
+    <div ref={ref} role="status" data-testid="demo-banner" data-tour-inset="top" className="no-print sticky top-0 z-40 w-full px-4 py-2 flex items-center justify-center gap-2 text-sm font-semibold text-center border-b"
       style={{ background: "rgba(255, 228, 214, 0.78)", borderColor: "rgba(255, 138, 107, 0.45)", color: "var(--ink)", WebkitBackdropFilter: "blur(14px)", backdropFilter: "blur(14px)" }}>
       <FlaskConical size={16} aria-hidden className="shrink-0" style={{ color: "var(--moderate)" }} />
       <span>{t("demo.banner")}</span>
