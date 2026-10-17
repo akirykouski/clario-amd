@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { api } from "../api";
-import type { ClinicKey, Profile, ShareResult } from "../types";
+import type { Care, ClinicKey, Profile, ShareResult } from "../types";
 import { daysAgo, fmtDate, today } from "../lib";
 import { ErrorBox } from "../components/ui";
 import { useHealth } from "../components/useHealth";
-import { useT } from "../i18n";
+import { useT, type Key } from "../i18n";
 
 const LS = "clario.clinic_url";
 function lsGet(): string { try { return localStorage.getItem(LS) ?? ""; } catch { return ""; } }
@@ -30,8 +30,11 @@ export default function SharePage() {
   const [age, setAge] = useState("");
   const [sex, setSex] = useState<NonNullable<Profile["sex"]> | "">("");
   const [withProfile, setWithProfile] = useState(true);
+  const [second, setSecond] = useState(false);
+  const [care, setCare] = useState<Care | null>(null);
   useEffect(() => {
     api.profile().then((p) => { setAge(p.age ? String(p.age) : ""); setSex(p.sex ?? ""); }).catch(() => {});
+    api.care().then(setCare).catch(() => setCare(null));
   }, []);
 
   const checkKey = async () => {
@@ -45,7 +48,7 @@ export default function SharePage() {
       const n = Number(age);
       await api.saveProfile({ age: age.trim() && Number.isFinite(n) ? Math.round(n) : null, sex: sex || null });
       setRes(await api.share({ clinic_url: url.trim(), since: daysAgo(weeks * 7), until: today(), include_patterns: patterns, note: note.trim() || null,
-                               expires_hours: hours, include_profile: withProfile }));
+                               expires_hours: hours, include_profile: withProfile, second_opinion: second }));
     } catch (x) { setErr((x as Error).message); }
     setBusy(false);
   };
@@ -85,6 +88,15 @@ export default function SharePage() {
       </div>
       <div><label className="label" htmlFor="nt">{t("share.noteLabel")}</label>
         <textarea id="nt" className="input min-h-[90px]" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("share.notePlaceholder")} /></div>
+      <fieldset className="card space-y-2" data-testid="share-second">
+        <legend className="sr-only">{t("share.second")}</legend>
+        <label className="flex items-center gap-2 min-h-[44px] font-bold"><input type="checkbox" className="w-5 h-5 accent-[var(--accent)]" checked={second} onChange={(e) => setSecond(e.target.checked)} />{t("share.second")}</label>
+        <p className="text-sm text-muted">{t("share.secondHint")}</p>
+        {second && <p className="text-sm" data-testid="share-second-previous">{care?.previous
+          ? t("share.secondPrevious", { who: care.previous.clinician, date: care.previous.date ? fmtDate(care.previous.date, { day: "numeric", month: "long" }) : "?" })
+          : t("share.secondNoPrevious")}</p>}
+        {care && (care.tried.length > 0 || care.tested.length > 0) && <CareList care={care} />}
+      </fieldset>
       <fieldset className="card space-y-2" data-testid="share-about">
         <legend className="label px-1">{t("share.about")}</legend>
         <p className="text-sm text-muted">{t("share.aboutHint")}</p>
@@ -105,8 +117,26 @@ export default function SharePage() {
         </select></div>
       {err && <ErrorBox error={err} />}
       <div className="sticky bottom-[72px] lg:static py-2 bg-paper/90">
-        <button className="btn btn-primary w-full" onClick={send} disabled={busy || !key}>{busy ? t("common.sending") : key ? t("share.send") : t("share.checkFirst")}</button>
+        <button className="btn btn-primary w-full" onClick={send} disabled={busy || !key}>{busy ? t("common.sending") : !key ? t("share.checkFirst") : second ? t("share.sendSecond") : t("share.send")}</button>
       </div>
+    </div>
+  );
+}
+
+/** What was already tried and tested: facts that go with every share. Never the previous doctor's conclusions. */
+function CareList({ care }: { care: Care }) {
+  const { t } = useT();
+  return (
+    <div className="border-t border-line pt-2 space-y-2 text-sm" data-testid="share-care">
+      {care.tried.length > 0 && <div><p className="font-bold">{t("share.tried")}</p>
+        <ul className="space-y-0.5">{care.tried.map((x, i) => (
+          <li key={i}>{x.treatment}{x.duration ? `, ${x.duration}` : ""}: <span className={x.effect === "none" || x.effect === "worse" ? "font-bold" : ""}>{t(`effect.${x.effect}` as Key)}</span></li>
+        ))}</ul></div>}
+      {care.tested.length > 0 && <div><p className="font-bold">{t("share.tested")}</p>
+        <ul className="space-y-0.5">{care.tested.map((x, i) => (
+          <li key={i}>{x.test}: {x.result}{x.date ? <span className="text-muted"> ({fmtDate(x.date)})</span> : null}</li>
+        ))}</ul></div>}
+      <p className="text-muted">{t("share.careHint")}</p>
     </div>
   );
 }
@@ -126,6 +156,7 @@ function Success({ res, onAgain }: { res: ShareResult; onAgain: () => void }) {
       <div className="card space-y-1" role="status">
         <p className="font-bold text-lg">{t("share.validUntil", { date: fmtDate(res.expires_at, { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) })}</p>
         <p>{t("share.counts", { entries: res.entries, m: res.mentions ?? res.entities, t: res.terms ?? res.entities })}</p>
+        {res.second_opinion && <p data-testid="share-sent-second">{t("share.sentSecond")}</p>}
         <p className="text-xs text-muted">{t("share.package")} <span className="font-mono break-all">{res.package_id}</span></p>
       </div>
       <div className="card flex flex-col items-center gap-2">

@@ -42,6 +42,10 @@ PHRASES = [
     ("proteine nelle urine", "Proteinuria", "HP:0000093"), ("globuli bianchi un po' bassi", "Leukopenia", "HP:0001882"),
     ("caviglie un po' gonfie", "Edema of the lower limbs", "HP:0010741"), ("mal di testa", "Headache", "HP:0002315"),
     ("pomeriggio di sole", "Sun exposure", None),
+    # past history (clario/past.py): the model lists them like any term; code marks them past from the clause
+    ("knee surgery", "Knee surgery", None, "finding"), ("operazione al ginocchio", "Knee surgery", None, "finding"),
+    ("asthma", "Asthma", "HP:0002099"), ("l'asma", "Asthma", "HP:0002099"),
+    ("thyroid was removed", "Thyroidectomy", None, "finding"), ("tolto la tiroide", "Thyroidectomy", None, "finding"),
     ("il lupus", "Systemic lupus erythematosus", None, "finding"),
     ("has lupus", "Systemic lupus erythematosus", None, "finding"),
 ]
@@ -50,7 +54,9 @@ PHRASES = [
 HEDGE = re.compile(r"\b(maybe|perhaps|i think|not sure|forse|mi sembra)\b")
 NEGATION = re.compile(r"\b(niente|nessuna|nessun|senza|non ho)\s+(?:\w+\s+){0,2}$")
 RELATIVE = re.compile(r"\b(my|mia|mio)\s+(mother|father|sister|brother|madre|padre|sorella|fratello)\b[^.;!?]{0,30}$")
-ONSET = re.compile(r"\b(da (?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica|ieri|stamattina|\w+ (?:giorni|settimane|mesi))|since \w+)")
+# A model often puts "5 years ago" or "as a child" in onset_hint too: the fixture does, so the code that clears it is exercised.
+ONSET = re.compile(r"\b(da (?:lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica|ieri|stamattina|\w+ (?:giorni|settimane|mesi))|"
+                   r"since \w+|\w+ years ago|\w+ anni fa|as a child|da bambin[oa])")
 
 
 def _stats(tokens: int = 60) -> Stats:

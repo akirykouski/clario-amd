@@ -26,7 +26,8 @@ export default function Inbox() {
           <tbody>
             {data.map((r) => (
               <tr key={r.package_id} className="border-b border-line last:border-0 hover:bg-paper">
-                <td className="px-3 py-2"><Link className="font-bold text-accent underline underline-offset-4" to={`/p/${r.package_id}`}>{r.patient_alias}</Link></td>
+                <td className="px-3 py-2"><Link className="font-bold text-accent underline underline-offset-4" to={`/p/${r.package_id}`}>{r.patient_alias}</Link>
+                  {r.second_opinion && <span className="chip text-xs ml-2" data-testid="inbox-second">{t("so.chip")}</span>}</td>
                 <td className="px-3 py-2">{t("share.range", { a: fmtDate(r.period[0]), b: fmtDate(r.period[1]) })}</td>
                 <td className="px-3 py-2">{fmtDate(r.received_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
                 <td className="px-3 py-2">{fmtDate(r.expires_at)}</td>

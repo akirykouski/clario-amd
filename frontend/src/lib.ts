@@ -1,5 +1,5 @@
-import { getLang, t, type Key } from "./i18n";
-import type { BriefItem, Evidence } from "./types";
+import { getLang, t, tn, type Key } from "./i18n";
+import type { BriefItem, Evidence, PastRef } from "./types";
 
 /** Fired whenever the review queue may have changed (extraction finished, a decision, an import), so the nav badge refetches. */
 export const REVIEW_EVENT = "clario-review-changed";
@@ -174,4 +174,17 @@ export function reorderDelta(before: string[], after: string[]): Record<string, 
     if (b >= 0) out[id] = after.indexOf(id) - b;
   }
   return out;
+}
+
+/** When a past-history term happened, in plain words: "about 5 years ago", "in childhood", "nel 2019". With `around`,
+ *  the approximate date the server computed is added for the clinician: "about 5 years ago (around 2021)". */
+export function pastWhen(p: PastRef, around = false): string {
+  if (p.kind === "childhood") return t("past.childhood");
+  if (p.kind === "past") return t("past.past");
+  if (p.kind === "year") return t("past.year", { n: p.n ?? "" });
+  const month = p.unit === "month";
+  const out = p.n === null ? t(month ? "past.someMonths" : "past.someYears") : tn(month ? "past.ago_month" : "past.ago_year", p.n);
+  if (!around || !p.approx_date) return out;
+  const d = month ? fmtDate(p.approx_date, { month: "short", year: "numeric" }) : p.approx_date.slice(0, 4);
+  return `${out} (${t(month ? "past.aroundMonth" : "past.around", { d })})`;
 }

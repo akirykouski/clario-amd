@@ -67,7 +67,11 @@ def test_default_path_is_eval_results_and_shipped_file_is_dry_run(clean_env):
     # no env: the repo's own eval/results/conformal_threshold.json is looked up; the committed one is a labelled fixture
     shipped = ROOT / "eval" / "results" / "conformal_threshold.json"
     s = Settings.from_env()
-    if shipped.exists() and not json.loads(shipped.read_text()).get("dry_run"):
+    d = json.loads(shipped.read_text()) if shipped.exists() else {}
+    if d and not d.get("dry_run") and d.get("threshold") is None:  # a real run that certified nothing: fixed threshold
+        assert s.review_source == "env" and s.review_threshold == 0.7
+        assert s.review_calibration_status == "no_valid_threshold"
+    elif d and not d.get("dry_run"):
         assert s.review_source == "conformal"
     else:
         assert s.review_source == "env" and s.review_threshold == 0.7

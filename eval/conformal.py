@@ -117,18 +117,22 @@ def evaluate(pairs, threshold):
             "error": (sum(1 - ok for ok in acc) / len(acc)) if acc else None}
 
 
-def load_rows(path, source="auto"):
+def load_rows(path, source="auto", correct="raw"):
     """-> (rows [(confidence, correct, group)], meta dict with dataset/model/backend/dry_run/confidence_source)."""
     d = json.load(open(path))
-    meta = {k: d.get(k) for k in ("dataset", "model", "backend", "dry_run")}
+    meta = {k: d.get(k) for k in ("dataset", "model", "backend", "dry_run", "hardware", "label", "n", "subsample")}
+    meta["n_diaries"] = meta.pop("n")
     rows = []
     if isinstance(d, dict) and d.get("per_item"):
         field, src = review_curve.pick_field(d, source)
+        ok = review_curve.correct_field(d, correct)
         meta["confidence_source"] = review_curve.SOURCE_TEXT[src]
+        meta["correctness"] = review_curve.CORRECT_TEXT[correct]
+        meta["source_result"] = os.path.basename(path)
         for i, it in enumerate(d["per_item"]):
             for e in it["entities"]:
                 if e.get(field) is not None:
-                    rows.append((float(e[field]), int(e["correct"]), it.get("id") if it.get("id") is not None else f"item{i}"))
+                    rows.append((float(e[field]), int(e[ok]), it.get("id") if it.get("id") is not None else f"item{i}"))
     else:
         pairs = d["pairs"] if isinstance(d, dict) else d
         meta["confidence_source"] = (d.get("confidence_source") if isinstance(d, dict) else None) or "as given in the file"
@@ -172,6 +176,9 @@ def build(rows, meta, alphas, delta=0.1, grid=20, cal_frac=0.5, seed=0):
             "n_calibration": len(cal), "n_heldout": len(held), "grid": grid, "split_seed": seed, "split_fraction": cal_frac,
             "split_unit": "diary (all entities of one diary on the same side)",
             "confidence_source": meta.get("confidence_source"), "method": METHOD, "by_alpha": by_alpha,
+            **{k: meta[k] for k in ("correctness", "hardware", "source_result", "n_diaries", "subsample", "label")
+               if meta.get(k) is not None},
+            "n_unit": "entities (predicted terms with a confidence)",
             "guarantee": f"with probability >= {1 - delta:g} over the calibration draw, the error rate of auto-accepted entities is <= alpha, "
                          "for data like the calibration set. Precision of accepted entities only: entities the model never output are not covered.",
             **({"note": "synthetic fixture, no model; checks the code path only. The app ignores this file."} if meta.get("dry_run") else {})}
@@ -186,6 +193,8 @@ def main(argv=None):
     ap.add_argument("--cal-frac", type=float, default=0.5, help="share of diaries used for calibration, the rest is held out")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--source", default="auto", choices=["auto", "sc", "verbalized"])
+    ap.add_argument("--correct", default="raw", choices=["raw", "resolved"],
+                    help="entity correctness: model's own HPO id (raw) or after the app's ontology resolver (resolved)")
     ap.add_argument("--dry-run", action="store_true", help="use a labelled synthetic fixture and write dry_run: true")
     ap.add_argument("--out", default=DEFAULT_OUT)
     a = ap.parse_args(argv)
@@ -197,7 +206,7 @@ def main(argv=None):
         meta = {"dataset": "synthetic-dry-run-fixture", "model": "none", "backend": "offline-dry-run", "dry_run": True,
                 "confidence_source": "invented numbers (no model)"}
     elif a.input:
-        rows, meta = load_rows(a.input, a.source)
+        rows, meta = load_rows(a.input, a.source, a.correct)
     else:
         ap.error("give an input file or --dry-run")
     if not rows:

@@ -30,6 +30,18 @@ class Term(BaseModel):
     label: str
 
 
+class PastRef(BaseModel):
+    """The term is past history: the note mentions it as something that happened long before ("knee surgery 5 years
+    ago", "as a child I had asthma"). Read in code from the clause around the quote (clario/past.py), never by the model."""
+
+    kind: Literal["ago", "year", "childhood", "past"] = Field(
+        description="ago: N years or months before the note; year: an explicit year; childhood: as a child; past: no time given")
+    n: int | None = Field(None, description="ago: the amount (null for 'a few'); year: the year")
+    unit: Literal["year", "month"] | None = Field(None, description="ago: years or months")
+    approx_date: str | None = Field(None, description="ISO date, approximate (first of the month or year); null when unknown")
+    cue: str = Field("", description="The time words as the patient wrote them ('5 years ago', 'da bambina')")
+
+
 class Entity(BaseModel):
     """One thing extracted from a diary entry, grounded in a verbatim quote."""
 
@@ -48,7 +60,8 @@ class Entity(BaseModel):
     review: Review = Field("auto", description="auto: counted, nobody looked at it; needs_review: counted, confidence below "
                                                "threshold, flagged for the clinician; confirmed, corrected, rejected: decided "
                                                "by a person (rejected never counts)")
-    flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, no_hpo, onset_dropped, quote_not_found")
+    flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, no_hpo, onset_dropped, quote_not_found, past_from_text")
+    past: PastRef | None = Field(None, description="Past history, not a current finding: kept, never counted as this note's term")
     model: str | None = None
 
 
@@ -136,6 +149,8 @@ class ShareRequest(BaseModel):
     note: str | None = Field(None, description="What the patient wants to ask at the visit")
     expires_hours: int = Field(72, ge=1, le=720)
     include_profile: bool = Field(True, description="Send the age and sex the patient entered, if any")
+    second_opinion: bool = Field(False, description="Send to another doctor for a second opinion: the previous doctor's "
+                                 "conclusions travel apart and the clinic shows them only after the new doctor signs")
 
 
 class SharedEntity(BaseModel):
@@ -154,6 +169,7 @@ class SharedEntity(BaseModel):
     from_question: bool = Field(False, description="The patient answered a question the app asked; `quote` is the app's question, not the patient's words")
     confidence: float | None = Field(None, ge=0, le=1, description="Extraction confidence, null when not measured")
     needs_review: bool = Field(False, description="Confidence below the threshold: the clinician is asked to check it")
+    past: PastRef | None = Field(None, description="Past history (clario/past.py): listed apart, not a current finding")
 
 
 class SharedLab(BaseModel):
@@ -177,7 +193,54 @@ class SharedLab(BaseModel):
     test_key: str = Field("", description="Folded test name: groups the same test across documents into one history")
     name_en: str | None = Field(None, description="English name of a known test, for an English clinic UI; test_name is as printed")
     abnormal: bool = Field(False, description="Flag is low, high or positive (out of range)")
-    decision: Literal["confirmed", "rejected"] | None = Field(None, description="The clinic's decision on a row that needed a check; set by the clinic server, absent in the sealed package")
+    decision: Literal["confirmed", "rejected", "corrected"] | None = Field(None, description="The clinic's decision on a row that needed a check; set by the clinic server, absent in the sealed package")
+    checks: list[str] = Field(default_factory=list, description="Code checks the reading failed on the device (documents.CHECKS)")
+    crop: str | None = Field(None, description="The printed row cut from the report page, a JPEG data URL (no page header, no name); "
+                             "null when the row has no position (photo or scan) or the size budget was spent")
+    corrected_from: dict | None = Field(None, description="Set by the clinic server when the clinician corrected the reading: "
+                                        "{value_numeric, value_text, unit} as it was read")
+
+
+# ---------------------------------------------------------------- second opinion: facts vs conclusions
+TreatmentEffect = Literal["none", "partial", "good", "worse", "unknown"]
+
+
+class TriedTreatment(BaseModel):
+    """A fact: something the patient already tried, how long, and what it did. Shared with every doctor."""
+
+    treatment: str = Field(description="What was tried, as the patient or the letter names it")
+    started: str | None = Field(None, description="ISO date it started, when known")
+    duration: str | None = Field(None, description="How long, in words ('2 weeks')")
+    effect: TreatmentEffect = "unknown"
+    note: str | None = Field(None, description="What happened, in plain words (never why it was prescribed)")
+
+
+class PriorTest(BaseModel):
+    """A fact: a test already done and its result. Shared with every doctor."""
+
+    test: str
+    date: str | None = None
+    result: str
+    abnormal: bool | None = Field(None, description="True out of range, False in range, null when the result says neither")
+
+
+class PriorCondition(BaseModel):
+    name: str
+    disease_id: str | None = Field(None, description="ORPHA or OMIM id when the condition is in the shipped ontology")
+
+
+class PriorOpinion(BaseModel):
+    """The previous doctor's conclusions. Never shown to the patient (condition names), never used by the ranking. In a
+    second-opinion package the clinic server holds them back from every view, the brief model and the differential until
+    the new doctor has finalized the brief; then `GET /api/inbox/{id}/compare` shows them side by side."""
+
+    clinician: str = Field(description="Who gave it, e.g. 'GP'")
+    date: str | None = None
+    diagnosis: list[PriorCondition] = Field(default_factory=list)
+    conditions: list[PriorCondition] = Field(default_factory=list, description="Conditions the doctor considered")
+    accepted: list[str] = Field(default_factory=list, description="Lines the doctor accepted")
+    rejected: list[str] = Field(default_factory=list, description="Lines the doctor set aside")
+    notes: str | None = None
 
 
 class SharePackage(BaseModel):
@@ -197,6 +260,11 @@ class SharePackage(BaseModel):
     entities: list[SharedEntity]
     labs: list[SharedLab] = Field(default_factory=list)
     patterns: list[Pattern] = Field(default_factory=list)
+    second_opinion: bool = Field(False, description="Sent for a second opinion")
+    tried: list[TriedTreatment] = Field(default_factory=list, description="Facts: already tried, with the effect")
+    tested: list[PriorTest] = Field(default_factory=list, description="Facts: already tested, with the result")
+    previous: PriorOpinion | None = Field(None, description="Conclusions: only in a second-opinion package, held back by "
+                                          "the clinic server until the brief is final (share.facts_only)")
 
 
 class BriefItem(BaseModel):
@@ -216,6 +284,8 @@ class BriefItem(BaseModel):
     kind: Literal["patient_note"] | None = Field(None, description="patient_note: `text` is the patient's own question, the UI adds the label")
     pages: list[int] = Field(default_factory=list, description="Lab lines: report pages the values were read from")
     from_question: bool = Field(False, description="Symptom line the patient confirmed by answering a question the app asked")
+    specialties: list[str] = Field(default_factory=list, description="Clinician copy: specialties the line belongs to "
+                                   "(rheumatology, nephrology), set in code from HPO organ systems and lab tests (clario/specialty.py); empty means general practice only")
 
 
 class Brief(BaseModel):
@@ -341,6 +411,9 @@ class LabResult(BaseModel):
     confidence: float | None = Field(None, ge=0, le=1, description="Self-consistency or model confidence")
     review: LabReview = "auto"
     model: str | None = None
+    checks: list[str] = Field(default_factory=list, description="Code checks the reading failed (documents.CHECKS): why it waits for a person")
+    box: list[float] | None = Field(None, description="Where the row is printed on the page: [x0, y0, x1, y1] as fractions of the page, "
+                                    "origin top left; from the PDF text layer, null for photos and scans")
 
 
 class LabValue(BaseModel):

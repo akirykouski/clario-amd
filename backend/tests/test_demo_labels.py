@@ -74,7 +74,13 @@ def test_demo_referti_load_without_ocr(unlocked, no_model):
     r = unlocked.post("/api/demo/documents").json()
     assert r["pages"] == 3
     labs = unlocked.get("/api/labs").json()
-    assert labs["n_results"] == 48 and labs["needs_review"] == 0  # what the live MinerU table read gave
+    # the live MinerU table read gave 48 of 48 right; two rows are stored as deliberate misreads (LABELS.md) and the
+    # code checks against the page's text layer send exactly those two to the clinician
+    assert labs["n_results"] == 48 and labs["needs_review"] == 2
+    unsure = sorted((d["test_name"], d["value_numeric"], tuple(d["checks"])) for d in unlocked.app.state.vault.all("lab")
+                    if d["review"] == "needs_review")
+    assert unsure == [("Emoglobina", 1.1, ("not_on_page", "implausible")), ("Sodio", 141.0, ("not_on_page",))]
+    assert all(d["model"].startswith(PRECOMPUTED) and d["box"] for d in unlocked.app.state.vault.all("lab"))
     assert no_model == []
     with unlocked.stream("GET", f"/api/documents/batch/{r['batch_id']}/events") as s:
         ev = next(json.loads(line[5:]) for line in s.iter_lines() if line.startswith("data:"))
@@ -152,3 +158,32 @@ def test_italian_screens_have_an_italian_name_for_every_demo_term():
                     assert x["hpo_id"] in hpo_it(), x["hpo_id"]
                 if x["family_history"]:
                     assert x["hpo_id"] is None  # a relative's condition is never a code or a condition name for her
+
+
+# ------------------------------------------------------------------ loading twice (#12)
+def counts(client) -> dict[str, int]:
+    v = client.app.state.vault
+    return {k: len(v.all(k)) for k in ("entry", "lab", "docpage", "docbatch", "care", "profile")}
+
+
+def test_loading_the_demo_twice_replaces_it(unlocked, no_model):
+    unlocked.post("/api/entries", json={"text": "My own note, not part of the demo."})
+    unlocked.post("/api/demo", json={"persona": "giulia"})
+    unlocked.post("/api/demo/documents")
+    first = counts(unlocked)
+    first_labs = unlocked.get("/api/labs").json()
+    assert first["entry"] == len(PERSONAS["giulia"]) + 2 and first["lab"] == 48  # persona + own note + import entry
+
+    unlocked.post("/api/demo", json={"persona": "giulia"})
+    unlocked.post("/api/demo/documents")
+    assert counts(unlocked) == first
+    again = unlocked.get("/api/labs").json()
+    assert (again["n_results"], again["needs_review"]) == (first_labs["n_results"], first_labs["needs_review"])
+    texts = [e["text"] for e in unlocked.get("/api/entries").json()]
+    assert len(texts) == len(set(texts)) and "My own note, not part of the demo." in texts
+
+    # switching persona replaces too: the Italian diary instead of the English one, not on top of it
+    unlocked.post("/api/demo", json={"persona": "giulia_it"})
+    assert counts(unlocked) == first
+    texts = {e["text"] for e in unlocked.get("/api/entries").json()}
+    assert {t for _d, t, _m in PERSONAS["giulia_it"]} <= texts and not {t for _d, t, _m in PERSONAS["giulia"]} & texts

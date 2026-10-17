@@ -33,6 +33,7 @@ Fine-tuning runs off AMD (own GPU or Kaggle) and the README says so. The AMD rul
 | Clinic | "Patient at a glance" in plain words, questions taken from the notes | `backend/clario/overview.py`, `clinic/PackagePage.tsx` |
 | Clinic | Named conditions to consider (Orphanet/OMIM links, recorded vs typical missing), interactive next best question with per-condition frequency, live re-rank | `backend/clario/clinic_ddx.py`, `clinic/Differential.tsx` |
 | Clinic | Unsure terms and lab readings listed for confirm/reject | `clinic/PackagePage.tsx` (NeedsCheck) |
+| Clinic | Second opinion: facts (diary, labs, already tried with effect, already tested) travel, the previous doctor's conclusions stay hidden until the new doctor signs, then a side-by-side comparison | `backend/clario/second_opinion.py`, `clinic/SecondOpinion.tsx` |
 | Patterns | Signal cut-offs calibrated on 1,200 simulated patients | `eval/results/pattern_calibration.json` |
 | Data | Lay lexicon + 2,992 synthetic diaries (train 2,392 / val 300 / test 300) by Gemma 4 31B on AMD Token Factory, published | [HF: m0rtyddd/clario-synth-v3](https://huggingface.co/datasets/m0rtyddd/clario-synth-v3) |
 | Training | QLoRA on 16 GB GPUs, in-process eval, retries for shared quotas | `train/train_rocm.py`, `train/eval.py` |

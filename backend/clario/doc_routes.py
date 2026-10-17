@@ -18,6 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 from . import documents as docs
 from . import gpu as gpumetrics
 from .config import Settings
+from .demo import DEMO_BATCH_PREFIX
 from .review import LabReviewKind, register_review_kind
 from .share import now_iso
 from .models import Entry, LabResult, LabsResponse, LabTest, LabValue
@@ -30,6 +31,8 @@ MAX_FILE_BYTES = 60 * 1024 * 1024
 # provenance of the demo referti rows: what produced them, never a claim of a live call (data/demo/LABELS.md)
 PRECOMPUTED_LABS = ("precomputed: MinerU2.5-Pro OCR on AMD Token Factory, table read in code, "
                     "checked against the truth file (eval/results/documents_tf-mineru-table.json)")
+PRECOMPUTED_MISREAD = ("precomputed: deliberate demo misread, not from a live read (data/demo/LABELS.md); "
+                      "the page prints a different value and the code checks send it to the clinician")
 FINISHED_TTL = 15 * 60  # seconds a finished batch stays readable for its progress stream, then dropped
 
 
@@ -73,14 +76,25 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         b["labs"] += 1
         b["needs_review"] += lab.review == "needs_review"
 
-    def store_precomputed(bid: str, pages: list[list[dict]]) -> None:
+    def store_precomputed(bid: str, pages: list[list[dict]], page_info: list[docs.Page]) -> None:
         """Demo referti: the rows a live read of these pages gives (OCR, table read in code), stored without a call.
-        Same review rule as the live table path: clean cells get docs.TABLE_CONFIDENCE, flags recomputed in code."""
+        Same review rule as the live table path: clean cells get docs.TABLE_CONFIDENCE, flags recomputed in code, and
+        the same code checks against the page's own text layer (a deliberate demo misread fails them)."""
         b = batches[bid]
         for i, rows in enumerate(pages):
+            pg = page_info[i] if i < len(page_info) else None
             for r in rows:
+                r = dict(r)
+                misread = r.pop("demo_misread", False)
+                conf = docs.TABLE_CONFIDENCE
+                checks = docs.code_checks(r, page_text=pg.text if pg else None, confidence=conf, threshold=s.review_threshold)
+                if any(k != "low_confidence" for k in checks):
+                    conf = min(conf, docs.UNGROUNDED_CAP)
                 store_row(bid, {**r, "flag": docs.compute_flag(r["value_numeric"], r["ref_low"], r["ref_high"], r["flag"], r["value_text"]),
-                                "page": i + 1, "confidence": docs.TABLE_CONFIDENCE, "review": "auto"}, PRECOMPUTED_LABS)
+                                "page": i + 1, "confidence": conf, "review": "needs_review" if checks else "auto",
+                                "checks": checks,
+                                "box": docs.locate_row(pg.lines if pg else None, r["test_name"], r["value_numeric"], r["value_text"])},
+                          PRECOMPUTED_MISREAD if misread else PRECOMPUTED_LABS)
             b["done"] += 1
         b["finished"] = time.monotonic()
 
@@ -129,13 +143,31 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
             raise HTTPException(422, "Add at least one PDF or image")
         return start_batch(pages)
 
-    def start_batch(pages: list[docs.Page], shift_days: int = 0, precomputed: list[list[dict]] | None = None) -> dict:
+    def drop_batch(bid: str, entry_id: str) -> None:
+        """Delete a stored batch: its page images, its diary entry, its lab rows and the batch record."""
+        for d in vault.all("lab"):
+            if d["batch_id"] == bid:
+                vault.delete(d["id"])
+        for d in vault.all("docpage"):
+            if d["batch_id"] == bid:
+                vault.delete(f"{bid}_p{d['page']}")
+        vault.delete(entry_id)
+        vault.delete(bid)
+        batches.pop(bid, None)
+
+    def start_batch(pages: list[docs.Page], shift_days: int = 0, precomputed: list[list[dict]] | None = None,
+                    demo: bool = False) -> dict:
         """Store the pages encrypted, add the diary entry, start reading in the background. `precomputed` (the demo
-        referti): rows per page already read, stored at once instead of reading the pages."""
+        referti): rows per page already read, stored at once instead of reading the pages. `demo`: replace an earlier
+        import of the demo referti instead of adding a second copy."""
         now_m = time.monotonic()
         for k in [k for k, b in batches.items() if b["finished"] is not None and now_m - b["finished"] > FINISHED_TTL]:
             del batches[k]
-        bid = f"b_{uuid.uuid4().hex[:10]}"
+        if demo:
+            for d in vault.all("docbatch"):
+                if d["batch_id"].startswith(DEMO_BATCH_PREFIX):
+                    drop_batch(d["batch_id"], d["entry_id"])
+        bid = f"{DEMO_BATCH_PREFIX if demo else 'b_'}{uuid.uuid4().hex[:10]}"
         now = now_iso()
         occurred = docs.today_iso()
         for i, p in enumerate(pages):
@@ -149,7 +181,7 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
                         "started": time.monotonic(), "finished": None, "entry_id": entry.id, "occurred_on": occurred,
                         "shift_days": shift_days, "precomputed": precomputed is not None}
         if precomputed is not None:
-            store_precomputed(bid, precomputed)
+            store_precomputed(bid, precomputed, pages)
         else:
             spawn(run_batch(bid, pages))
         return {"batch_id": bid, "pages": len(pages), "entry_id": entry.id}

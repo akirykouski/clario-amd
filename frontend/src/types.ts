@@ -6,11 +6,17 @@ export type Extraction = "pending" | "done" | "failed";
 
 export interface Term { hpo_id: string; label: string }
 
+/** Past history read from the note's words ("5 years ago", "as a child"): not a current finding. */
+export interface PastRef {
+  kind: "ago" | "year" | "childhood" | "past"; n: number | null; unit: "year" | "month" | null;
+  approx_date: string | null; cue: string;
+}
+
 export interface Entity {
   id: string; entry_id: string; type: EntityType; quote: string; canonical: string;
   hpo_id: string | null; hpo_label: string | null; negated: boolean; severity: number | null;
   family_history: boolean; onset_hint: string | null; confidence: number | null; review: EntityReview;
-  flags: string[]; model: string | null;
+  flags: string[]; model: string | null; past?: PastRef | null;
 }
 
 export interface ReviewItem {
@@ -50,6 +56,8 @@ export interface PatientPattern {
 export interface ShareRequest {
   clinic_url: string; since: string; until: string; include_patterns: boolean;
   note?: string | null; expires_hours: number; include_profile?: boolean;
+  /** Send for a second opinion: the previous doctor's conclusions are shown to the new doctor only after they sign. */
+  second_opinion?: boolean;
 }
 export interface Profile { age?: number | null; sex?: "female" | "male" | "other" | null }
 
@@ -57,18 +65,50 @@ export interface SharedEntity {
   id?: string | null; confidence?: number | null; needs_review?: boolean;
   entry_id: string; occurred_on: string; type: EntityType; quote: string; canonical: string;
   hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; onset_hint?: string | null; reviewed: boolean; from_question?: boolean;
+  past?: PastRef | null;
 }
 
 export interface SharedLab {
   test_name: string; value_numeric: number | null; value_text: string | null; unit: string; ref_low: number | null;
   ref_high: number | null; flag: LabFlag | null; date: string; page: number; entry_id: string | null; reviewed: boolean;
   confidence?: number | null; needs_review?: boolean; id: string | null; test_key: string; name_en: string | null; abnormal: boolean;
-  decision: "confirmed" | "rejected" | null;
+  decision: "confirmed" | "rejected" | "corrected" | null;
+  /** Code checks the reading failed on the device (why it waits for the clinician). */
+  checks?: string[];
+  /** The printed row cut from the report page, a JPEG data URL; null for photos and scans. */
+  crop?: string | null;
+  /** What was read, when the clinician corrected the reading. */
+  corrected_from?: LabReading | null;
 }
+
+export interface LabReading { value_numeric: number | null; value_text: string | null; unit: string }
+export interface LabFix { from: LabReading; to: LabReading; at: string }
+/** A corrected reading: `value` as printed ("11,0", "Positivo 1:160"), optionally the unit. */
+export interface LabCorrection { value: string; unit?: string }
 
 export interface SharePackage {
   package_id: string; patient_alias: string; created_at: string; expires_at: string;
   period: [string, string]; note: string | null; profile?: Profile | null; entries: Entry[]; entities: SharedEntity[]; labs: SharedLab[]; patterns: Pattern[];
+  /** Second opinion: facts (`tried`, `tested`) are shown; `previous` (conclusions) is always null here until `/compare`. */
+  second_opinion?: boolean; tried?: TriedTreatment[]; tested?: PriorTest[]; previous?: PriorOpinion | null;
+}
+
+// ---- second opinion: facts (shared) vs conclusions (held back until the new doctor signs)
+export type TreatmentEffect = "none" | "partial" | "good" | "worse" | "unknown";
+export interface TriedTreatment { treatment: string; started?: string | null; duration?: string | null; effect: TreatmentEffect; note?: string | null }
+export interface PriorTest { test: string; date?: string | null; result: string; abnormal?: boolean | null }
+export interface PriorCondition { name: string; disease_id?: string | null }
+export interface PriorOpinion {
+  clinician: string; date?: string | null; diagnosis: PriorCondition[]; conditions: PriorCondition[];
+  accepted: string[]; rejected: string[]; notes?: string | null;
+}
+/** Patient side: facts, and only who gave the previous opinion and when (its conclusions name conditions). */
+export interface Care { tried: TriedTreatment[]; tested: PriorTest[]; previous: { clinician: string; date?: string | null } | null }
+export interface CompareRow { name: string; disease_id: string | null; previous: "diagnosis" | "considered" | null; current_rank: number | null; agree: boolean }
+export interface Comparison {
+  previous: PriorOpinion | null;
+  current: { conditions: { disease_id: string; name: string; rank: number; signal: string | null }[]; accepted: string[]; rejected: string[]; finalized_at: string | null } | null;
+  rows: CompareRow[]; disagreements: number; since_previous: string[];
 }
 
 export type BriefSection = "summary" | "timeline" | "symptoms" | "labs" | "medications" | "patterns" | "questions";
@@ -78,7 +118,11 @@ export interface BriefItem {
   id: string; section: BriefSection; text: string; cites: string[];
   origin: "patient" | "ai" | "document"; review: BriefReview; flag?: "citation_mismatch" | null;
   flag_term?: string | null; flag_entries?: string[]; kind?: "patient_note" | null; pages?: number[]; from_question?: boolean;
+  /** Clinician copy: specialties the line belongs to, set in code by the server; empty = general practice only */
+  specialties?: Specialty[];
 }
+
+export type Specialty = "rheumatology" | "nephrology";
 
 export type Persona = "giulia" | "giulia_it";
 export type BriefView = { audience?: "clinician" | "patient"; lang?: "en" | "it" };
@@ -115,11 +159,12 @@ export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms:
 export interface ShareResult {
   package_id: string; clinic_url: string; expires_at: string; qr_payload: string; entities: number; entries: number;
   mentions?: number; terms?: number; labs?: number;  // entities = mentions: patient terms only, no negated, no family history
+  second_opinion?: boolean; tried?: number; tested?: number;
 }
 export interface ClinicKey { public_key: string; fingerprint: string; clinic_name: string }
 export interface InboxRow {
   package_id: string; patient_alias: string; period: [string, string]; received_at: string;
-  expires_at: string; entities: number; terms?: number; mentions?: number; labs?: number; brief_state: string;
+  expires_at: string; entities: number; terms?: number; mentions?: number; labs?: number; brief_state: string; second_opinion?: boolean;
 }
 
 export interface RunEvent {
@@ -183,15 +228,17 @@ export interface Differential { conditions: Condition[]; question: ClinicQuestio
 export type TermDecision = "confirmed" | "rejected" | "corrected" | "pending";
 /** A term the clinician replaced: the id and label it had (`from`, null when it had no id) and the one picked (`to`). */
 export interface TermCorrection { from: string | null; from_label: string; to: string; label: string; at: string }
-export interface Decisions { terms: Record<string, TermDecision>; corrections?: Record<string, TermCorrection>; labs?: Record<string, TermDecision>; answers: ClinicAnswer[] }
+export interface Decisions { terms: Record<string, TermDecision>; corrections?: Record<string, TermCorrection>; labs?: Record<string, TermDecision>; lab_fixes?: Record<string, LabFix>; answers: ClinicAnswer[] }
 
 export interface OverviewTerm { label: string; count: number; recent_count: number; first: string; last: string; max_severity: number | null }
 export interface Overview {
   profile: Profile | null; notes: number; weeks: number; frequent: OverviewTerm[]; recent: OverviewTerm[]; new: string[];
   first: OverviewTerm | null; severe: OverviewTerm[]; labs_off: OverviewLab[];
-  family: string[]; denied: string[]; mood: { avg: number; trend: "down" | "up" | "flat" } | null;
+  past?: OverviewPast[]; family: string[]; denied: string[]; mood: { avg: number; trend: "down" | "up" | "flat" } | null;
   asks: { text: string; entry_id: string; date: string }[];
 }
+/** Past history line of the glance; `when` is worded by the server ("about 5 years ago (around 2021)"). */
+export interface OverviewPast { label: string; past: PastRef; when: string; entry_id: string; date: string; quote: string }
 /** One test with an out-of-range result: its latest out-of-range reading; `latest_in_range` when a later one is back in range. */
 export interface OverviewLab {
   name: string; test_key: string; value: string; unit: string; flag: "low" | "high" | "positive"; date: string; latest_in_range: boolean;

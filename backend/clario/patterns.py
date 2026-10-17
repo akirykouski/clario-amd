@@ -49,7 +49,9 @@ def card_id(disease_id: str) -> str:
 
 
 def counts_as_evidence(ent: Entity) -> bool:
-    return bool(ent.hpo_id) and ent.review in COUNTED and not ent.negated and not ent.family_history
+    """A current term of the patient. Past history (`ent.past`, clario/past.py) is not: a knee operation five years ago
+    or childhood asthma is history the clinician reads, not a phenotype seen now, so it never scores a pattern."""
+    return bool(ent.hpo_id) and ent.review in COUNTED and not ent.negated and not ent.family_history and not ent.past
 
 
 def evidence_from(entries: list[Entry], onto: Ontology) -> dict[str, Evidence]:

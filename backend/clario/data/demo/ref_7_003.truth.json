@@ -86,7 +86,12 @@
      "ref_low": 136.0,
      "ref_high": 145.0,
      "ref_text": "136 - 145",
-     "flag": "high"
+     "flag": "high",
+     "demo_read": {
+      "value_numeric": 141.0,
+      "shown": "141",
+      "note": "Deliberate demo misread, not from a live read: the page prints 147; stored as 141 (7 read as 1, a common OCR slip) so the clinician check shows. The misread looks in range and would hide a high sodium"
+     }
     },
     {
      "test_name": "Creatinina",
@@ -110,7 +115,12 @@
      "ref_low": 12.0,
      "ref_high": 16.0,
      "ref_text": "12,0 - 16,0",
-     "flag": "low"
+     "flag": "low",
+     "demo_read": {
+      "value_numeric": 1.1,
+      "shown": "1,1",
+      "note": "Deliberate demo misread, not from a live read: the page prints 11,0; stored as 1,1 (a digit lost) so the clinician check shows"
+     }
     },
     {
      "test_name": "C3",

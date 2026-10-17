@@ -88,16 +88,19 @@ def test_findings_follow_directions_and_units():
 def test_lab_decisions_are_respected_like_term_decisions():
     labs = [lab("ANA", text="Positivo 1:80", id_="ok"), lab("C3", 63, lo=90, hi=180, id_="unsure", needs_review=True),
             lab("Emoglobina", 10.5, lo=12, hi=16, id_="bad")]
-    # an unsure row counts like an unsure term (models.COUNTED); a rejected row never does
-    assert set(lab_findings(labs)) == {"HP:0003493", "HP:0005421", "HP:0001903"}
-    assert set(lab_findings(labs, {"bad": "rejected"})) == {"HP:0003493", "HP:0005421"}
+    # a row the code checks sent to the clinician counts only once confirmed or corrected; a rejected row never does
+    assert set(lab_findings(labs)) == {"HP:0003493", "HP:0001903"}
+    assert set(lab_findings(labs, {"unsure": "confirmed"})) == {"HP:0003493", "HP:0005421", "HP:0001903"}
+    assert set(lab_findings(labs, {"unsure": "corrected"})) == {"HP:0003493", "HP:0005421", "HP:0001903"}
+    assert set(lab_findings(labs, {"unsure": "confirmed", "bad": "rejected"})) == {"HP:0003493", "HP:0005421"}
     assert set(lab_findings(labs, {"unsure": "rejected", "bad": "rejected"})) == {"HP:0003493"}
+    assert "HP:0005421" not in lab_normal(labs)  # an unchecked reading says nothing either way
     onto = Ontology.load()
     ents = {x.hpo_id: x for e in with_labs(onto, [], labs, {"unsure": "confirmed"}) for x in e.entities}
     assert ents["HP:0005421"].review == "confirmed" and ents["HP:0003493"].review == "auto"
     assert all("from_labs" in x.flags and x.type == "lab" for x in ents.values())
     ents = {x.hpo_id: x for e in with_labs(onto, [], labs) for x in e.entities}
-    assert ents["HP:0005421"].review == "needs_review"
+    assert "HP:0005421" not in ents  # unchecked: not a feature yet
     assert "HP:0001903" not in lab_normal(labs, {"bad": "rejected"})  # a rejected reading says nothing either way
 
 
@@ -185,7 +188,8 @@ def test_giulia_labs_reach_the_ranking_and_sle_is_the_general_entry(unlocked, cl
         assert all(m["labs"] == 0 for m in top["matched"] if m["hpo_id"] == "HP:0025300")  # malar rash: notes only
         missing = {m["hpo_id"] for c in d["conditions"] for m in c["missing"]}
         assert "HP:0001903" not in missing  # her haemoglobin is low: anemia is recorded, not "typical, not recorded"
-        assert any(m["hpo_id"] == "HP:0001903" and m["labs"] == 2 for c in d["conditions"] for m in c["matched"])
+        # the demo stores one haemoglobin reading as a deliberate misread (1,1 for 11,0): unchecked, it does not count
+        assert any(m["hpo_id"] == "HP:0001903" and m["labs"] == 1 for c in d["conditions"] for m in c["matched"])
         assert not {"HP:0011227", "HP:0003565", "HP:0045042"} & missing  # CRP, ESR and C4 were measured in range
         assert d["question"]["feature_id"] not in {"HP:0011227", "HP:0003565", "HP:0045042"}
 
@@ -198,23 +202,68 @@ def test_giulia_labs_reach_the_ranking_and_sle_is_the_general_entry(unlocked, cl
         assert after["n_terms"] == d["n_terms"] - 1
         assert all(m["hpo_id"] != "HP:0003493" for c in after["conditions"] for m in c["matched"])
 
+        # the clinician corrects the misread against the printed row: it now counts, with the printed value
+        pkg = clinic.get(f"/api/inbox/{pid}").json()
+        hb = next(l for l in pkg["labs"] if l["test_key"] == "emoglobina" and l["needs_review"])
+        assert hb["value_numeric"] == 1.1 and "implausible" in hb["checks"]
+        r = clinic.patch(f"/api/inbox/{pid}/labs/{hb['id']}", json={"decision": "corrected", "value": "11,0"})
+        assert r.status_code == 200, r.text
+        assert r.json()["lab_fixes"][hb["id"]]["to"]["value_numeric"] == 11.0
+        fixed = next(l for l in clinic.get(f"/api/inbox/{pid}").json()["labs"] if l["id"] == hb["id"])
+        assert fixed["value_numeric"] == 11.0 and fixed["decision"] == "corrected" and fixed["flag"] == "low"
+        assert fixed["corrected_from"]["value_numeric"] == 1.1
+        corr = clinic.get(f"/api/inbox/{pid}/ddx").json()
+        assert any(m["hpo_id"] == "HP:0001903" and m["labs"] == 2 for c in corr["conditions"] for m in c["matched"])
+
         it = clinic.get(f"/api/inbox/{pid}/ddx", params={"lang": "it"}).json()
         assert it["conditions"][0]["name"] == "Lupus eritematoso sistemico"
         labels = {m["label"] for m in it["conditions"][0]["matched"]}
         assert "C3 basso" in labels and "Anticorpi anti-DNA nativo positivi" in labels
 
 
-def test_unsure_lab_rows_count_until_rejected(unlocked, clinic_server, tmp_path):
+def test_unsure_lab_rows_count_only_once_the_clinician_checked_them(unlocked, clinic_server, tmp_path):
     pid = shared_giulia_with_labs(unlocked, clinic_server, unsure_every=2)
     with TestClient(create_app(settings(tmp_path, "clinic"))) as clinic:
         pkg = clinic.get(f"/api/inbox/{pid}").json()
         unsure = [l for l in pkg["labs"] if l["needs_review"] and l["test_key"] in ("ana", "antidsdna", "c3", "emoglobina")]
         assert unsure
-        d = clinic.get(f"/api/inbox/{pid}/ddx").json()
-        before = {m["hpo_id"]: m["labs"] for c in d["conditions"] for m in c["matched"]}
+
+        def lab_counts() -> dict:
+            return {m["hpo_id"]: m["labs"] for c in clinic.get(f"/api/inbox/{pid}/ddx").json()["conditions"]
+                    for m in c["matched"]}
+
+        before = lab_counts()
+        for l in unsure:  # an unchecked reading never feeds the ranking; confirming it does
+            clinic.patch(f"/api/inbox/{pid}/labs/{l['id']}", json={"decision": "confirmed"})
+        confirmed = lab_counts()
+        assert sum(confirmed.values()) > sum(before.values())
         for l in unsure:
             clinic.patch(f"/api/inbox/{pid}/labs/{l['id']}", json={"decision": "rejected"})
-        after = {m["hpo_id"]: m["labs"] for c in clinic.get(f"/api/inbox/{pid}/ddx").json()["conditions"]
-                 for m in c["matched"]}
-        assert after != before
-        assert sum(after.values()) < sum(before.values())
+        assert lab_counts() == before
+        for l in unsure:  # undo: back to waiting, still out of the ranking
+            clinic.patch(f"/api/inbox/{pid}/labs/{l['id']}", json={"decision": "pending"})
+        assert lab_counts() == before
+
+
+def test_lab_correction_is_validated(unlocked, clinic_server, tmp_path):
+    pid = shared_giulia_with_labs(unlocked, clinic_server)
+    with TestClient(create_app(settings(tmp_path, "clinic"))) as clinic:
+        pkg = clinic.get(f"/api/inbox/{pid}").json()
+        na = next(l for l in pkg["labs"] if l["test_key"] == "sodio" and l["needs_review"])
+        assert na["value_numeric"] == 141.0 and na["checks"] == ["not_on_page"]
+        # the source: the printed row cut from the report page travels with the reading
+        assert na["crop"] and na["crop"].startswith("data:image/jpeg;base64,")
+        assert sum(len(l["crop"] or "") for l in pkg["labs"]) < 2_100_000
+        url = f"/api/inbox/{pid}/labs/{na['id']}"
+        assert clinic.patch(url, json={"decision": "corrected"}).status_code == 422  # nothing given
+        assert clinic.patch(url, json={"decision": "corrected", "value": "141"}).status_code == 422  # same as read
+        r = clinic.patch(url, json={"decision": "corrected", "value": "147", "unit": "mmol/L"})
+        assert r.status_code == 200, r.text
+        fixed = next(l for l in clinic.get(f"/api/inbox/{pid}").json()["labs"] if l["id"] == na["id"])
+        assert fixed["value_numeric"] == 147.0 and fixed["flag"] == "high" and fixed["abnormal"]  # flag recomputed in code
+        ov = clinic.get(f"/api/inbox/{pid}/overview").json()
+        assert any(l["value"].startswith("147") for l in ov["labs_off"])
+        assert clinic.patch(url, json={"decision": "pending"}).status_code == 200  # undo drops the fix
+        back = next(l for l in clinic.get(f"/api/inbox/{pid}").json()["labs"] if l["id"] == na["id"])
+        assert back["value_numeric"] == 141.0 and back["corrected_from"] is None
+        assert clinic.get(f"/api/inbox/{pid}/decisions").json()["lab_fixes"] == {}

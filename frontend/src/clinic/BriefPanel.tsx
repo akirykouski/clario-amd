@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Pencil, Printer, X } from "lucide-react";
 import { api } from "../api";
-import type { Brief, BriefItem, BriefSection, SharePackage } from "../types";
+import type { Brief, BriefItem, BriefSection, SharePackage, Specialty } from "../types";
 import { canFinalize, fmtDate, fmtNum } from "../lib";
 import { ErrorBox, Spinner } from "../components/ui";
 import { tn, useT, type Key } from "../i18n";
@@ -11,6 +11,45 @@ import { tokenFactoryLabel } from "../components/compute";
 
 const SECTIONS: BriefSection[] = ["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"];
 const sectionTitle = (s: BriefSection) => `brief.section.${s}` as Key;
+
+export type Focus = "general" | Specialty;
+export const FOCUSES: Focus[] = ["general", "rheumatology", "nephrology"];
+/** Section order per specialty: what that clinic reads first. General practice keeps the default order. */
+const FOCUS_SECTIONS: Record<Focus, BriefSection[]> = {
+  general: SECTIONS,
+  rheumatology: ["summary", "symptoms", "labs", "patterns", "timeline", "medications", "questions"],
+  nephrology: ["summary", "labs", "symptoms", "medications", "timeline", "patterns", "questions"],
+};
+/** Sections every specialty sees in full: the patient's question, medicines, questions to ask. */
+const ALWAYS: BriefSection[] = ["summary", "medications", "questions"];
+
+/** The brief for one specialty: sections reordered, lines of that specialty first, other lines hidden. A line that
+ *  still needs a decision (an AI draft or an unchecked lab line) is never hidden, so finalizing is never blocked by
+ *  something off screen. Specialties come from the server (HPO organ systems and lab tests, no model). */
+export function focusBrief(items: BriefItem[], focus: Focus): { sections: { s: BriefSection; items: BriefItem[] }[]; hidden: number } {
+  const ours = (i: BriefItem) => focus !== "general" && (i.specialties ?? []).includes(focus);
+  let hidden = 0;
+  const sections = FOCUS_SECTIONS[focus].map((s) => {
+    const all = items.filter((i) => i.section === s);
+    if (focus === "general") return { s, items: all };
+    const keep = all.filter((i) => ALWAYS.includes(s) || ours(i) || i.review === "pending");
+    hidden += all.length - keep.length;
+    return { s, items: [...keep.filter(ours), ...keep.filter((i) => !ours(i))] };
+  });
+  return { sections, hidden };
+}
+
+export function SpecialtySelect({ value, onChange }: { value: Focus; onChange: (f: Focus) => void }) {
+  const { t } = useT();
+  return (
+    <div className="no-print flex items-center gap-2 flex-wrap" data-testid="specialty">
+      <label htmlFor="brief-specialty" className="text-sm font-bold text-muted">{t("brief.specialty")}</label>
+      <select id="brief-specialty" className="input !w-auto" value={value} onChange={(e) => onChange(e.target.value as Focus)}>
+        {FOCUSES.map((f) => <option key={f} value={f}>{t(`brief.specialty.${f}` as Key)}</option>)}
+      </select>
+    </div>
+  );
+}
 
 export function countDecisions(items: BriefItem[]) {
   const c = { accepted: 0, edited: 0, rejected: 0 };
@@ -67,10 +106,12 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
   const openedAt = useRef(Date.now()); // the panel mounts when the clinician opens the package
   const [copy, setCopy] = useState<"clinician" | "patient">("clinician");
   const [patientCopy, setPatientCopy] = useState<Brief | null>(null);
+  const [focus, setFocus] = useState<Focus>("general");
   const shown = brief ?? (state.status === "done" ? state.brief ?? null : null);
   useEffect(() => { if (state.status === "done" && state.brief) setBrief(state.brief); }, [state.status, state.brief]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finalized = !!shown?.finalized;
+  const focused = shown ? focusBrief(shown.items, focus) : null;
   useEffect(() => {
     if (!finalized || copy !== "patient") return;
     setPatientCopy(null);
@@ -132,8 +173,14 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
           ) : (
             <>
               <div className="no-print space-y-4">
-                {SECTIONS.map((s) => {
-                  const items = shown.items.filter((i) => i.section === s);
+                <SpecialtySelect value={focus} onChange={setFocus} />
+                {focused && focused.hidden > 0 && (
+                  <p className="text-sm text-muted" aria-live="polite" data-testid="specialty-hidden">
+                    {tn("brief.specialtyHidden", focused.hidden, { sp: t(`brief.specialty.${focus}` as Key) })}{" "}
+                    <button className="font-bold text-accent underline underline-offset-4" onClick={() => setFocus("general")}>{t("brief.specialtyShowAll")}</button>
+                  </p>
+                )}
+                {(focused?.sections ?? []).map(({ s, items }) => {
                   if (!items.length) return null;
                   return (
                     <section key={s} aria-label={t(sectionTitle(s))}>

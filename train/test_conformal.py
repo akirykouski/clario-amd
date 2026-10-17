@@ -188,3 +188,30 @@ def test_review_curve_source_selection():
     assert rc.build(res, "verbalized")["confidence_kind"] == "verbalized"
     with pytest.raises(ValueError):
         rc.pick_field({**res, "sc_n": 0, "confidence_prompt": False}, "sc")
+
+
+def test_correct_resolved_selects_the_resolver_label(tmp_path):
+    items = [{"id": f"d{i}", "entities": [{"confidence": 1.0, "correct": 0, "correct_resolved": 1},
+                                          {"confidence": 0.2, "correct": 0, "correct_resolved": 0}]} for i in range(400)]
+    res = {"label": "x", "dataset": "d", "model": "m", "backend": "b", "n": 400, "sc_n": 5, "per_item": items,
+           "hardware": {"gpu_name": "hosted"}}
+    p = tmp_path / "extraction_x.json"
+    p.write_text(json.dumps(res))
+    raw_rows, _ = cf.load_rows(str(p), "sc", "raw")
+    rows, meta = cf.load_rows(str(p), "sc", "resolved")
+    assert sum(ok for _, ok, _ in raw_rows) == 0 and sum(ok for _, ok, _ in rows) == 400
+    assert "resolver" in meta["correctness"] and meta["hardware"] == {"gpu_name": "hosted"} and meta["n_diaries"] == 400
+    out = cf.build(rows, meta, [0.05])
+    assert out["threshold"] == 1.0 and out["hardware"] and out["n_diaries"] == 400 and out["correctness"]
+    curve = rc.build(res, "sc", "resolved")
+    assert curve["correctness_kind"] == "resolved" and curve["tolerances"]["1pct"]["entity"]["review_share"] == 0.5
+    with pytest.raises(ValueError):
+        rc.build({**res, "per_item": [{"id": "a", "entities": [{"confidence": 1.0, "correct": 1}]}]}, "sc", "resolved")
+
+
+def test_attach_resolved_copies_correctness_in_order():
+    m = {"per_item": [{"entities": [{"confidence": 1.0, "correct": 0}, {"confidence": 0.4, "correct": 1}]}]}
+    rm = {"resolved_entity_f1": 0.5, "_resolved_per_item": [{"entities": [{"confidence": 1.0, "correct": 1},
+                                                                          {"confidence": 0.4, "correct": 1}]}]}
+    ev.attach_resolved(m, rm)
+    assert [e["correct_resolved"] for e in m["per_item"][0]["entities"]] == [1, 1] and "_resolved_per_item" not in rm

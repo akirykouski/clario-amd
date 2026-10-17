@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import type { Entry } from "../types";
-import { fmtDate, notifyReview } from "../lib";
+import { fmtDate, notifyReview, pastWhen } from "../lib";
 import { entityName, entryText, useT } from "../i18n";
 import { Spinner } from "../components/ui";
 import { ShieldCheck } from "lucide-react";
@@ -60,14 +60,14 @@ export function EntryCard({ initial, onChange, pii = 0, tour = false }: { initia
         {entry.extraction === "failed" && <span className="text-sm text-muted">{t("entry.failedShort")}</span>}
         {entry.extraction === "done" && terms.length === 0 && <span className="text-sm text-muted">{t("entry.noTerms")}</span>}
         {terms.map((x) => x.review === "needs_review" ? (
-          <Link key={x.id} to={`/entry/${entry.id}`} className="chip" style={{ borderStyle: "dashed", borderColor: "var(--moderate)" }}
+          <Link key={x.id} to={`/entry/${entry.id}`} className="chip" data-testid={x.past ? "past-chip" : undefined} style={{ borderStyle: "dashed", borderColor: "var(--moderate)" }}
             title={t("entry.unsureTitle")} aria-label={`${name(x)}. ${t("entry.unsureTitle")}`}>
-            {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{name(x)}
+            {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{x.past && <span className="text-muted">{t("term.pastChip")}</span>}{name(x)}{x.past && <span className="text-muted"> ({pastWhen(x.past)})</span>}
             <span aria-hidden className="text-xs" style={{ color: "var(--moderate)" }}>?</span>
           </Link>
         ) : (
-          <span key={x.id} className="chip">
-            {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{name(x)}
+          <span key={x.id} className="chip" data-testid={x.past ? "past-chip" : undefined}>
+            {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{x.past && <span className="text-muted">{t("term.pastChip")}</span>}{name(x)}{x.past && <span className="text-muted"> ({pastWhen(x.past)})</span>}
           </span>
         ))}
       </div>

@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { Check, X } from "lucide-react";
 import { api } from "../api";
 import type { Entity, Entry, Term } from "../types";
-import { flagNote, notifyReview, splitQuotes } from "../lib";
+import { flagNote, notifyReview, pastWhen, splitQuotes } from "../lib";
 import { ErrorBox, Loading, Spinner } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { entityName, getLang, patientTermLine, useT } from "../i18n";
@@ -69,7 +69,8 @@ function EntityRow({ e, onPatch }: { e: Entity; onPatch: (b: Parameters<typeof a
   return (
     <li className="card" style={removed ? { opacity: 0.6 } : unsure ? { borderStyle: "dashed", borderColor: "var(--moderate)" } : undefined}>
       <p className="text-sm text-muted">{t("entryPage.youWrote")} <mark className="quote text-ink">{e.quote}</mark></p>
-      <p className={`mt-1 font-bold ${removed ? "line-through" : ""}`}>{e.negated && t("term.absent")}{e.family_history && t("term.relative")}{e.type === "trigger" && t("term.contextChip")}{entityName(e)}</p>
+      <p className={`mt-1 font-bold ${removed ? "line-through" : ""}`}>{e.negated && t("term.absent")}{e.family_history && t("term.relative")}{e.type === "trigger" && t("term.contextChip")}{e.past && t("term.pastChip")}{entityName(e)}</p>
+      {e.past && <p className="text-sm text-muted" data-testid="past-line">{t("entryPage.past", { when: pastWhen(e.past) })}</p>}
       {line && <p className="text-sm text-muted">{line}</p>}
       {(e.onset_hint || e.severity !== null) && (
         <p className="text-sm text-muted">

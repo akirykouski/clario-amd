@@ -1,5 +1,5 @@
 """Clinician overview of a shared package, in plain words: who, what the patient keeps writing about, what is new,
-how it started, labs out of range, family history, mood, and the questions the patient wrote down.
+how it started, labs out of range, past history, family history, mood, and the questions the patient wrote down.
 
 Computed in code from the package (no model call), so it is there the moment a package is opened and never invents
 anything. Terms use everyday names (no HPO codes); the clinical names stay in the details block.
@@ -15,7 +15,8 @@ from .brief import _num
 from .documents import is_off, lab_flag
 from .models import SharedLab, SharePackage
 from .patterns import patient_label
-from .share import LAB_NAMES_EN, patient_mentions
+from .past import sort_key, when_text
+from .share import LAB_NAMES_EN, past_mentions, patient_mentions
 
 RECENT_DAYS = 14
 ANSWER_LEADS = ("Answer to a question:", "Risposta a una domanda:")
@@ -83,6 +84,22 @@ def labs_out_of_range(labs: list[SharedLab], lang: str = "en") -> list[dict]:
     return out
 
 
+def past_history(pkg: SharePackage, onto: Ontology, lang: str = "en") -> list[dict]:
+    """The patient's past history (clario/past.py), one line per term, oldest first: "knee surgery, about 5 years ago
+    (around 2021)". Not counted in the frequent, recent or new lists: it did not happen in the shared period."""
+    out: dict[str, dict] = {}
+    for x in past_mentions(pkg.entities):
+        if x.type in ("lab", "trigger"):
+            continue
+        k = x.hpo_id or x.canonical.lower()
+        if k in out and sort_key(out[k]["past"]) <= sort_key(x.past):  # type: ignore[arg-type]
+            continue
+        out[k] = {"label": _label(onto, x.hpo_id, x.canonical, lang), "past": x.past, "when": when_text(x.past, lang, around=True),  # type: ignore[arg-type]
+                  "entry_id": x.entry_id, "date": x.occurred_on, "quote": x.quote}
+    rows = sorted(out.values(), key=lambda r: sort_key(r["past"]))
+    return [r | {"past": r["past"].model_dump()} for r in rows]
+
+
 def overview(pkg: SharePackage, onto: Ontology, lang: str = "en") -> dict:
     entries = sorted(pkg.entries, key=lambda e: e.occurred_on)
     end = date.fromisoformat(entries[-1].occurred_on) if entries else date.today()
@@ -124,5 +141,5 @@ def overview(pkg: SharePackage, onto: Ontology, lang: str = "en") -> dict:
 
     span_weeks = max(1, round((end - date.fromisoformat(entries[0].occurred_on)).days / 7) + 1) if entries else 0
     return {"profile": pkg.profile, "notes": len(entries), "weeks": span_weeks, "frequent": frequent, "recent": recent,
-            "new": new, "first": first, "severe": severe, "labs_off": labs_off, "family": family, "denied": denied,
+            "new": new, "first": first, "severe": severe, "labs_off": labs_off, "past": past_history(pkg, onto, lang), "family": family, "denied": denied,
             "mood": mood, "asks": asks_from_notes(pkg)}

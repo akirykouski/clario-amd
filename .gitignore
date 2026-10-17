@@ -8,3 +8,4 @@ train/out/
 .env
 deploy/amd/logs/
 models/
+eval/.cache/

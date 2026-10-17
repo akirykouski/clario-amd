@@ -21,6 +21,10 @@ Misses (gold entities the model never output) carry no confidence and cannot be 
     python eval/review_curve.py                          # every extraction_*.json that has per_item
     python eval/review_curve.py eval/results/extraction_ft.json
     python eval/review_curve.py --source verbalized eval/results/extraction_ft.json   # the model's own number
+    python eval/review_curve.py --correct resolved eval/results/extraction_ft.json  # correct after the app's HPO resolver
+CORRECTNESS. `--correct raw` (default): the model's own HPO id must equal gold. `--correct resolved`: the id after the
+app's ontology resolver (per-entity `correct_resolved`, written when the backend is importable), closer to what the
+app stores. Output name gets `_resolved`.
 Writes eval/results/review_curve_<label>.json (n, dataset, model, backend, date, curves).
 """
 import datetime
@@ -71,28 +75,44 @@ def pick_field(res, source="auto"):
     return ("confidence", "self_consistency") if run_sc else ("confidence", "verbalized")
 
 
-def entity_points(items, field="confidence"):
-    return [(e[field], e["correct"]) for it in items for e in it["entities"] if e.get(field) is not None]
+CORRECT_FIELD = {"raw": "correct", "resolved": "correct_resolved"}
+CORRECT_TEXT = {"raw": "HPO id as the model wrote it, plus negation and family flags (exact match with gold)",
+                "resolved": "HPO id after the app's ontology resolver (clario.extract.resolve_hpo, what the app stores "
+                            "minus the optional model pick), plus negation and family flags (exact match with gold)"}
 
 
-def item_points(items, field="confidence"):
+def correct_field(res, correct="raw"):
+    """-> per-entity correctness key. 'resolved' needs a run scored with the backend resolver (correct_resolved)."""
+    f = CORRECT_FIELD[correct]
+    if correct == "resolved" and not any(f in e for it in res["per_item"] for e in it["entities"]):
+        raise ValueError("run has no correct_resolved (score it with the backend importable, without --no-resolve)")
+    return f
+
+
+def entity_points(items, field="confidence", ok="correct"):
+    return [(e[field], e[ok]) for it in items for e in it["entities"] if e.get(field) is not None]
+
+
+def item_points(items, field="confidence", ok="correct"):
     rows = [[e for e in it["entities"] if e.get(field) is not None] for it in items]
-    return [(min(e[field] for e in r), int(all(e["correct"] for e in r))) for r in rows if r]
+    return [(min(e[field] for e in r), int(all(e[ok] for e in r))) for r in rows if r]
 
 
 SOURCE_TEXT = {"self_consistency": "self-consistency: agreement rate across n sampled answers (the signal the app routes on)",
                "verbalized": "model self-reported (prompt asked for a probability); not self-consistency"}
 
 
-def build(res, source="auto"):
+def build(res, source="auto", correct="raw"):
     items = res["per_item"]
     field, src = pick_field(res, source)
-    ep, ip = entity_points(items, field), item_points(items, field)
+    ok = correct_field(res, correct)
+    ep, ip = entity_points(items, field, ok), item_points(items, field, ok)
     out = {k: res[k] for k in ("label", "dataset", "model", "backend", "hardware") if k in res}
     out.update({"date": datetime.date.today().isoformat(), "source_result": f"extraction_{res['label']}.json",
                 "n": res["n"], "n_entities_with_confidence": len(ep), "n_items_scored": len(ip),
                 "unrouted_misses": res.get("fn"),
                 "confidence_source": SOURCE_TEXT[src], "confidence_kind": src, "sc_n": res.get("sc_n") or None,
+                "correctness": CORRECT_TEXT[correct], "correctness_kind": correct,
                 "ece": res.get("ece"), "metric": "share of entities routed to review (not coverage, not accuracy)",
                 "tolerances": {}})
     for tol in TOLERANCES:
@@ -101,7 +121,7 @@ def build(res, source="auto"):
     return out
 
 
-def main(paths, source="auto"):
+def main(paths, source="auto", correct="raw"):
     paths = paths or sorted(glob.glob(os.path.join(HERE, "results", "extraction_*.json")))
     done = 0
     for p in paths:
@@ -110,11 +130,12 @@ def main(paths, source="auto"):
             print(f"skip {os.path.basename(p)}: no per-item confidence (run the eval with --confidence)")
             continue
         try:
-            out = build(res, source)
+            out = build(res, source, correct)
         except ValueError as e:
             print(f"skip {os.path.basename(p)}: {e}")
             continue
         suffix = "" if out["confidence_kind"] == "self_consistency" or source == "auto" else "_" + out["confidence_kind"]
+        suffix += "_resolved" if correct == "resolved" else ""
         dest = os.path.join(os.path.dirname(os.path.abspath(p)), f"review_curve_{res['label']}{suffix}.json")
         json.dump(out, open(dest, "w"), indent=2)
         for k, v in out["tolerances"].items():
@@ -131,4 +152,9 @@ if __name__ == "__main__":
         i = args.index("--source")
         src = args[i + 1]
         args = args[:i] + args[i + 2:]
-    main(args, src)
+    cor = "raw"
+    if "--correct" in args:
+        i = args.index("--correct")
+        cor = args[i + 1]
+        args = args[:i] + args[i + 2:]
+    main(args, src, cor)

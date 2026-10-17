@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -27,11 +29,13 @@ from . import overview as overview_mod
 from . import privacy
 from . import doc_routes
 from . import gpu as gpumetrics
+from . import second_opinion as second
 from . import share as sharing
+from . import specialty
 from .config import Settings
 from .share import lab_needs_check, now_iso
 from . import documents as docs
-from .demo import (DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_entries,
+from .demo import (DEMO_ENTRY_PREFIX, DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_care, persona_entries,
                    persona_labels, truth_rows)
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
@@ -95,7 +99,14 @@ class InboxIn(BaseModel):
 
 
 class LabDecisionIn(BaseModel):
+    """`corrected` takes the value as printed (`value`, free text such as "11,0" or "Positivo 1:160", or `value_numeric` /
+    `value_text`) and optionally the `unit`; what is not given stays as read."""
+
     decision: str
+    value: str | None = None
+    value_numeric: float | None = None
+    value_text: str | None = None
+    unit: str | None = None
 
 
 class LabBulkIn(BaseModel):
@@ -308,7 +319,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         except Locked:
             return None
         try:
-            ents, _st = await extract(llm, e.id, e.text, onto, opts)
+            ents, _st = await extract(llm, e.id, e.text, onto, opts, note_date=e.occurred_on)
         except Exception as err:  # noqa: BLE001 - recorded as failed, retried on demand
             log.warning("extraction failed for %s: %s", eid, err)
             ents, status = [], "failed"
@@ -514,6 +525,15 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         after = as_ranked_patterns(onto, all_entries(), norm_lang(body.lang))
         return AnswerResult(before=before, after=after, entry_id=entry_id)
 
+    @app.get("/api/care")
+    def get_care() -> dict:
+        """Earlier care: what was already tried and tested (facts, shared with every clinic), and whether a previous
+        doctor's opinion is on file. Its conclusions name conditions, so the patient screens only learn who and when."""
+        d = vault.get("care") or {}
+        prev = d.get("previous")
+        return {"tried": d.get("tried") or [], "tested": d.get("tested") or [],
+                "previous": {"clinician": prev.get("clinician"), "date": prev.get("date")} if prev else None}
+
     def load_profile() -> dict:
         d = vault.get("profile") or {}
         return {k: d[k] for k in ("age", "sex") if d.get(k) is not None}
@@ -538,13 +558,19 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             raise HTTPException(404, "unknown persona")
         vault.put("profile", "profile", {"age": 29, "sex": "female"})  # Giulia, 29 (synthetic)
         labels = persona_labels(body.persona)  # reviewed, precomputed (data/demo/LABELS.md): no model call, no call log
+        # loading again replaces the earlier demo diary (either persona) instead of adding a second copy; notes the user
+        # wrote keep their own ids and stay
+        for d in vault.all("entry"):
+            if d["id"].startswith(DEMO_ENTRY_PREFIX):
+                vault.delete(d["id"])
         n = 0
         for day, text, mood in persona_entries(body.persona):
-            eid = f"e_{uuid.uuid4().hex[:10]}"
+            eid = f"{DEMO_ENTRY_PREFIX}{uuid.uuid4().hex[:10]}"
             ents = [Entity(id=f"ent_{uuid.uuid4().hex[:10]}", entry_id=eid, **x) for x in labels[text]]
             save(Entry(id=eid, created_at=now_iso(), occurred_on=day, text=text, mood=mood, extraction="done",
                        entities=ents))
             n += 1
+        vault.put("care", "care", persona_care(body.persona))  # earlier care, written by hand (LABELS.md): facts + the GP's view
         return {"ok": True, "entries": n, "persona": body.persona, "lang": PERSONA_LANG[body.persona]}
 
     @app.post("/api/demo/documents")
@@ -563,7 +589,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             rows += truth
         # the rows a live read gives (eval/results/documents_tf-mineru-table.json), stored at once: no OCR call
         return app.state.start_batch(pages, (date.today() - timedelta(days=DEMO_REFERTI_AGE) - REFERTI_LATEST).days,
-                                     precomputed=rows)
+                                     precomputed=rows, demo=True)
 
     async def clinic_key(url: str) -> dict:
         u = urlparse(url)
@@ -592,9 +618,14 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             pats = score_patterns(entries, onto, within={e.id for e in entries if body.since <= e.occurred_on <= body.until})
         labs = [LabResult.model_validate(d) for d in vault.all("lab")]
         batch_entry = {d["batch_id"]: d["entry_id"] for d in vault.all("docbatch")}
+        def page_jpeg(bid: str, page: int) -> bytes | None:  # the page image stored encrypted at import
+            d = vault.get(f"{bid}_p{page}")
+            return base64.b64decode(d["jpeg_b64"]) if d and d.get("jpeg_b64") else None
+
         pkg = sharing.build_package(entries, body.since, body.until, sharing.alias(str(s.data_dir.resolve())),
                                     body.note, pats, body.expires_hours, labs, batch_entry,
-                                    load_profile() if body.include_profile else None)
+                                    load_profile() if body.include_profile else None, page_jpeg,
+                                    care=vault.get("care"), second_opinion=body.second_opinion)
         if not pkg.entries:
             raise HTTPException(422, "No entries in that period")
         sealed = sharing.seal(pkg, key["public_key"])
@@ -609,6 +640,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return {"package_id": pkg.package_id, "clinic_url": body.clinic_url, "expires_at": pkg.expires_at,
                 "clinic_name": key.get("clinic_name"), "fingerprint": key.get("fingerprint"),
                 "entries": len(pkg.entries), **sharing.counts(pkg), "patterns": len(pkg.patterns),
+                "second_opinion": pkg.second_opinion, "tried": len(pkg.tried), "tested": len(pkg.tested),
                 "qr_payload": qr_payload, "qr_svg": sharing.qr_svg(qr_payload)}
 
 
@@ -628,6 +660,11 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         return pid
 
     def open_pkg(pid: str) -> SharePackage:
+        """The package as every view, the brief model and the differential see it: facts only. The previous doctor's
+        conclusions of a second opinion stay out until the brief is final (`/compare`)."""
+        return second.facts_only(open_full(pid))
+
+    def open_full(pid: str) -> SharePackage:
         f = inbox_dir / f"{safe_id(pid)}.json"
         if not f.exists():
             raise HTTPException(404, "package not found")
@@ -645,14 +682,14 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         """The clinician's decisions on one package: term checks and answers. Encrypted at rest like the briefs."""
         f = decisions_dir / f"{safe_id(pid)}.json"
         if not f.exists():
-            return {"terms": {}, "labs": {}, "corrections": {}, "answers": []}
-        return {"labs": {}, "corrections": {}} | json.loads(keys.open_data(f.read_bytes()))
+            return {"terms": {}, "labs": {}, "corrections": {}, "lab_fixes": {}, "answers": []}
+        return {"labs": {}, "corrections": {}, "lab_fixes": {}} | json.loads(keys.open_data(f.read_bytes()))
 
     def save_decisions(pid: str, d: dict) -> None:
         (decisions_dir / f"{safe_id(pid)}.json").write_bytes(keys.seal_data(json.dumps(d).encode()))
 
     def differential(pkg: SharePackage, d: dict, lang: str) -> Differential:
-        pkg = clinic_ddx.with_corrections(pkg, d["corrections"])
+        pkg = clinic_ddx.with_corrections(pkg, d["corrections"], d["lab_fixes"])
         rejected = {k for k, v in d["terms"].items() if v == "rejected"}
         entries = clinic_ddx.with_answers(pkg.entries, d["answers"], rejected)
         entries = clinic_ddx.with_labs(onto, entries, pkg.labs, d["labs"])  # abnormal labs as features, rejected rows left out
@@ -688,13 +725,13 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         """The package with the clinic's decisions applied. A row or term the clinician confirmed no longer asks for a check;
         a rejected one is dropped (`drop_rejected`) or kept marked, so the page can offer undo."""
         d = load_decisions(pkg.package_id)
-        pkg = clinic_ddx.with_corrections(pkg, d["corrections"])
+        pkg = clinic_ddx.with_corrections(pkg, d["corrections"], d["lab_fixes"])
         labs = []
         for l in pkg.labs:
             v = d["labs"].get(l.id) if l.id else None
             if v == "rejected" and drop_rejected:
                 continue
-            labs.append(l.model_copy(update={"decision": v if v in ("confirmed", "rejected") else None}))
+            labs.append(l.model_copy(update={"decision": v if v in ("confirmed", "rejected", "corrected") else None}))
         ents = []
         for x in pkg.entities:
             v = d["terms"].get(x.id) if x.id else None
@@ -742,7 +779,8 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             state = "none" if not b else ("final" if b.finalized else "draft")
             out.append({"package_id": pkg.package_id, "patient_alias": pkg.patient_alias, "period": pkg.period,
                         "received_at": rec["received_at"], "expires_at": pkg.expires_at,
-                        **sharing.counts(pkg), "entries": len(pkg.entries), "brief_state": state})
+                        **sharing.counts(pkg), "entries": len(pkg.entries), "brief_state": state,
+                        "second_opinion": pkg.second_opinion})
         return out
 
     @app.get("/api/inbox/{pid}")
@@ -751,14 +789,36 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
 
     @app.api_route("/api/inbox/{pid}/labs/{lab_id}", methods=["PATCH", "PUT"])
     def decide_lab(pid: str, lab_id: str, body: LabDecisionIn) -> dict:
-        """The clinician confirms or rejects one lab value (`accepted` is accepted as an alias of `confirmed`).
-        Returns the clinic's decisions, `labs` keyed by row id."""
+        """The clinician confirms, rejects or corrects one lab value (`accepted` is an alias of `confirmed`). `corrected`
+        stores the value (and unit) the clinician read on the printed row; the reading then counts with that value.
+        Returns the clinic's decisions, `labs` keyed by row id, `lab_fixes` the corrections."""
         pkg = open_pkg(pid)
         row = next((l for l in pkg.labs if l.id == lab_id), None)
         if row is None:
             raise HTTPException(404, "lab row not found")
-        write_lab_decisions(pid, [row], body.decision, "row")
+        fix = lab_fix(row, body) if body.decision == "corrected" else None
+        write_lab_decisions(pid, [row], body.decision, "row", {lab_id: fix} if fix else None)
         return load_decisions(pid)
+
+    def lab_fix(row, body: LabDecisionIn) -> dict:
+        """{"from", "to"} for a corrected reading, or 422 when nothing usable or nothing different was given."""
+        was = {"value_numeric": row.value_numeric, "value_text": row.value_text, "unit": row.unit}
+        to = dict(was)
+        if (body.value or "").strip():
+            to.update({"value_numeric": None, "value_text": None, **docs.parse_lab_value(body.value or "")})
+        elif body.value_numeric is not None:
+            to.update(value_numeric=body.value_numeric, value_text=None)
+        elif (body.value_text or "").strip():
+            to.update(value_numeric=None, value_text=(body.value_text or "").strip())
+        if body.unit is not None:
+            to["unit"] = body.unit.strip()
+        if to["value_numeric"] is None and not to["value_text"]:
+            raise HTTPException(422, "A corrected reading needs a number or a printed result")
+        if to["value_numeric"] is not None and not math.isfinite(to["value_numeric"]):
+            raise HTTPException(422, "The corrected value is not a number")
+        if to == was:
+            raise HTTPException(422, "The correction is the same as the reading: confirm it instead")
+        return {"from": was, "to": to, "at": now_iso()}
 
     @app.post("/api/inbox/{pid}/labs/decide")
     def decide_labs(pid: str, body: LabBulkIn) -> SharePackage:
@@ -771,29 +831,42 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         write_lab_decisions(pid, rows, body.decision, scope)
         return decided(open_pkg(pid), drop_rejected=False)
 
-    def write_lab_decisions(pid: str, rows: list, decision: str, scope: str) -> None:
+    def write_lab_decisions(pid: str, rows: list, decision: str, scope: str, fixes: dict | None = None) -> None:
         b = load_brief(pid)
         if b and b.finalized:
             raise HTTPException(409, "Brief is final")
         decision = {"accepted": "confirmed"}.get(decision, decision)
-        if decision not in ("pending", "confirmed", "rejected"):
-            raise HTTPException(422, "decision must be pending, confirmed or rejected")
+        if decision not in ("pending", "confirmed", "rejected", "corrected"):
+            raise HTTPException(422, "decision must be pending, confirmed, rejected or corrected")
+        if decision == "corrected" and not fixes:
+            raise HTTPException(422, "corrected needs the value read on the report")
         d = load_decisions(pid)
         at = now_iso()
         with labdec_log.open("a") as fh:  # one row per lab, ids and timing only: no values, no diary text
             for r in rows:
+                d["lab_fixes"].pop(r.id, None)
                 if decision == "pending":
                     d["labs"].pop(r.id, None)
                 else:
                     d["labs"][r.id] = decision
-                fh.write(json.dumps({"package_id": pid, "lab_id": r.id, "decision": decision, "scope": scope, "at": at}) + "\n")
+                changed = None
+                if decision == "corrected" and fixes and r.id in fixes:
+                    was, to = fixes[r.id]["from"], fixes[r.id]["to"]
+                    d["lab_fixes"][r.id] = fixes[r.id]
+                    changed = []  # which fields, never the values
+                    if (was["value_numeric"], was["value_text"]) != (to["value_numeric"], to["value_text"]):
+                        changed.append("value")
+                    if was["unit"] != to["unit"]:
+                        changed.append("unit")
+                fh.write(json.dumps({"package_id": pid, "lab_id": r.id, "decision": decision, "scope": scope, "at": at,
+                                     **({"changed": changed} if changed is not None else {})}) + "\n")
         save_decisions(pid, d)
 
     @app.get("/api/inbox/{pid}/overview")
     def get_overview(pid: str, lang: str = "en") -> dict:
         """Plain-words summary of the package for the first look: no model call, no codes."""
         d = load_decisions(pid)
-        pkg = clinic_ddx.with_corrections(open_pkg(pid), d["corrections"])
+        pkg = clinic_ddx.with_corrections(open_pkg(pid), d["corrections"], d["lab_fixes"])
         rejected = {k for k, v in (d.get("labs") or {}).items() if v == "rejected"}  # as the lab table leaves them out
         pkg = pkg.model_copy(update={"labs": [l for l in pkg.labs if l.id not in rejected]})
         return overview_mod.overview(pkg, onto, norm_lang(lang))
@@ -853,7 +926,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             return
         pkg = decided(open_pkg(pid), drop_rejected=True)
         kept = [i for i in b.items if i.origin == "ai" or (i.origin == "document" and i.section != "labs")]
-        save_brief(b.model_copy(update={"items": briefing.patient_items(pkg, b.lang) + kept}))
+        save_brief(b.model_copy(update={"items": specialty.tag(pkg, briefing.patient_items(pkg, b.lang) + kept, onto)}))
 
     @app.get("/api/inbox/{pid}/terms/{ent_id}/candidates")
     def term_candidates(pid: str, ent_id: str, lang: str = "en") -> list[Term]:
@@ -920,7 +993,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
                     await runs.emit(rid, "draft", "Drafting brief", min(0.9, 0.1 + n / 600), backend=llm.backend,
                                     model=llm.model, tokens=n, tokens_per_s=round(n / el, 1) if el else None)
             parsed = briefing.DraftOut.model_validate(extract_json(text))
-            items = briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed, lang)
+            items = specialty.tag(pkg, briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed, lang), onto)
             b = save_brief(Brief(package_id=pkg.package_id, items=items, model=llm.model, backend=llm.backend,
                                  stats=stats.as_dict() if stats else {}, lang=lang))  # type: ignore[arg-type]
             await runs.emit(rid, "done", "Brief drafted. Review each AI item.", 1.0, backend=llm.backend,
@@ -952,7 +1025,8 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     @app.get("/api/inbox/{pid}/brief")
     def get_brief(pid: str, audience: str | None = None, lang: str | None = None) -> Brief:
         pkg, b, aud, lg = view(pid, audience, lang)
-        return briefing.render_brief(pkg, b, aud, lg, onto)
+        out = briefing.render_brief(pkg, b, aud, lg, onto)
+        return specialty.tag_brief(pkg, out, onto) if aud == "clinician" else out
 
     @app.patch("/api/brief-items/{pid}/{item_id}")
     def review(pid: str, item_id: str, body: ReviewIn):
@@ -989,7 +1063,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         pending = [i for i in b.items if i.review == "pending" and i.section != "labs"]
         if pending:
             raise HTTPException(409, f"{len(pending)} AI item(s) still need review")
-        b = briefing.with_labs(b, dpkg, b.lang)
+        b = specialty.tag_brief(dpkg, briefing.with_labs(b, dpkg, b.lang), onto)
         b.finalized = True
         b.finalized_at = now_iso()
         secs = body.seconds if body else None
@@ -1019,6 +1093,25 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             totals=DecisionCounts(accepted=sum(r.accepted for r in rows), edited=sum(r.edited for r in rows),
                                   rejected=sum(r.rejected for r in rows)),
             mean_review_seconds=round(sum(timed) / len(timed), 1) if timed else None)
+
+    @app.get("/api/inbox/{pid}/compare")
+    async def compare_opinions(pid: str, lang: str = "en") -> dict:
+        """Second opinion only, after this doctor finalized the brief: the previous doctor's conclusions next to this
+        doctor's (conditions computed in code from the facts, brief lines as decided), disagreements marked."""
+        full = open_full(pid)
+        if not full.second_opinion:
+            raise HTTPException(404, "This package is not a second opinion")
+        b = load_brief(pid)
+        if not b or not b.finalized:
+            raise HTTPException(409, "The previous opinion opens after you finalize your brief")
+        lang = norm_lang(lang)
+        pkg = second.facts_only(full)
+        ddx = await asyncio.to_thread(differential, pkg, load_decisions(pid), lang)
+        if full.previous is None:
+            return {"previous": None, "current": None, "rows": [], "disagreements": 0, "since_previous": []}
+        dpkg = decided(pkg, drop_rejected=True)
+        return second.compare(full.previous, ddx.conditions, b,
+                              second.since_previous(dpkg, full.previous.date, onto, lang))
 
     @app.get("/api/inbox/{pid}/brief.md", response_class=PlainTextResponse)
     def brief_md(pid: str, audience: str | None = None, lang: str | None = None):

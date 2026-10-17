@@ -1,0 +1,27 @@
+{
+  "about": "Le cure di Giulia prima di Clario: cosa ha già provato e quali esami ha già fatto (fatti) e le conclusioni del medico di base precedente. Scritto a mano, vedi LABELS.md. I giorni si contano a ritroso dal giorno in cui si carica la demo, come il diario.",
+  "tried": [
+    {"treatment": "Ibuprofene (un FANS), al bisogno", "days_ago": 47, "duration": "2 settimane", "effect": "none",
+     "note": "Dolore alle articolazioni e stanchezza uguali; febbre e polsi gonfi sono arrivati mentre lo prendeva."},
+    {"treatment": "Più riposo e orari di sonno regolari", "days_ago": 47, "duration": "4 settimane", "effect": "none",
+     "note": "Dormiva di più, sempre esausta."}
+  ],
+  "tested": [
+    {"test": "Funzione tiroidea (TSH)", "days_ago": 47, "result": "Nei limiti", "abnormal": false},
+    {"test": "Indici di infiammazione (PCR, VES)", "days_ago": 47, "result": "Nei limiti", "abnormal": false},
+    {"test": "Radiografia delle mani", "days_ago": 44, "result": "Nessuna erosione, nessun danno articolare", "abnormal": false},
+    {"test": "Esame delle urine", "days_ago": 30, "result": "Proteine presenti", "abnormal": true},
+    {"test": "Emocromo", "days_ago": 30, "result": "Globuli bianchi un po' bassi", "abnormal": true}
+  ],
+  "previous": {
+    "clinician": "Medico di base",
+    "days_ago": 47,
+    "diagnosis": [{"name": "Fibromialgia", "disease_id": null}, {"name": "Stanchezza da stress", "disease_id": null}],
+    "conditions": [{"name": "Fibromialgia", "disease_id": null}, {"name": "Artrite reumatoide", "disease_id": "OMIM:180300"}],
+    "accepted": ["Dolori diffusi e stanchezza in un periodo di stress al lavoro.",
+                 "Niente febbre e nessuna articolazione gonfia alla visita."],
+    "rejected": ["Le guance rosse dopo il sole potrebbero meritare un controllo per una causa autoimmune.",
+                 "Le afte ricorrenti potrebbero meritare una domanda."],
+    "notes": "Molto probabilmente stress e sonno scarso. Ibuprofene al bisogno per 2 settimane, ricontrollo se non migliora. Esami autoimmuni per ora non necessari."
+  }
+}

@@ -14,7 +14,7 @@ ontology's own best match). Those are the resolved_* metrics: what the app store
 Gold rows: {"diary", "target": {"entities": [...]}} in v3 or the older dataset shape.
 A row with "gold_complete": false (PsyTAR) means unlabelled mentions exist, so precision is a lower bound.
 """
-import argparse, copy, datetime, difflib, json, os, re, sys, time, unicodedata
+import argparse, collections, copy, datetime, difflib, hashlib, json, os, random, re, sys, threading, time, unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from prompt import build_messages, from_dataset_entities, parse, strict_valid
 
@@ -249,7 +249,22 @@ def resolved_metrics(records, resolve):
         recs.append({**r, "pred": pred})
     m = score(recs)
     keep = ("entity_precision", "entity_recall", "entity_f1", "hpo_id_accuracy", "tp", "fp", "fn")
-    return {f"resolved_{k}": m[k] for k in keep}
+    out = {f"resolved_{k}": m[k] for k in keep}
+    if m.get("per_item"):  # same entities in the same order: their correctness once the resolver set the id
+        out["_resolved_per_item"] = m["per_item"]
+    return out
+
+
+def attach_resolved(m, resolved):
+    """Copy per-entity correctness after the resolver into m["per_item"] as `correct_resolved` (what the app stores,
+    minus the optional model pick). conformal.py / review_curve.py score on it with --correct resolved."""
+    per = resolved.pop("_resolved_per_item", None)
+    if not per or not m.get("per_item"):
+        return m
+    for it, rit in zip(m["per_item"], per):
+        for e, re_ in zip(it["entities"], rit["entities"]):
+            e["correct_resolved"] = re_["correct"]
+    return m
 
 
 def load_gold(path):
@@ -258,24 +273,142 @@ def load_gold(path):
              "gold_complete": r.get("gold_complete", True), "partial": r.get("partial", False)} for r in rows]
 
 
-def make_complete(base_url, model, key, max_tokens=1024, timeout=300, confidence=False, max_retries=2):
-    """-> complete(diary) -> (text, seconds, completion_tokens) against an OpenAI-compatible endpoint."""
-    from openai import OpenAI
-    client = OpenAI(base_url=base_url, api_key=key or "none", timeout=timeout, max_retries=max_retries)
+class RateGate:
+    """Client-side limits for a rate-limited gateway (AMD Token Factory: 20 requests/min, 8 in flight per key).
+    At most `inflight` requests at once and `rpm` request starts per rolling 60 s; 0 means no limit. Thread-safe."""
 
-    def complete(diary):
-        t0 = time.time()
-        r = client.chat.completions.create(model=model, messages=build_messages(diary, confidence=confidence),
-                                           temperature=0, max_tokens=max_tokens)
-        dt = time.time() - t0
+    def __init__(self, rpm=0, inflight=0, clock=time.monotonic, sleep=time.sleep):
+        self.rpm, self.clock, self.sleep = rpm, clock, sleep
+        self.sem = threading.BoundedSemaphore(inflight) if inflight else None
+        self.lock = threading.Lock()
+        self.starts = collections.deque()
+
+    def __enter__(self):
+        if self.sem:
+            self.sem.acquire()
+        while self.rpm:
+            with self.lock:
+                now = self.clock()
+                while self.starts and now - self.starts[0] >= 60:
+                    self.starts.popleft()
+                if len(self.starts) < self.rpm:
+                    self.starts.append(now)
+                    break
+                wait = 60 - (now - self.starts[0]) + 0.05
+            self.sleep(wait)
+        return self
+
+    def __exit__(self, *exc):
+        if self.sem:
+            self.sem.release()
+        return False
+
+
+def retry_delay(headers, attempt, cap=120.0):
+    """Seconds to wait before retrying a 429: Retry-After (or retry-after-ms) when sent, else exponential backoff.
+    None when the server asks for more than `cap` (e.g. the daily budget is spent): the call fails instead of hanging."""
+    h = headers or {}
+    wait = None
+    try:
+        if h.get("retry-after-ms"):
+            wait = float(h["retry-after-ms"]) / 1000
+        elif h.get("retry-after"):
+            wait = float(h["retry-after"])
+    except (TypeError, ValueError):
+        wait = None
+    if wait is None:
+        wait = min(2.0 ** attempt, 30.0) + random.uniform(0, 1)
+    return None if wait > cap else max(0.0, wait)
+
+
+def n_refused(e):
+    """400 because the server cannot return several choices (Token Factory: "does not support the n parameter")."""
+    return getattr(e, "status_code", None) == 400 and "n parameter" in str(getattr(e, "message", "") or e).lower()
+
+
+def new_usage():
+    return {"requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0, "rate_limited": 0}
+
+
+def add_usage(acc, r=None, lock=None, rate_limited=0):
+    """Add one response's usage (requests, tokens, the gateway's `usage.cost` when it reports one) to acc."""
+    if acc is None:
+        return
+    u = getattr(r, "usage", None) if r is not None else None
+    extra = (getattr(u, "model_extra", None) or {}) if u is not None else {}
+    with (lock or threading.Lock()):
+        acc["rate_limited"] += rate_limited
+        if r is None:
+            return
+        acc["requests"] += 1
+        acc["prompt_tokens"] += (u.prompt_tokens or 0) if u else 0
+        acc["completion_tokens"] += (u.completion_tokens or 0) if u else 0
+        if isinstance(extra.get("cost"), (int, float)):
+            acc["cost_usd"] += float(extra["cost"])
+
+
+def make_complete(base_url, model, key, max_tokens=1024, timeout=300, confidence=False, schema=None, rpm=0, inflight=0,
+                  rate_retries=12, max_retries=2):
+    """-> complete(diary) -> (text, seconds, completion_tokens) against an OpenAI-compatible endpoint.
+    schema: send it as response_format json_schema (the app does, on every extraction call).
+    rpm / inflight: client-side limits (RateGate); a 429 is retried after Retry-After up to rate_retries times.
+    complete(diary, acc=dict) and complete.samples(..., acc=dict) add request and token counts to acc (new_usage())."""
+    import openai
+    from openai import OpenAI
+    limited = bool(rpm or inflight)
+    client = OpenAI(base_url=base_url, api_key=key or "none", timeout=timeout, max_retries=0 if limited else max_retries)
+    gate = RateGate(rpm, inflight)
+    lock = threading.Lock()
+    state = {"n_ok": True}
+    rf = {"response_format": {"type": "json_schema", "json_schema": {"name": "out", "schema": schema}}} if schema else {}
+
+    def create(acc, **kw):
+        """One request through the gate. Returns (response, seconds of the successful attempt, gate wait excluded)."""
+        for attempt in range(rate_retries + 1):
+            try:
+                with gate:
+                    t0 = time.time()
+                    r = client.chat.completions.create(**kw)
+                    dt = time.time() - t0
+                add_usage(acc, r, lock)
+                return r, dt
+            except openai.RateLimitError as e:
+                wait = retry_delay(e.response.headers if e.response is not None else None, attempt)
+                if wait is None or attempt == rate_retries:
+                    raise
+                add_usage(acc, None, lock, rate_limited=1)
+                time.sleep(wait)
+            except (openai.APIConnectionError, openai.InternalServerError):
+                if attempt >= 2:
+                    raise
+                time.sleep(2.0 ** attempt + random.uniform(0, 1))
+        raise AssertionError("unreachable")
+
+    def complete(diary, acc=None):
+        r, dt = create(acc, model=model, messages=build_messages(diary, confidence=confidence), temperature=0,
+                       max_tokens=max_tokens, **rf)
         return r.choices[0].message.content or "", dt, (r.usage.completion_tokens if r.usage else 0)
 
-    def samples(diary, n, temperature=0.7):
-        """n sampled answers in one call (the app's llm.samples does the same with n=CLARIO_SC_N, temperature 0.7)."""
-        r = client.chat.completions.create(model=model, messages=build_messages(diary, confidence=confidence),
-                                           temperature=temperature, max_tokens=max_tokens, n=n)
-        return [c.message.content or "" for c in r.choices]
+    def samples(diary, n, temperature=0.7, acc=None):
+        """n sampled answers (the app's llm.samples with n=CLARIO_SC_N, temperature 0.7). One call with n choices when the
+        server takes `n`; else (Token Factory rejects n > 1 with 400) n separate requests, as the app does."""
+        kw = dict(model=model, messages=build_messages(diary, confidence=confidence), temperature=temperature,
+                  max_tokens=max_tokens, **rf)
+        if n > 1 and state["n_ok"]:
+            try:
+                r, _ = create(acc, n=n, **kw)
+                texts = [c.message.content or "" for c in r.choices[:n]]
+                if len(texts) == n:
+                    return texts
+            except openai.BadRequestError as e:
+                if not n_refused(e):
+                    raise
+                state["n_ok"] = False
+        with ThreadPoolExecutor(n) as ex:
+            outs = list(ex.map(lambda _: create(acc, **kw)[0], range(n)))
+        return [o.choices[0].message.content or "" for o in outs]
     complete.samples = samples
+    complete.tracks_usage = True
     return complete
 
 
@@ -348,21 +481,50 @@ def make_complete_hf(model_id, adapter=None, load_in_4bit=False, max_tokens=1024
     return complete
 
 
-def run_records(gold, complete, concurrency=4, sc_n=0, batch_size=1):
+def cache_key(g, tag):
+    return hashlib.sha1(json.dumps([tag, g.get("id"), g["diary"]], ensure_ascii=False).encode()).hexdigest()[:20]
+
+
+def run_records(gold, complete, concurrency=4, sc_n=0, batch_size=1, cache_dir=None, cache_tag=""):
     """Run complete(diary) over gold rows. Returns (records, wall_seconds).
     sc_n > 1: also draw sc_n samples per row and set every predicted entity's confidence to its self-consistency
-    (agreement rate across the samples, the app's signal); a verbalized confidence the model wrote moves to `verbalized`."""
+    (agreement rate across the samples, the app's signal); a verbalized confidence the model wrote moves to `verbalized`.
+    cache_dir: raw answers per row are kept there (key: cache_tag + row id + diary) and reused on a rerun, so an
+    interrupted run against a rate-limited endpoint resumes without spending the calls again."""
+    tracks = getattr(complete, "tracks_usage", False)
+    if cache_dir:
+        os.makedirs(cache_dir, exist_ok=True)
+
+    def call(g):
+        acc = new_usage() if tracks else None
+        kw = {"acc": acc} if tracks else {}
+        text, dt, toks = complete(g["diary"], **kw)
+        sampled = None
+        if sc_n > 1 and parse(text):
+            sampled = complete.samples(g["diary"], sc_n, **kw)
+        return {"text": text, "dt": dt, "toks": toks, "samples": sampled, "usage": acc}
+
     def one(g):
         try:
-            text, dt, toks = complete(g["diary"])
+            path = os.path.join(cache_dir, cache_key(g, cache_tag) + ".json") if cache_dir else None
+            if path and os.path.exists(path):
+                raw = json.load(open(path)); raw["cached"] = True
+            else:
+                raw = call(g)
+                if path:
+                    tmp = path + ".tmp"
+                    json.dump(raw, open(tmp, "w")); os.replace(tmp, path)
+            text = raw["text"]
             pred = parse(text)
-            if sc_n > 1 and pred:
-                sampled = [parse(t) for t in complete.samples(g["diary"], sc_n)]
+            if sc_n > 1 and pred and raw.get("samples"):
+                sampled = [parse(t) for t in raw["samples"]]
                 for e, c in zip(pred, self_consistency(pred, sampled, g["diary"])):
                     e["verbalized"] = e.get("confidence")
                     e["confidence"] = c
-            return {**g, "pred": pred, "strict": strict_valid(text), "dt": dt, "toks": toks, "raw": text, "err": None}
+            return {**g, "pred": pred, "strict": strict_valid(text), "dt": raw["dt"], "toks": raw["toks"], "raw": text,
+                    "err": None, "usage": raw.get("usage"), "cached": bool(raw.get("cached"))}
         except Exception as e:
+            print(f"row {g.get('id')}: {repr(e)[:200]}", file=sys.stderr)
             return {**g, "pred": None, "strict": False, "dt": 0.0, "toks": 0, "raw": "", "err": repr(e)}
     t0 = time.time()
     if getattr(complete, "batch", None) and sc_n <= 1 and batch_size > 1:  # in-process model: padded batches
@@ -402,6 +564,7 @@ def infer_backend(url):
     u = (url or "").lower()
     if "anthropic.com" in u: return "anthropic-openai-compat"
     if "11434" in u: return "ollama"
+    if "developer.amd.com.cn" in u: return "amd-token-factory"
     return "openai-compatible"
 
 
@@ -449,8 +612,18 @@ def main(argv=None):
     ap.add_argument("--load-in-4bit", action="store_true", help="--hf-model in 4-bit (16 GB GPUs)")
     ap.add_argument("--batch-size", type=int, default=16, help="--hf-model: diaries per padded generate() call")
     ap.add_argument("--no-resolve", action="store_true", help="skip the resolved_* metrics (app HPO resolver)")
+    ap.add_argument("--json-schema", action="store_true",
+                    help="send the extraction_v3 schema as response_format json_schema on every call (as the app does)")
+    ap.add_argument("--rpm", type=int, default=0, help="client-side cap on requests started per minute (0 = none)")
+    ap.add_argument("--max-inflight", type=int, default=0, help="client-side cap on requests in flight (0 = none)")
+    ap.add_argument("--cache-dir", default="", help="keep raw answers per row here and reuse them on a rerun (resumable)")
+    ap.add_argument("--shuffle-seed", type=int, default=None,
+                    help="shuffle rows with this seed before --limit, so --limit takes a random subsample")
     a = ap.parse_args(argv)
     gold = load_gold(a.data)
+    n_available = len(gold)
+    if a.shuffle_seed is not None:
+        random.Random(a.shuffle_seed).shuffle(gold)
     if a.limit: gold = gold[:a.limit]
     os.makedirs(a.out_dir, exist_ok=True)
     dataset = a.dataset or "/".join(os.path.normpath(a.data).split(os.sep)[-2:])
@@ -469,18 +642,44 @@ def main(argv=None):
         else:
             if not (a.base_url and a.model): ap.error("--base-url and --model required (or --hf-model)")
             key = os.environ.get(a.api_key_env, "") if a.api_key_env else "none"
-            complete = make_complete(a.base_url, a.model, key, a.max_tokens, a.timeout, a.confidence, a.max_retries)
-        recs, wall = run_records(gold, complete, a.concurrency, a.sc_n, a.batch_size if a.hf_model else 1)
+            schema = None
+            if a.json_schema:
+                sp = os.path.join(os.path.dirname(HERE), "backend", "clario", "schemas", "extraction_v3.json")
+                schema = {k: v for k, v in json.load(open(sp)).items() if k not in ("$schema", "$id")}
+            complete = make_complete(a.base_url, a.model, key, a.max_tokens, a.timeout, a.confidence, schema=schema,
+                                     rpm=a.rpm, inflight=a.max_inflight, max_retries=a.max_retries)
+        tag = json.dumps([a.model, a.base_url, a.sc_n, a.confidence, a.json_schema, a.max_tokens])
+        recs, wall = run_records(gold, complete, a.concurrency, a.sc_n, a.batch_size if a.hf_model else 1,
+                                 cache_dir=a.cache_dir or None, cache_tag=tag)
         m = score(recs); label = a.label
         resolve = None if a.no_resolve else make_resolver()
         if resolve:
-            m.update(resolved_metrics(recs, resolve), resolver="clario.extract.resolve_hpo (ontology check, no model pick)")
+            rm = resolved_metrics(recs, resolve)
+            attach_resolved(m, rm)
+            m.update(rm, resolver="clario.extract.resolve_hpo (ontology check, no model pick)")
         lat = [r["dt"] for r in recs if r["err"] is None]
         m.update(latency_p50_s=pct(lat, .5), latency_p95_s=pct(lat, .95),
                  tokens_per_s=sum(r["toks"] for r in recs) / wall if wall else 0.0,
                  wall_s=wall, errors=sum(r["err"] is not None for r in recs), concurrency=a.concurrency)
+        if a.limit and a.limit < n_available:
+            m["subsample"] = {"of": n_available, "seed": a.shuffle_seed,
+                              "how": "random subsample (rows shuffled with seed, first n kept)" if a.shuffle_seed is not None
+                              else "first n rows of the file"}
+        used = [r["usage"] for r in recs if r.get("usage")]
+        if used:  # what the run cost on the endpoint: requests and tokens per note (self-consistency included)
+            tot = {k: sum(u[k] for u in used) for k in new_usage()}
+            m["usage"] = {**{f"{k}_total": (round(v, 6) if k == "cost_usd" else v) for k, v in tot.items()},
+                          "notes": len(used),
+                          "requests_per_note": round(tot["requests"] / len(used), 3),
+                          "prompt_tokens_per_note": round(tot["prompt_tokens"] / len(used), 1),
+                          "completion_tokens_per_note": round(tot["completion_tokens"] / len(used), 1),
+                          "cost_source": "usage.cost in the gateway responses (0 when the server reports none)"}
+        m["rows_from_cache"] = sum(bool(r.get("cached")) for r in recs)
+        if a.rpm or a.max_inflight:
+            m["client_limits"] = {"rpm": a.rpm, "max_inflight": a.max_inflight}
         res = build_result(m, label, dataset, a.model, a.backend or infer_backend(a.base_url), dry_run=False,
                            confidence_prompt=a.confidence, base_url=a.base_url or None, sc_n=a.sc_n,
+                           json_schema=a.json_schema,
                            confidence_source=("self_consistency" if a.sc_n > 1 else "verbalized" if a.confidence else None))
         res["samples"] = [{"diary": r["diary"], "raw": r["raw"][:600], "err": r["err"]} for r in recs[:3]]
     with open(os.path.join(a.out_dir, f"extraction_{label}.json"), "w") as f: json.dump(res, f, indent=2)
