@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { X } from "lucide-react";
+import { SYSTEM_COLOR } from "../lib";
+import { GlassBead } from "../components/GlassBead";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { buildHeat, fmtDate, pastWhen, weeklyMood } from "../lib";
@@ -31,6 +35,8 @@ export default function TimelinePage() {
   const { t, lang } = useT();
   const { data, error, loading, reload } = useAsync(() => api.timeline(lang), [lang]);
   const [pick, setPick] = useState<HeatPick | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (pick) panel.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }); }, [pick]);
   if (loading) return <Loading />;
   if (error || !data) return <ErrorBox error={error ?? t("common.noData")} retry={reload} />;
   if (data.days.length === 0) return <Empty title={t("timeline.emptyTitle")}>{t("timeline.emptyText")}</Empty>;
@@ -43,29 +49,52 @@ export default function TimelinePage() {
   const picked = pick ? pick.entryIds.map((id) => byId[id]).filter(Boolean) : [];
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl">{t("timeline.title")}</h1>
-      <section aria-labelledby="hs" className="card" data-tour="timeline-heat">
-        <h2 id="hs" className="text-xl">{t("timeline.byWeek")}</h2>
+      <h1 className="font-display text-[34px] sm:text-[40px] leading-tight font-semibold tracking-[-0.03em]">{t("timeline.title")}</h1>
+      <section aria-labelledby="hs" className="glass p-6 sm:p-8" data-tour="timeline-heat">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 mb-5">
+          <div>
+            <h2 id="hs" className="text-2xl">{t("timeline.byWeek")}</h2>
+            {heat.rows.length > 0 && <p className="text-[15px] text-muted mt-1">{t("timeline.pick")}</p>}
+          </div>
+          {heat.rows.length > 0 && (
+            <p aria-hidden className="flex items-center gap-1 text-[13px] text-muted">
+              <GlassBead color="var(--aqua)" count={1} size={26} /><GlassBead color="var(--aqua)" count={2} size={26} /><GlassBead color="var(--aqua)" count={3} size={26} />
+              <span className="ml-1">{t("timeline.legend")}</span>
+            </p>
+          )}
+        </div>
         {heat.rows.length === 0 ? <p className="text-muted mt-1">{t("timeline.confirmHint")}</p> : (
           <>
-            <p className="text-sm text-muted mb-2">{t("timeline.pick")}</p>
             <HeatStrip heat={heat} mood={mood} onPick={(p) => setPick(pick && pick.hpo_id === p.hpo_id && pick.week === p.week ? null : p)}
               selected={pick} />
           </>
         )}
+        <AnimatePresence initial={false}>
         {pick && (
-          <div className="mt-3 border-t border-line pt-3" aria-live="polite" data-testid="heat-picked">
-            <p className="font-bold">{t("timeline.notesFor", { label: pick.label, date: fmtDate(pick.week) })}</p>
-            <ul className="mt-1 space-y-1">
-              {picked.map((e) => (
-                <li key={e.id} className="text-[15px]">
-                  <span className="text-muted text-sm mr-2">{fmtDate(e.occurred_on, { weekday: "short", day: "numeric", month: "short" })}</span>
-                  <Link to={`/entry/${e.id}`} className="underline underline-offset-4">{entryText(e.text)}</Link>
-                </li>
+          <motion.div ref={panel} key={`${pick.hpo_id}-${pick.week}`} initial={{ opacity: 0.4, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-6 rounded-[24px] p-5 sm:p-6" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid var(--glass-edge)", boxShadow: "0 1px 0 0 #fff inset, 0 18px 36px -22px rgba(20,50,58,0.45)" }}
+            aria-live="polite" data-testid="heat-picked">
+            <div className="flex items-start justify-between gap-4">
+              <p className="font-semibold text-[17px] flex items-center gap-2">
+                <GlassBead color={SYSTEM_COLOR[(data.systems ?? {})[pick.hpo_id] ?? "other"] ?? SYSTEM_COLOR.other} count={1} size={28} />
+                {t("timeline.notesFor", { label: pick.label, date: fmtDate(pick.week) })}
+              </p>
+              <button type="button" className="btn btn-sm !px-0 w-9 shrink-0" onClick={() => setPick(null)} aria-label={t("common.close")} title={t("common.close")}><X size={15} aria-hidden /></button>
+            </div>
+            <ul className="mt-4 grid gap-3 md:grid-cols-2">
+              {picked.map((e, i) => (
+                <motion.li key={e.id} initial={{ opacity: 0.4, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}>
+                  <Link to={`/entry/${e.id}`} className="block card !p-4 transition-transform hover:-translate-y-0.5">
+                    <span className="text-muted text-sm">{fmtDate(e.occurred_on, { weekday: "short", day: "numeric", month: "short" })}</span>
+                    <span className="block text-[15px] mt-1 line-clamp-3">{entryText(e.text)}</span>
+                  </Link>
+                </motion.li>
               ))}
             </ul>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </section>
       {past.length > 0 && (
         <section aria-labelledby="ph" className="card" data-testid="timeline-past">
