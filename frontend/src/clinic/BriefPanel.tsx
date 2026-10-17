@@ -91,7 +91,7 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
 
   return (
     <aside className="lg:sticky lg:top-4 space-y-4" aria-label={t("brief.title")}>
-      <div className="no-print flex items-center justify-between gap-3">
+      <div className="no-print flex items-center justify-between gap-3" data-tour="brief">
         <h2 className="text-2xl">{t("brief.title")}</h2>
         <button className="btn btn-primary" onClick={() => start(pkg.package_id, lang)} disabled={state.status === "running" || finalized}>
           {shown ? t("brief.draftAgain") : t("brief.draft")}

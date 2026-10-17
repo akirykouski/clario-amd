@@ -18,7 +18,7 @@ export default function Inbox() {
     <section>
       <h1 className="text-3xl mb-1">{t("inbox.title")}</h1>
       <InboxMetrics />
-      <div className="overflow-x-auto card p-0">
+      <div className="overflow-x-auto card p-0" data-tour="inbox">
         <table className="w-full text-[15px]">
           <thead><tr className="text-left text-muted border-b border-line">
             {(["inbox.patient", "inbox.period", "inbox.received", "inbox.expires", "inbox.terms", "inbox.brief"] as Key[]).map((h) => <th key={h} className="px-3 py-2 font-bold">{t(h)}</th>)}

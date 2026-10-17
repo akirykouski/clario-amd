@@ -72,3 +72,5 @@ Private symptom diary (patient mode) + clinic review server (clinic mode) from o
 ## Dictation (issue #13)
 - Mic on Today (`frontend/src/patient/dictation/`): Whisper `onnx-community/whisper-base` (q8 encoder + q8 merged decoder, about 77 MB, browser cache) via `@huggingface/transformers` 4.3.0 in a module Web Worker; language = UI language. Audio stays in the worker; network is only huggingface.co (model) and cdn.jsdelivr.net (onnxruntime wasm). The 27 MB ort wasm in dist/ is emitted by Vite but unused (runtime loads it from jsDelivr).
 - `core.ts` is shared by the worker and the opt-in headless test: `DICTATION_WAV_EN=x.wav DICTATION_WAV_IT=y.wav npx vitest run src/test/dictation.headless.test.ts` (downloads the model; skipped otherwise). Component tests mock `engine.ts`.
+## Onboarding tour (issue #14)
+- "?" in both headers opens `components/Tour.tsx` (max 5 steps, never on load). Steps point at `data-tour="..."` elements; the first visible one gets a spotlight, else the card is centred. Rendered in a portal (a backdrop-filter header would trap `position: fixed`). Copy: `tour.*` keys; patients never see condition names.

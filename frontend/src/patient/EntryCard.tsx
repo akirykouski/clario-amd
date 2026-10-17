@@ -43,13 +43,13 @@ export function useLiveEntry(initial: Entry, onChange?: (e: Entry) => void) {
   return entry;
 }
 
-export function EntryCard({ initial, onChange, pii = 0 }: { initial: Entry; onChange?: (e: Entry) => void; pii?: number }) {
+export function EntryCard({ initial, onChange, pii = 0, tour = false }: { initial: Entry; onChange?: (e: Entry) => void; pii?: number; tour?: boolean }) {
   const { t, tn } = useT();
   const entry = useLiveEntry(initial, onChange);
   const name = entityName;
   const terms = entry.entities.filter((e) => e.review !== "rejected");
   return (
-    <article className="card">
+    <article className="card" data-tour={tour ? "today-recent" : undefined}>
       <div className="flex justify-between text-sm text-muted">
         <time dateTime={entry.occurred_on}>{fmtDate(entry.occurred_on, { weekday: "short", day: "numeric", month: "short" })}</time>
         {entry.mood !== null && <span>{t("entry.mood", { n: entry.mood })}</span>}

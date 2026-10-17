@@ -7,6 +7,7 @@ import Inbox from "./Inbox";
 import PackagePage from "./PackagePage";
 import PrivacyPage from "../patient/PrivacyPage";
 import { LangSwitch } from "../components/LangSwitch";
+import { CLINIC_TOUR, TourButton } from "../components/Tour";
 import { useT } from "../i18n";
 import { tokenFactoryLabel } from "../components/compute";
 
@@ -35,6 +36,7 @@ export default function ClinicApp({ health }: { health: Health }) {
           <div className="flex items-center gap-x-4 gap-y-2 flex-wrap justify-end">
             <Link to="/privacy" className="text-sm font-bold text-accent underline underline-offset-4">{t("clinic.callLog")}</Link>
             <LangSwitch />
+            <TourButton steps={CLINIC_TOUR} />
             <ComputeBadge llm={health.llm} />
           </div>
           {key.data && <span className="w-full text-sm text-muted inline-flex items-center gap-1.5 flex-wrap" title={t("clinic.keyTitle")}><KeyRound size={14} aria-hidden />{key.data.clinic_name} <span className="font-mono text-ink break-all">{key.data.fingerprint}</span></span>}

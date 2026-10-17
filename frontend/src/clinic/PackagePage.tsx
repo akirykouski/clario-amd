@@ -60,7 +60,7 @@ export default function PackagePage() {
   };
   const open = brief ? brief.items.filter((i) => i.review === "pending" && i.origin === "ai").length : 0;
   const seg = (k: "package" | "brief") => (
-    <button key={k} role="tab" aria-selected={pane === k} className="btn flex-1" onClick={() => { setPane(k); window.scrollTo({ top: 0 }); }}
+    <button key={k} role="tab" aria-selected={pane === k} className="btn flex-1" data-tour={k === "brief" ? "brief" : undefined} onClick={() => { setPane(k); window.scrollTo({ top: 0 }); }}
       style={pane === k ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
       {k === "package" ? t("pkg.panePackage") : t("pkg.paneBrief")}{k === "brief" && open > 0 ? ` (${open})` : ""}
     </button>
@@ -102,7 +102,7 @@ function Header({ pkg, brief, version = 0 }: { pkg: SharePackage; brief: Brief |
     `${x.label} (${tn("ov.notes", n)}${x.max_severity !== null && x.max_severity >= 5 ? `, ${t("ov.upTo", { n: x.max_severity })}` : ""})`;
   return (
     <header className="space-y-3">
-      <div>
+      <div data-tour="pkg-glance">
         <h1 className="text-3xl">{pkg.patient_alias}{who && <span className="text-xl text-muted font-sans ml-3" data-testid="pkg-who">{who}</span>}</h1>
         <p className="text-muted text-sm">{t("share.range", { a: fmtDate(pkg.period[0]), b: fmtDate(pkg.period[1]) })} · {t("pkg.expiresShort", { date: fmtDate(pkg.expires_at) })}</p>
         <p className="text-sm font-bold mt-1" data-testid="pkg-glance">{t("pkg.glance", { notes: pkg.entries.length, weeks: ov?.weeks ?? "?", terms, labs: abnormal })}</p>
@@ -158,7 +158,7 @@ function NeedsCheck({ pkg, decisions, onDecide, onReplace, onDecideLab, onDecide
   const pages = new Map<string, { entry: string | null; page: number; n: number }>();
   openLabs.forEach((l) => { const k = `${l.entry_id}|${l.page}`; pages.set(k, { entry: l.entry_id, page: l.page, n: (pages.get(k)?.n ?? 0) + 1 }); });
   return (
-    <section aria-labelledby="chk" className="card space-y-2" style={{ borderLeft: "5px solid var(--moderate)" }} data-testid="needs-check">
+    <section aria-labelledby="chk" className="card space-y-2" style={{ borderLeft: "5px solid var(--moderate)" }} data-testid="needs-check" data-tour="needs-check">
       <h2 id="chk" className="text-xl flex items-center gap-2"><AlertTriangle size={20} aria-hidden style={{ color: "var(--moderate)" }} />{tn("check.title", open)}</h2>
       <p className="text-sm text-muted">{t("check.sub")}</p>
       {openLabs.length > 1 && (
