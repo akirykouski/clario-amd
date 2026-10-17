@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.3.0",
     "framer-motion": "^11.11.0",
     "lucide-react": "^0.460.0",
     "qrcode": "^1.5.4",

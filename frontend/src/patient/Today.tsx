@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Entry, SafetyNotice } from "../types";
 import { today } from "../lib";
@@ -8,6 +8,7 @@ import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { EntryCard } from "./EntryCard";
 import { SafetyBanner } from "./SafetyBanner";
+import { DictationButton } from "./dictation/Dictation";
 
 export default function Today() {
   const { t, lang } = useT();
@@ -36,6 +37,11 @@ export default function Today() {
     finally { setBusy(false); }
   };
 
+  // Dictated text is appended so a typed start is kept; the user edits it before saving.
+  const addSpoken = useCallback((spoken: string) => {
+    setText((prev) => (prev.trim() ? `${prev.trimEnd()} ${spoken}` : spoken));
+  }, []);
+
   useEffect(() => { document.title = `${t("today.title")} · Clario`; }, [t, lang]);
   const entries: Entry[] = data ?? [];
 
@@ -46,6 +52,7 @@ export default function Today() {
         <label htmlFor="today" className="block font-display text-3xl">{t("today.question")}</label>
         <textarea id="today" className="input min-h-[140px] text-[17px]" value={text} onChange={(e) => setText(e.target.value)}
           placeholder={t("today.placeholder")} />
+        <DictationButton onText={addSpoken} />
         <div className="grid grid-cols-2 gap-3 items-end">
           <div>
             <label htmlFor="d" className="label">{t("today.date")}</label>
