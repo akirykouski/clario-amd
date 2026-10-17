@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, Check, MessageSquareQuote, X } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Check, MessageSquareQuote, X } from "lucide-react";
 import { api } from "../api";
-import type { Brief, Decisions, Entry, Overview, OverviewTerm, SharedLab, SharePackage, TermDecision } from "../types";
+import type { Brief, Decisions, Entry, Overview, OverviewTerm, SharedLab, SharePackage, Term, TermCorrection, TermDecision } from "../types";
 import { buildHeat, fmtDate, fmtNum, splitQuotes, weeklyMood } from "../lib";
 import { ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
@@ -37,8 +37,20 @@ export default function PackagePage() {
   };
   if (loading) return <Loading />;
   if (error || !data) return <ErrorBox error={error ?? t("common.notFound")} retry={reload} />;
+  // a replaced term changes the package itself (new id and label): take the package, overview and brief lines again
+  const refreshAfterReplace = () => {
+    api.package(id).then(setDecided).catch(() => undefined);
+    if (brief && !brief.finalized) api.brief(id, { lang }).then(setBrief).catch(() => undefined);
+  };
   const decide = async (entId: string, d: TermDecision) => {
-    try { setDecisions(await api.decideTerm(id, entId, d)); setVersion((v) => v + 1); } catch { /* keep state */ }
+    const wasReplaced = decisions.terms[entId] === "corrected";
+    try {
+      setDecisions(await api.decideTerm(id, entId, d)); setVersion((v) => v + 1);
+      if (wasReplaced) refreshAfterReplace();
+    } catch { /* keep state */ }
+  };
+  const replace = async (entId: string, hpoId: string) => {
+    try { setDecisions(await api.replaceTerm(id, entId, hpoId)); setVersion((v) => v + 1); refreshAfterReplace(); } catch { /* keep state */ }
   };
   const decideLab = async (labId: string, d: TermDecision) => {
     try { setDecisions(await api.decideLab(id, labId, d)); refreshAfterLab(); } catch { /* keep state */ }
@@ -62,9 +74,9 @@ export default function PackagePage() {
       </div>
       <div className="grid xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-6 items-start">
         <div className={`no-print min-w-0 space-y-5 ${pane === "brief" ? "hidden xl:block" : ""}`}>
-          <Header pkg={data} brief={brief} />
+          <Header pkg={data} brief={brief} version={version} />
           <Differential pid={id} version={version} />
-          <NeedsCheck pkg={data} decisions={decisions} onDecide={decide} onDecideLab={decideLab} onDecideLabs={decideLabs} />
+          <NeedsCheck pkg={data} decisions={decisions} onDecide={decide} onReplace={replace} onDecideLab={decideLab} onDecideLabs={decideLabs} />
           <Heat pkg={data} />
           {data.labs.length > 0 && <LabsBlock labs={data.labs} decisions={decisions} />}
           <Details pkg={data} />
@@ -75,10 +87,11 @@ export default function PackagePage() {
   );
 }
 
-function Header({ pkg, brief }: { pkg: SharePackage; brief: Brief | null }) {
+function Header({ pkg, brief, version = 0 }: { pkg: SharePackage; brief: Brief | null; version?: number }) {
   const { t, tn, lang } = useT();
   const [ov, setOv] = useState<Overview | null>(null);
-  useEffect(() => { api.overview(pkg.package_id, lang).then(setOv).catch(() => setOv(null)); }, [pkg.package_id, lang]);
+  // `version` bumps after a term decision: a replaced term changes what the overview counts
+  useEffect(() => { api.overview(pkg.package_id, lang).then(setOv).catch(() => setOv(null)); }, [pkg.package_id, lang, version]);
   const mine = own(pkg);
   const terms = new Set(mine.filter((e) => e.type !== "lab").map((e) => e.hpo_id ?? e.canonical.toLowerCase())).size;
   const abnormal = new Set(pkg.labs.filter((l) => l.flag === "low" || l.flag === "high").map((l) => l.test_name)).size;
@@ -128,12 +141,14 @@ function Header({ pkg, brief }: { pkg: SharePackage; brief: Brief | null }) {
   );
 }
 
-function NeedsCheck({ pkg, decisions, onDecide, onDecideLab, onDecideLabs }: {
-  pkg: SharePackage; decisions: Decisions; onDecide: (id: string, d: TermDecision) => void; onDecideLab: (id: string, d: TermDecision) => void;
-  onDecideLabs: (b: { decision: TermDecision; page?: number; entry_id?: string | null }) => void;
+function NeedsCheck({ pkg, decisions, onDecide, onReplace, onDecideLab, onDecideLabs }: {
+  pkg: SharePackage; decisions: Decisions; onDecide: (id: string, d: TermDecision) => void; onReplace: (id: string, hpoId: string) => void;
+  onDecideLab: (id: string, d: TermDecision) => void; onDecideLabs: (b: { decision: TermDecision; page?: number; entry_id?: string | null }) => void;
 }) {
   const { t, lang } = useT();
-  const items = pkg.entities.filter((e) => e.needs_review && e.id);
+  // a replaced term arrives already checked (it carries the clinician's term): keep it listed so it can be undone
+  const items = pkg.entities.filter((e) => e.id && (e.needs_review || decisions.terms[e.id] === "corrected"));
+  const fixes = decisions.corrections ?? {};
   const labs = pkg.labs.filter((l) => l.needs_review && l.id);
   if (!items.length && !labs.length) return null;
   const labDec: Record<string, TermDecision | undefined> = { ...Object.fromEntries(labs.map((l) => [l.id as string, l.decision ?? undefined])), ...decisions.labs };
@@ -157,11 +172,16 @@ function NeedsCheck({ pkg, decisions, onDecide, onDecideLab, onDecideLabs }: {
         </div>
       )}
       <ul className="divide-y divide-line">
-        {items.map((e) => (
-          <CheckRow key={e.id} decision={decisions.terms[e.id as string]} onDecide={(d) => onDecide(e.id as string, d)}
-            title={`${e.negated ? "No " : ""}${termLabel(e.hpo_id, e.canonical)}`} confidence={e.confidence}
-            sub={<>{t("check.wrote")}: <span className="clinic-quote">{e.quote}</span> · {fmtDate(e.occurred_on)}</>} />
-        ))}
+        {items.map((e) => {
+          const fix: TermCorrection | undefined = decisions.terms[e.id as string] === "corrected" ? fixes[e.id as string] : undefined;
+          return (
+            <CheckRow key={e.id} decision={decisions.terms[e.id as string]} onDecide={(d) => onDecide(e.id as string, d)}
+              title={`${e.negated ? "No " : ""}${fix ? termLabel(fix.to, fix.label) : termLabel(e.hpo_id, e.canonical)}`} confidence={fix ? null : e.confidence}
+              replacedFrom={fix ? termLabel(fix.from, fix.from_label) : undefined}
+              replace={e.family_history ? undefined : { pid: pkg.package_id, entId: e.id as string, current: e.hpo_id, onPick: (h) => onReplace(e.id as string, h) }}
+              sub={<>{t("check.wrote")}: <span className="clinic-quote">{e.quote}</span> · {fmtDate(e.occurred_on)}</>} />
+          );
+        })}
         {labs.map((l) => (
           <CheckRow key={l.id} decision={labDec[l.id as string]} onDecide={(d) => onDecideLab(l.id as string, d)}
             title={`${labName(l, lang)}: ${labValue(l, t)}`} confidence={l.confidence}
@@ -172,29 +192,81 @@ function NeedsCheck({ pkg, decisions, onDecide, onDecideLab, onDecideLabs }: {
   );
 }
 
-function CheckRow({ title, sub, confidence, decision, onDecide }: {
+type ReplaceTarget = { pid: string; entId: string; current: string | null; onPick: (hpoId: string) => void };
+
+function CheckRow({ title, sub, confidence, decision, onDecide, replace, replacedFrom }: {
   title: string; sub: React.ReactNode; confidence?: number | null; decision?: TermDecision; onDecide: (d: TermDecision) => void;
+  replace?: ReplaceTarget; replacedFrom?: string;
 }) {
   const { t } = useT();
+  const [picking, setPicking] = useState(false);
+  const said = decision === "confirmed" ? t("check.confirmed") : decision === "corrected" ? t("check.replaced", { was: replacedFrom ?? "" }) : t("check.rejected");
   return (
-    <li className="py-2 flex flex-wrap items-center justify-between gap-2">
-      <div className="min-w-0">
-        <p className={`font-bold ${decision === "rejected" ? "line-through text-muted" : ""}`}>{title}
-          {confidence !== null && confidence !== undefined && <span className="text-xs text-muted font-normal"> · {Math.round(confidence * 100)}%</span>}</p>
-        <p className="text-sm text-muted">{sub}</p>
+    <li className="py-2 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className={`font-bold ${decision === "rejected" ? "line-through text-muted" : ""}`}>{title}
+            {confidence !== null && confidence !== undefined && <span className="text-xs text-muted font-normal"> · {Math.round(confidence * 100)}%</span>}</p>
+          <p className="text-sm text-muted">{sub}</p>
+        </div>
+        {decision ? (
+          <div className="flex items-center gap-2 text-sm">
+            <span style={{ color: decision === "rejected" ? "var(--muted)" : "var(--accent)" }}>{said}</span>
+            <button className="btn-quiet btn px-1 min-h-[32px] text-sm" onClick={() => onDecide("pending")}>{t("check.undo")}</button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button className="btn btn-sm" onClick={() => onDecide("confirmed")}><Check size={14} aria-hidden />{t("common.confirm")}</button>
+            <button className="btn btn-sm" onClick={() => onDecide("rejected")}><X size={14} aria-hidden />{t("common.reject")}</button>
+            {replace && (
+              <button className="btn btn-sm" aria-expanded={picking} onClick={() => setPicking(!picking)}>
+                <ArrowLeftRight size={14} aria-hidden />{t("check.replace")}
+              </button>
+            )}
+          </div>
+        )}
       </div>
-      {decision ? (
-        <div className="flex items-center gap-2 text-sm">
-          <span style={{ color: decision === "confirmed" ? "var(--accent)" : "var(--muted)" }}>{decision === "confirmed" ? t("check.confirmed") : t("check.rejected")}</span>
-          <button className="btn-quiet btn px-1 min-h-[32px] text-sm" onClick={() => onDecide("pending")}>{t("check.undo")}</button>
-        </div>
-      ) : (
-        <div className="flex gap-2">
-          <button className="btn btn-sm" onClick={() => onDecide("confirmed")}><Check size={14} aria-hidden />{t("common.confirm")}</button>
-          <button className="btn btn-sm" onClick={() => onDecide("rejected")}><X size={14} aria-hidden />{t("common.reject")}</button>
-        </div>
+      {replace && picking && !decision && (
+        <ReplacePicker target={replace} onCancel={() => setPicking(false)} onPick={(h) => { setPicking(false); replace.onPick(h); }} />
       )}
     </li>
+  );
+}
+
+/** Other ontology terms for the patient's words, plus a search over the whole term list. No model call. */
+function ReplacePicker({ target, onPick, onCancel }: { target: ReplaceTarget; onPick: (hpoId: string) => void; onCancel: () => void }) {
+  const { t, lang } = useT();
+  const [cands, setCands] = useState<Term[] | null>(null);
+  const [q, setQ] = useState("");
+  const [found, setFound] = useState<Term[] | null>(null);
+  useEffect(() => { api.termCandidates(target.pid, target.entId, lang).then(setCands).catch(() => setCands([])); }, [target.pid, target.entId, lang]);
+  useEffect(() => {
+    const v = q.trim();
+    if (v.length < 3) { setFound(null); return; }
+    const h = setTimeout(() => { api.searchTerms(v, lang).then(setFound).catch(() => setFound([])); }, 250);
+    return () => clearTimeout(h);
+  }, [q, lang]);
+  const shown = (found ?? cands ?? []).filter((c) => c.hpo_id !== target.current);
+  return (
+    <div className="rounded-lg border border-line p-3 space-y-2" data-testid="replace-picker">
+      <p className="text-sm font-bold">{t("check.replaceTitle")}</p>
+      <input type="search" className="input w-full" value={q} onChange={(e) => setQ(e.target.value)}
+        placeholder={t("check.replaceSearch")} aria-label={t("check.replaceSearch")} />
+      {cands === null && found === null ? <p className="text-sm text-muted">{t("common.loading")}</p> : shown.length === 0 ? (
+        <p className="text-sm text-muted">{t("check.replaceNone")}</p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+          {shown.map((c) => (
+            <li key={c.hpo_id}>
+              <button className="btn btn-sm" onClick={() => onPick(c.hpo_id)}>
+                {c.label} <span className="font-mono text-xs text-muted">{c.hpo_id}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button className="btn-quiet btn px-1 min-h-[32px] text-sm" onClick={onCancel}>{t("common.cancel")}</button>
+    </div>
   );
 }
 

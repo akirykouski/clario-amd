@@ -175,8 +175,10 @@ export interface Condition {
 export interface ClinicQuestion { feature_id: string; label: string; question: string; ig: number; freq_by: { name: string; freq: number | null }[] }
 export interface ClinicAnswer { feature_id: string; label: string; answer: Answer; at: string }
 export interface Differential { conditions: Condition[]; question: ClinicQuestion | null; answers: ClinicAnswer[]; n_terms: number; note: string }
-export type TermDecision = "confirmed" | "rejected" | "pending";
-export interface Decisions { terms: Record<string, TermDecision>; labs?: Record<string, TermDecision>; answers: ClinicAnswer[] }
+export type TermDecision = "confirmed" | "rejected" | "corrected" | "pending";
+/** A term the clinician replaced: the id and label it had (`from`, null when it had no id) and the one picked (`to`). */
+export interface TermCorrection { from: string | null; from_label: string; to: string; label: string; at: string }
+export interface Decisions { terms: Record<string, TermDecision>; corrections?: Record<string, TermCorrection>; labs?: Record<string, TermDecision>; answers: ClinicAnswer[] }
 
 export interface OverviewTerm { label: string; count: number; recent_count: number; first: string; last: string; max_severity: number | null }
 export interface Overview {

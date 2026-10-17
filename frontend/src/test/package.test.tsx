@@ -168,6 +168,48 @@ describe("clinic package page", () => {
     expect(await within(box).findByText("Rejected by you")).toBeInTheDocument();
     await waitFor(() => expect(getDdx).toHaveBeenCalledTimes(2));
   });
+
+  it("replaces an unsure term with one the clinician picks, refreshes the package and overview, and can undo", async () => {
+    const unsure = { ...pkg, labs: pkg.labs.map((l) => ({ ...l, needs_review: false })),
+      entities: [...pkg.entities, ent("Sun exposure", null, { id: "x7", quote: "after a sunny afternoon", type: "trigger", needs_review: true, confidence: 0.6, reviewed: false })] };
+    const replaced = { ...unsure, entities: unsure.entities.map((e) => ("id" in e && e.id === "x7"
+      ? { ...e, hpo_id: "HP:0000992", canonical: "Cutaneous photosensitivity", type: "finding" as const, needs_review: false, reviewed: true } : e)) };
+    const getPkg = vi.spyOn(api, "package").mockResolvedValueOnce(unsure).mockResolvedValue(replaced);
+    vi.spyOn(api, "inbox").mockResolvedValue([]);
+    vi.spyOn(api, "decisions").mockResolvedValue({ terms: {}, answers: [] });
+    vi.spyOn(api, "termSystems").mockResolvedValue({});
+    const getDdx = vi.spyOn(api, "ddx").mockResolvedValue(ddx);
+    const getOv = vi.spyOn(api, "overview").mockResolvedValue(overview);
+    const cands = vi.spyOn(api, "termCandidates").mockResolvedValue([
+      { hpo_id: "HP:0000992", label: "Cutaneous photosensitivity" }, { hpo_id: "HP:0032379", label: "Polymorphous light eruption" }]);
+    const search = vi.spyOn(api, "searchTerms").mockResolvedValue([{ hpo_id: "HP:0007537", label: "Severe photosensitivity" }]);
+    const fix = { from: null, from_label: "Sun exposure", to: "HP:0000992", label: "Cutaneous photosensitivity", at: "x" };
+    const rep = vi.spyOn(api, "replaceTerm").mockResolvedValue({ terms: { x7: "corrected" }, corrections: { x7: fix }, answers: [] });
+    const undo = vi.spyOn(api, "decideTerm").mockResolvedValue({ terms: {}, corrections: {}, answers: [] });
+    render(<MemoryRouter initialEntries={["/p/pkg_1"]}><Routes><Route path="/p/:id" element={<PackagePage />} /></Routes></MemoryRouter>);
+    const box = await screen.findByTestId("needs-check");
+    expect(within(box).getByRole("button", { name: /confirm/i })).toBeInTheDocument();  // confirm and reject stay
+    expect(within(box).getByRole("button", { name: /reject/i })).toBeInTheDocument();
+    await userEvent.click(within(box).getByRole("button", { name: /replace/i }));
+    const picker = await within(box).findByTestId("replace-picker");
+    expect(cands).toHaveBeenCalledWith("pkg_1", "x7", "en");
+    expect(await within(picker).findByRole("button", { name: /Polymorphous light eruption/ })).toBeInTheDocument();
+    await userEvent.type(within(picker).getByRole("searchbox"), "severe photo");
+    await waitFor(() => expect(search).toHaveBeenCalledWith("severe photo", "en"));
+    expect(await within(picker).findByRole("button", { name: /Severe photosensitivity/ })).toBeInTheDocument();
+    await userEvent.clear(within(picker).getByRole("searchbox"));
+    await userEvent.click(await within(picker).findByRole("button", { name: /Cutaneous photosensitivity/ }));
+    expect(rep).toHaveBeenCalledWith("pkg_1", "x7", "HP:0000992");
+    expect(await within(box).findByText("Replaced by you, was Sun exposure")).toBeInTheDocument();
+    expect(box).toHaveTextContent("Cutaneous photosensitivity");
+    expect(box).toHaveTextContent("after a sunny afternoon");  // the patient's words stay
+    await waitFor(() => expect(getPkg).toHaveBeenCalledTimes(2));  // the package comes back with the new term
+    await waitFor(() => expect(getDdx).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getOv).toHaveBeenCalledTimes(2));
+    await userEvent.click(within(box).getByRole("button", { name: "Undo" }));
+    expect(undo).toHaveBeenCalledWith("pkg_1", "x7", "pending");
+    await waitFor(() => expect(getPkg).toHaveBeenCalledTimes(3));
+  });
 });
 
 describe("run chips", () => {
