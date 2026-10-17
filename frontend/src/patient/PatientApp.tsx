@@ -40,7 +40,7 @@ export default function PatientApp() {
   if (!open) {
     const target = vault.initialized ? "/unlock" : "/setup";
     if (loc.pathname !== target) return <Navigate to={target} replace />;
-    return <Vault mode={vault.initialized ? "unlock" : "setup"} onDone={() => { refresh().then(() => nav("/", { replace: true })); }} />;
+    return <Vault mode={vault.initialized ? "unlock" : "setup"} demoOpen={!!vault.demo_open} onDone={() => { refresh().then(() => nav("/", { replace: true })); }} />;
   }
   if (loc.pathname === "/setup" || loc.pathname === "/unlock") return <Navigate to="/" replace />;
 

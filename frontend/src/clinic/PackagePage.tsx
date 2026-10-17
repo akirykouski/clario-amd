@@ -39,7 +39,7 @@ export default function PackagePage() {
   // a lab decision changes the brief's lab lines and what blocks finalizing: take both from the server
   const refreshAfterLab = () => {
     api.package(id).then(setDecided).catch(() => undefined);
-    if (!brief?.finalized) api.brief(id, { lang }).then(setBrief).catch(() => undefined);
+    if (brief && !brief.finalized) api.brief(id, { lang }).then(setBrief).catch(() => undefined); // no brief yet: nothing to refresh (a GET would 404)
   };
   if (loading) return <Loading />;
   if (error || !data) return <ErrorBox error={error ?? t("common.notFound")} retry={reload} />;

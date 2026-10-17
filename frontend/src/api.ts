@@ -49,6 +49,8 @@ export const api = {
   setup: (passphrase: string) => request<{ ok: boolean }>("POST", "/vault/setup", { body: { passphrase } }),
   unlock: (passphrase: string) => request<{ ok: boolean }>("POST", "/vault/unlock", { body: { passphrase } }),
   lock: () => request<{ ok: boolean }>("POST", "/vault/lock"),
+  /** Demo server only: open the demo diary with the passphrase the server keeps. */
+  demoOpen: () => request<{ ok: boolean }>("POST", "/vault/demo"),
   entries: (since?: string, until?: string) => request<Entry[]>("GET", "/entries", { params: { since, until } }),
   addEntry: (b: { text: string; occurred_on?: string; mood?: number | null; lang?: string }) =>
     request<{ entry: Entry; safety: SafetyNotice | null }>("POST", "/entries", { body: b }),

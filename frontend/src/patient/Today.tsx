@@ -139,7 +139,8 @@ export default function Today() {
           </Empty>
         )}
         <div className="grid gap-4 lg:grid-cols-2 items-start">
-          {entries.map((e, i) => <EntryCard key={e.id} initial={e} pii={pii[e.id] ?? 0} tour={i === tourIdx} />)}
+          {entries.map((e, i) => <EntryCard key={e.id} initial={e} pii={pii[e.id] ?? 0} tour={i === tourIdx}
+            onChange={(u) => setData((d) => d?.map((x) => (x.id === u.id ? u : x)) ?? d)} />)}
         </div>
       </section>
       <DemoMenu onLoaded={reload} open={!loading && entries.length === 0} />

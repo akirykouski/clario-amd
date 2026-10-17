@@ -47,6 +47,10 @@ export const en = {
   "vault.noRecovery": " Your notes are encrypted with this passphrase. If you forget it, nobody can open them, including us. Write it down somewhere safe.",
   "vault.create": "Create diary",
   "vault.unlock": "Unlock",
+  "vault.skipDemo": "Open the demo diary",
+  "vault.skipHint": "No passphrase needed. Every note in it is synthetic.",
+  "vault.demoIntro": "This is the public demo of Clario.",
+  "vault.havePass": "Have a passphrase?",
 
   "today.title": "Today",
   "today.question": "How was today?",

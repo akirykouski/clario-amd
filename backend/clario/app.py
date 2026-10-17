@@ -342,9 +342,25 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             return save(cur)
         return None
 
+    demo_open = bool(s.demo_instance and s.demo_passphrase)
+
     @app.get("/api/vault")
     def vault_state():
-        return {"initialized": vault.initialized, "locked": vault.locked}
+        return {"initialized": vault.initialized, "locked": vault.locked, "demo_open": demo_open}
+
+    @app.post("/api/vault/demo")
+    def vault_demo():
+        """Demo server only: open the synthetic demo diary without typing the passphrase (set up on first use)."""
+        if not demo_open:
+            raise HTTPException(404, "Not a demo server")
+        if not vault.initialized:
+            vault.setup(s.demo_passphrase)
+        elif vault.locked:
+            try:
+                vault.unlock(s.demo_passphrase)
+            except BadPassphrase:
+                raise HTTPException(409, "This diary was created with another passphrase")
+        return {"ok": True}
 
     @app.post("/api/vault/setup")
     def vault_setup(body: Passphrase):

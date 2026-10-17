@@ -12,9 +12,10 @@ Shapes: `backend/clario/models.py`. One codebase, two modes: `CLARIO_MODE=patien
 ## Patient mode
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| GET | `/api/vault` | | `{initialized: bool, locked: bool}` |
+| GET | `/api/vault` | | `{initialized: bool, locked: bool, demo_open: bool}`; `demo_open` is true on a demo server with `CLARIO_DEMO_PASSPHRASE` set |
 | POST | `/api/vault/setup` | `{passphrase}` (min 12 chars) | `{ok}`; vault unlocked |
 | POST | `/api/vault/unlock` | `{passphrase}` | `{ok}` or 401 |
+| POST | `/api/vault/demo` | | Demo server only ("Skip for the demo"): sets up or unlocks the vault with `CLARIO_DEMO_PASSPHRASE`, which never leaves the server. `{ok}`; 404 off a demo server; 409 if the diary was made with another passphrase |
 | POST | `/api/vault/lock` | | `{ok}` |
 | GET | `/api/entries` | `?since&until` | `Entry[]` newest first (423 if locked) |
 | POST | `/api/entries` | `{text, occurred_on?, mood?, lang?: en\|it}` | `{entry: Entry, safety: SafetyNotice \| null}`; extraction runs in background, except for a dosing or medicine-change question (`safety.level = advice`): the entry is saved with `extraction=done`, no entities, and never reaches a model. `lang` words the notice |

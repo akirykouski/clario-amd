@@ -4,7 +4,7 @@ import { LangSwitch } from "../components/LangSwitch";
 import { useT } from "../i18n";
 import { AppMark } from "../components/AppIdentity";
 
-export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () => void }) {
+export function Vault({ mode, demoOpen, onDone }: { mode: "setup" | "unlock"; demoOpen?: boolean; onDone: () => void }) {
   const { t } = useT();
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -20,6 +20,11 @@ export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () =
     try { await (setup ? api.setup(pass) : api.unlock(pass)); onDone(); }
     catch (x) { setErr((x as Error).message); setBusy(false); }
   };
+  const skip = async () => {
+    setBusy(true); setErr(null);
+    try { await api.demoOpen(); onDone(); }
+    catch (x) { setErr((x as Error).message); setBusy(false); }
+  };
 
   return (
     <main className="min-h-screen max-w-[520px] mx-auto px-5 py-10 flex flex-col justify-center relative">
@@ -31,11 +36,19 @@ export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () =
       </div>
       <div className="glass p-8 sm:p-10">
       <h1 className="mb-3"><AppMark role="patient" size="lg" /></h1>
-      <p className="text-muted mb-6">{setup ? t("vault.setupIntro") : t("vault.unlockIntro")}</p>
+      <p className="text-muted mb-6">{demoOpen ? t("vault.demoIntro") : setup ? t("vault.setupIntro") : t("vault.unlockIntro")}</p>
+      {/* demo server: visitors have no passphrase, so opening the demo diary is the main action */}
+      {demoOpen && (
+        <div className="space-y-2 text-center mb-5 pb-5 border-b" style={{ borderColor: "var(--glass-rim)" }} data-testid="vault-skip">
+          <button type="button" className="btn btn-primary w-full" onClick={skip} disabled={busy} autoFocus>{busy ? t("common.oneMoment") : t("vault.skipDemo")}</button>
+          <p className="text-sm text-muted">{t("vault.skipHint")}</p>
+        </div>
+      )}
+      {demoOpen && <p className="label mb-3">{t("vault.havePass")}</p>}
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label htmlFor="pp" className="label">{t("vault.passphrase")}{setup && t("vault.atLeast")}</label>
-          <input id="pp" className="input" type="password" autoComplete={setup ? "new-password" : "current-password"} value={pass} onChange={(e) => setPass(e.target.value)} autoFocus />
+          <input id="pp" className="input" type="password" autoComplete={setup ? "new-password" : "current-password"} value={pass} onChange={(e) => setPass(e.target.value)} autoFocus={!demoOpen} />
           {setup && pass.length > 0 && pass.length < 12 && <p className="text-sm text-muted mt-1">{t("vault.moreChars", { n: 12 - pass.length })}</p>}
         </div>
         {setup && (
@@ -51,7 +64,7 @@ export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () =
           </div>
         )}
         {err && <p role="alert" className="text-strong text-sm">{err}</p>}
-        <button className="btn btn-primary w-full" disabled={!valid || busy}>{busy ? t("common.oneMoment") : setup ? t("vault.create") : t("vault.unlock")}</button>
+        <button className={`btn w-full ${demoOpen ? "" : "btn-primary"}`} disabled={!valid || busy}>{busy ? t("common.oneMoment") : setup ? t("vault.create") : t("vault.unlock")}</button>
       </form>
       </div>
     </main>

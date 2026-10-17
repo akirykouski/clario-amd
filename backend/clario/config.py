@@ -104,6 +104,9 @@ class Settings:
     trust_model_confidence: bool = ExtractOpts.trust_model_confidence
     hpo_pick: bool = ExtractOpts.hpo_pick
     demo_instance: bool = False
+    # Demo server only: the vault opens without typing a passphrase ("Skip for the demo"). Kept on the server, never
+    # sent to the browser; ignored unless demo_instance is on.
+    demo_passphrase: str | None = None
     clinic_url: str | None = None  # default address on the patient Share page (demo instance preset)
     gpu_metrics_url: str | None = None
 
@@ -205,6 +208,7 @@ class Settings:
             review_calibration_status=cal_status,
             review_calibration_file=str(cal_path) if cal else None,
             demo_instance=bool(_flag(e.get("CLARIO_DEMO_INSTANCE"))),
+            demo_passphrase=(e.get("CLARIO_DEMO_PASSPHRASE") or "").strip() or None,
             clinic_url=(e.get("CLARIO_CLINIC_URL") or "").strip() or None,
             gpu_metrics_url=(e.get("CLARIO_GPU_METRICS_URL") or "").strip() or None,
         )

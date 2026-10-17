@@ -68,7 +68,9 @@ def clinic():
 
 
 @app.function(volumes={"/data": patient_vol},
-              secrets=[modal.Secret.from_name("tokenfactory"), modal.Secret.from_name("clario-model-key")], **COMMON)
+              secrets=[modal.Secret.from_name("tokenfactory"), modal.Secret.from_name("clario-model-key"),
+                       modal.Secret.from_name("clario-demo-vault")],  # CLARIO_DEMO_PASSPHRASE: "Skip for the demo"
+              **COMMON)
 @modal.concurrent(max_inputs=100)
 @modal.web_server(8800, startup_timeout=120, label="clario-patient")
 def patient():

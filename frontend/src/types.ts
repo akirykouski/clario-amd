@@ -178,7 +178,7 @@ export interface AiCall {
 export interface PrivacyVerify { ok: boolean; broken_at: string | null; count: number }
 
 export interface SafetyNotice { level: "emergency" | "advice"; message: string; matched: string }
-export interface VaultState { initialized: boolean; locked: boolean }
+export interface VaultState { initialized: boolean; locked: boolean; /** demo server: the vault opens without a passphrase */ demo_open?: boolean }
 export interface TimelineDay { date: string; entries: Entry[]; terms: Term[] }
 export interface Timeline { days: TimelineDay[]; terms: (Evidence & { clinical?: string })[]; systems?: Record<string, string> }
 export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms: number; note: string }

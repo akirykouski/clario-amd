@@ -11,10 +11,12 @@ warnings (`text_warnings`), and signs (`sign_items`): the signed text is the bri
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from difflib import SequenceMatcher
 
 from pydantic import BaseModel, Field
@@ -24,6 +26,21 @@ from .models import Brief, BriefItem, BriefLine, BriefWarning, SharePackage
 from .past import when_text
 from .safety import hedge_problems
 from .share import lab_needs_check
+
+
+def signed_day(iso: str | None) -> str:
+    """The signing day in the clinic's time zone (CLARIO_TZ, default Europe/Rome): finalized_at is stored in UTC, so
+    taking its first 10 characters printed the day before for a brief signed shortly after midnight."""
+    if not iso:
+        return ""
+    try:
+        when = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        if when.tzinfo is None:
+            return iso[:10]
+        return when.astimezone(ZoneInfo(os.environ.get("CLARIO_TZ") or "Europe/Rome")).date().isoformat()
+    except ValueError:
+        return iso[:10]
+
 
 SYSTEM = """You draft a one-page brief for a clinician who has 15 minutes with this patient. You get the \
 patient's own diary entries (with ids), the clinical terms the patient confirmed, and pattern overlaps computed by \
@@ -629,7 +646,7 @@ def to_patient_pdf(pkg: SharePackage, brief: Brief, lang: str, onto) -> bytes:
     view = render_brief(pkg, brief, "patient", lang, onto)
     w = brief_pdf.WORDS[lang]
     sections = _reviewed_sections(pkg, view, "patient", lang)
-    when = fdate((brief.finalized_at or "")[:10], lang, True) if brief.finalized_at else ""
+    when = fdate(signed_day(brief.finalized_at), lang, True) if brief.finalized_at else ""
     return brief_pdf.render(brief_pdf.PdfBrief(
         lang=lang, kicker="Clario", title=w["p_title"], subtitle=" · ".join(x for x in (pkg.patient_alias, when) if x),
         sections=sections, provenance=[], signed=w["p_signed"].format(name=brief.signed_by or "?"),
@@ -966,7 +983,7 @@ def to_pdf(pkg: SharePackage, brief: Brief, text: str, lang: str, focus: str | N
         sub += " · " + w["focus"].format(sp=LABELS[lang][focus])
     signed = None
     if brief.finalized:
-        signed = w["signed"].format(name=brief.signed_by or "?", date=fdate((brief.finalized_at or "")[:10], lang, True))
+        signed = w["signed"].format(name=brief.signed_by or "?", date=fdate(signed_day(brief.finalized_at), lang, True))
     return brief_pdf.render(brief_pdf.PdfBrief(
         lang=lang, title=w["title"].format(alias=pkg.patient_alias), subtitle=sub, sections=sections, signed=signed,
         provenance=brief_pdf.provenance(brief.backend, brief.model, brief.pseudonymized, brief.model_remote, lang)))

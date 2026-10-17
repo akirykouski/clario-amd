@@ -8,7 +8,7 @@ from clario.safety import check_entry, hedge_problems, is_hedged
 
 
 def test_vault_lifecycle_and_encryption_at_rest(patient):
-    assert patient.get("/api/vault").json() == {"initialized": False, "locked": True}
+    assert patient.get("/api/vault").json() == {"initialized": False, "locked": True, "demo_open": False}
     assert patient.post("/api/vault/setup", json={"passphrase": "short"}).status_code == 422
     assert patient.post("/api/vault/setup", json={"passphrase": PASS}).status_code == 200
     secret = "Fingers turned white in the cold at Porta Romana"

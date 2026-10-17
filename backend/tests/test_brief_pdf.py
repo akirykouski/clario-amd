@@ -123,3 +123,13 @@ def test_pseudonymised_brief_cites_aliases_and_keeps_every_line(tmp_path, monkey
 def test_restore_cites_maps_aliases_and_leaves_the_rest():
     pkg = _pkg()
     assert briefing.restore_cites(["E2", " e1 ", "e_1", "E9", "e_[RECORD_NO]", "E2"], pkg) == ["e_2", "e_1", "E9", "e_[RECORD_NO]"]
+
+
+def test_signed_day_is_the_clinic_day_not_the_utc_day(monkeypatch):
+    from clario.brief import signed_day
+    monkeypatch.delenv("CLARIO_TZ", raising=False)
+    assert signed_day("2026-10-17T22:30:00+00:00") == "2026-10-18"  # 00:30 in Rome
+    assert signed_day("2026-10-17T10:00:00+00:00") == "2026-10-17"
+    monkeypatch.setenv("CLARIO_TZ", "UTC")
+    assert signed_day("2026-10-17T22:30:00+00:00") == "2026-10-17"
+    assert signed_day(None) == "" and signed_day("2026-10-17") == "2026-10-17"

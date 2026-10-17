@@ -48,6 +48,10 @@ export const it: Record<Key, string> = {
   "vault.noRecovery": " Le tue note sono cifrate con questa frase. Se la dimentichi, nessuno può aprirle, nemmeno noi. Scrivila in un posto sicuro.",
   "vault.create": "Crea il diario",
   "vault.unlock": "Sblocca",
+  "vault.skipDemo": "Apri il diario di prova",
+  "vault.skipHint": "Non serve la frase segreta. Le note sono tutte di fantasia.",
+  "vault.demoIntro": "Questa è la demo pubblica di Clario.",
+  "vault.havePass": "Hai una frase segreta?",
 
   "today.title": "Oggi",
   "today.question": "Com'è andata oggi?",
