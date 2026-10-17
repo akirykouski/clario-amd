@@ -127,6 +127,23 @@ def score(model: str, label: str, adapter: str = "", limit: int = 0):
     runs.commit()
 
 
+@app.function(gpu="L40S", **OPTS)
+def merge(adapter: str = "/work/train/out/e4b-r16-lr2e-4/best_adapter", base: str = "google/gemma-4-E4B-it",
+          out: str = "/runs/out/merged-e4b"):
+    """Adapter + base -> bf16 weights for vLLM, with the base's processor and chat-template files alongside."""
+    import glob, shutil
+    from huggingface_hub import snapshot_download
+    _layout(False)
+    _sh(f"python export.py merge --base {base} --adapter {adapter} --out {out}")
+    snap = snapshot_download(base)
+    for f in glob.glob(f"{snap}/*"):
+        name = os.path.basename(f)
+        if not name.endswith(".safetensors") and "index" not in name and not os.path.exists(f"{out}/{name}"):
+            shutil.copy(f, f"{out}/{name}")
+    print(sorted(os.listdir(out)))
+    runs.commit()
+
+
 @app.local_entrypoint()
 def score_subset(limit: int = 100, model: str = "google/gemma-4-E4B-it",
                  adapter: str = "/work/train/out/e4b-r16-lr2e-4/best_adapter"):
