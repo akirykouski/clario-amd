@@ -33,7 +33,8 @@ describe("app identity", () => {
     const mark = await screen.findByTestId("app-mark");
     expect(mark).toHaveAttribute("data-role", "clinic");
     expect(mark).toHaveTextContent("Clario·Clinic");
-    expect(document.documentElement.dataset.app).toBe("clinic");
+    // data-app, title and favicon are set in an effect after the first render
+    await waitFor(() => expect(document.documentElement.dataset.app).toBe("clinic"));
     expect(document.title).toBe("Clario Clinic");
     expect(favicon()).toBe("/favicon-clinic.svg");
   });
@@ -44,7 +45,7 @@ describe("app identity", () => {
     const mark = await screen.findByTestId("app-mark");
     expect(mark).toHaveAttribute("data-role", "patient");
     expect(mark).toHaveTextContent("Clario·Patient");
-    expect(document.documentElement.dataset.app).toBe("patient");
+    await waitFor(() => expect(document.documentElement.dataset.app).toBe("patient"));
     expect(document.title).toBe("Clario Patient");
     expect(favicon()).toBe("/favicon-patient.svg");
   });
