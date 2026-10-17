@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clario</title>
+<meta name="description" content="A private symptom diary for people on a long road to a diagnosis, and a review console for the clinic that receives it.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f7f8f8;--card:#fff;--ink:#16211f;--muted:#5b6b68;--line:#e2e8e7;--accent:#1F6F78;--accent-ink:#fff;--soft:#e8f2f3;--good:#1F6F78}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f1514;--card:#162020;--ink:#e6efed;--muted:#9fb1ae;--line:#26332f;--accent:#4fb3bf;--accent-ink:#0f1514;--soft:#1b2a2b}}
+:root[data-theme="dark"]{--bg:#0f1514;--card:#162020;--ink:#e6efed;--muted:#9fb1ae;--line:#26332f;--accent:#4fb3bf;--accent-ink:#0f1514;--soft:#1b2a2b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,-apple-system,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:40px 16px 64px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+header img{width:36px;height:36px}
+header b{font-size:20px;letter-spacing:-.01em}
+header a{margin-left:auto;color:var(--muted);text-decoration:none;font-size:14px}
+h1{font-size:clamp(28px,5vw,44px);line-height:1.12;letter-spacing:-.02em;margin:0 0 14px;max-width:760px}
+.lead{color:var(--muted);font-size:18px;max-width:680px;margin:0 0 28px}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+.btn{display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:0 20px;border-radius:12px;font-weight:600;text-decoration:none;border:1px solid var(--line);color:var(--ink);background:var(--card)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.note{color:var(--muted);font-size:13px;margin:0 0 40px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:44px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+.card h3{margin:0 0 6px;font-size:16px}
+.card p{margin:0;color:var(--muted);font-size:14px}
+h2{font-size:22px;letter-spacing:-.01em;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+.tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:12px}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+th,td{padding:11px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+tr:last-child td{border-bottom:0}
+tr.ours td{background:var(--soft);font-weight:600}
+.bar{display:inline-block;height:8px;border-radius:4px;background:var(--accent);vertical-align:middle;margin-left:8px;opacity:.85}
+.fine{color:var(--muted);font-size:13px;margin:0 0 44px}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:44px}
+.step{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+.step span{display:inline-block;font-size:12px;font-weight:600;color:var(--accent);margin-bottom:6px}
+.step p{margin:0;font-size:14px;color:var(--muted)}
+footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:18px}
+footer a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="favicon.svg" alt="">
+    <b>Clario</b>
+    <a href="https://github.com/akirykouski/clario-amd">GitHub</a>
+  </header>
+
+  <h1>The months before a diagnosis, written down and ready for the clinic.</h1>
+  <p class="lead">A private symptom diary for people on a long road to a diagnosis, and a review console for the clinician who receives it. Everyday words become clinical terms with the patient's own quote as the source. Clario organises information. It never diagnoses.</p>
+
+  <div class="cta">
+    <a class="btn primary" href="https://se4wer--clario-patient.us-east.modal.run">Open the patient app</a>
+    <a class="btn" href="https://se4wer--clario-clinic.us-east.modal.run">Open the clinic console</a>
+  </div>
+  <p class="note">Demo servers with synthetic patients only. The first visit after a quiet period can take up to a minute while the server starts.</p>
+
+  <div class="grid">
+    <div class="card"><h3>Private by design</h3><p>The diary is encrypted on the patient's side. Names and ID numbers in the text are replaced before it reaches a model.</p></div>
+    <div class="card"><h3>Every term has a source</h3><p>Each clinical term links back to the exact words the patient wrote, so the clinician can check it in one look.</p></div>
+    <div class="card"><h3>A person always reviews</h3><p>Uncertain terms and lab readings go to the clinician to confirm or reject before anything reaches the brief.</p></div>
+    <div class="card"><h3>Gemma 4, fine-tuned</h3><p>A 4B Gemma 4 model tuned for this task reads the diary. Gemma 4 31B on AMD Token Factory writes the clinic brief.</p></div>
+  </div>
+
+  <h2>Benchmark</h2>
+  <p class="sub">Same 100 held-out diary entries (conditions never seen in training), same scorer. A term counts as correct only when the HPO code, the "denied" flag and the "a relative's" flag all match.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Model</th><th>F1</th><th>Precision</th><th>Recall</th><th>Time per entry</th></tr></thead>
+      <tbody>
+        <tr class="ours"><td>Clario: Gemma 4 E4B + our LoRA</td><td>0.687<span class="bar" style="width:69px"></span></td><td>0.686</td><td>0.688</td><td>1.5 s</td></tr>
+        <tr><td>DeepSeek-V4-Flash</td><td>0.495<span class="bar" style="width:50px"></span></td><td>0.478</td><td>0.514</td><td>18.4 s</td></tr>
+        <tr><td>Gemma 4 31B</td><td>0.471<span class="bar" style="width:47px"></span></td><td>0.459</td><td>0.484</td><td>20.6 s</td></tr>
+        <tr><td>Gemma 4 E4B, base</td><td>0.356<span class="bar" style="width:36px"></span></td><td>0.349</td><td>0.364</td><td>2.2 s</td></tr>
+        <tr><td>Jev 1.13 (decision model) over ontology search</td><td>0.324<span class="bar" style="width:32px"></span></td><td>0.335</td><td>0.314</td><td>n/a</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="fine">F1 after the app's HPO check, which is what Clario stores. Test set: 100 rows of the public synthetic set <a href="https://huggingface.co/datasets/m0rtyddd/clario-synth-v3">clario-synth-v3</a>, written by Gemma 4 31B, so it favours a model trained on the same style; it is no proof of results on real patient text. Large models ran through the AMD Token Factory API, where time includes queueing on a shared key. Every number is read from a file in <a href="https://github.com/akirykouski/clario-amd/tree/main/eval/results">eval/results</a>.</p>
+
+  <h2>How it works</h2>
+  <p class="sub">One diary entry, from the patient's words to the clinician's brief.</p>
+  <div class="flow">
+    <div class="step"><span>1 · Write</span><p>The patient writes in everyday words, in English or Italian, and can add photos of lab reports.</p></div>
+    <div class="step"><span>2 · Understand</span><p>The fine-tuned model lists each symptom with its quote, the clinical term, and whether it is denied or a relative's.</p></div>
+    <div class="step"><span>3 · Share</span><p>The patient picks a time window and sends a sealed package that expires.</p></div>
+    <div class="step"><span>4 · Review</span><p>The clinician sees a plain-words overview, conditions to consider and the one question that would separate them, and signs off a one-page brief.</p></div>
+  </div>
+
+  <footer>Built for the AMD Developer Hackathon ACT III, Health and Wellbeing track. MIT licence. <a href="https://github.com/akirykouski/clario-amd">Source and results</a>.</footer>
+</div>
+</body>
+</html>
