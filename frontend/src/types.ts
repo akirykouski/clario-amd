@@ -272,3 +272,15 @@ export interface OverviewPast { label: string; past: PastRef; when: string; entr
 export interface OverviewLab {
   name: string; test_key: string; value: string; unit: string; flag: "low" | "high" | "positive"; date: string; latest_in_range: boolean;
 }
+
+/** Doctor verify (demo). The patient types carry no conclusions; only `VerifyConclusions` (doctor tab) does. */
+export type VerifyState = "waiting" | "claimed" | "confirmed" | "rejected" | "ended" | "expired";
+export interface VerifyStarted { code: string; doctor_path: string; expires_at: string; register: "demo"; register_note: string }
+export interface VerifyAuditRow { ts: string; event: "started" | "claimed" | "confirmed" | "rejected" | "opened" | "ended" | "expired"; who: string | null }
+export interface VerifyStatus { register: "demo"; state: VerifyState; hit_display: string | null; expires_at: string; audit: VerifyAuditRow[] }
+export interface VerifyHit { id: string; display: string }
+export interface VerifyLookup { register: "demo"; register_note: string; hits: VerifyHit[] }
+export interface VerifyClaim { register: "demo"; doctor_token: string; hit_display: string }
+export interface VerifyDoctorStatus { state: VerifyState; hit_display?: string | null }
+export interface VerifyConclusions { register: "demo"; doctor: string; previous: PriorOpinion[]; message?: string | null }
+export interface VerifyRegister { register: "demo"; register_note: string; provinces: string[] }

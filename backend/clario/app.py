@@ -28,6 +28,7 @@ from . import clinic_ddx
 from . import overview as overview_mod
 from . import privacy
 from . import doc_routes
+from . import doctor_verify
 from . import gpu as gpumetrics
 from . import second_opinion as second
 from . import share as sharing
@@ -426,6 +427,8 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
                 save(e)
                 return e.entities[i]
         raise HTTPException(404, "entity not found")
+
+    doctor_verify.routes(app, vault)
 
     # ---- human review queue; other modules add kinds with review.register_review_kind
     app.state.vault = vault

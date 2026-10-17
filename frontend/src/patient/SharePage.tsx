@@ -6,6 +6,7 @@ import { daysAgo, fmtDate, today } from "../lib";
 import { ErrorBox } from "../components/ui";
 import { useHealth } from "../components/useHealth";
 import { useT, type Key } from "../i18n";
+import VerifyDoctor from "./VerifyDoctor";
 
 const LS = "clario.clinic_url";
 function lsGet(): string { try { return localStorage.getItem(LS) ?? ""; } catch { return ""; } }
@@ -59,6 +60,7 @@ export default function SharePage() {
     <div className="space-y-5">
       <header><h1 className="text-3xl">{t("share.title")}</h1>
         <p className="text-muted mt-1">{t("share.intro")}</p></header>
+      <VerifyDoctor />
       <div>
         <label className="label" htmlFor="cu">{t("share.address")}</label>
         <div className="flex gap-2">

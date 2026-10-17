@@ -1,7 +1,7 @@
 import type {
   AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefLine, BriefText, BriefWarning, ClinicMetrics, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
   ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition, Overview, Profile, LabCorrection, Specialty,
-  Care, Comparison,
+  Care, Comparison, VerifyStarted, VerifyStatus, VerifyLookup, VerifyClaim, VerifyDoctorStatus, VerifyConclusions, VerifyRegister,
 } from "./types";
 
 export class ApiError extends Error {
@@ -21,10 +21,11 @@ export function buildUrl(path: string, params?: Record<string, string | undefine
   return `/api${path}${q ? `?${q}` : ""}`;
 }
 
-async function request<T>(method: string, path: string, opts: { params?: Record<string, string | undefined>; body?: unknown; form?: FormData; text?: boolean } = {}): Promise<T> {
+async function request<T>(method: string, path: string, opts: { params?: Record<string, string | undefined>; body?: unknown; form?: FormData; text?: boolean; headers?: Record<string, string>; keepalive?: boolean } = {}): Promise<T> {
   const res = await fetch(buildUrl(path, opts.params), {
     method,
-    headers: opts.body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    headers: opts.body !== undefined || opts.headers ? { ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}), ...opts.headers } : undefined,
+    keepalive: opts.keepalive,
     body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
   });
   if (res.status === 423) {
@@ -118,6 +119,21 @@ export const api = {
   care: () => request<Care>("GET", "/care"),
   /** Second opinion, after the brief is final: the previous doctor's conclusions next to this one's (409 before). */
   compare: (id: string, lang?: string) => request<Comparison>("GET", `/inbox/${encodeURIComponent(id)}/compare`, { params: { lang } }),
+  /** Doctor verify (demo). Patient side: start, status, confirm, reject, end. Doctor side (no vault): lookup, claim, doctor status, conclusions, end. */
+  verifyStart: () => request<VerifyStarted>("POST", "/verify/start"),
+  verifyStatus: (code: string) => request<VerifyStatus>("GET", `/verify/${encodeURIComponent(code)}/status`),
+  verifyConfirm: (code: string) => request<VerifyStatus>("POST", `/verify/${encodeURIComponent(code)}/confirm`),
+  verifyReject: (code: string) => request<VerifyStatus>("POST", `/verify/${encodeURIComponent(code)}/reject`),
+  verifyEnd: (code: string, token?: string) =>
+    request<{ ok: boolean; state: string }>("POST", `/verify/${encodeURIComponent(code)}/end`, { headers: token ? { "X-Doctor-Token": token } : undefined, keepalive: true }),
+  verifyRegister: () => request<VerifyRegister>("GET", "/verify/register"),
+  verifyLookup: (code: string, b: { name: string; surname: string; province: string }) =>
+    request<VerifyLookup>("POST", `/verify/${encodeURIComponent(code)}/lookup`, { body: b }),
+  verifyClaim: (code: string, hitId: string) => request<VerifyClaim>("POST", `/verify/${encodeURIComponent(code)}/claim`, { body: { hit_id: hitId } }),
+  verifyDoctorStatus: (code: string, token: string) =>
+    request<VerifyDoctorStatus>("GET", `/verify/${encodeURIComponent(code)}/doctor-status`, { headers: { "X-Doctor-Token": token } }),
+  verifyConclusions: (code: string, token: string) =>
+    request<VerifyConclusions>("GET", `/verify/${encodeURIComponent(code)}/conclusions`, { headers: { "X-Doctor-Token": token } }),
   saveProfile: (p: Profile) => request<Profile>("PUT", "/profile", { body: p }),
   privacyCounts: () => request<Record<string, number>>("GET", "/privacy/counts"),
   termSystems: (ids: string[]) => request<Record<string, string>>("GET", "/terms/systems", { params: { ids: ids.join(",") } }),

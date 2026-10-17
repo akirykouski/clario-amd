@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { matchPath, useLocation } from "react-router-dom";
 import { api } from "./api";
 import type { Health } from "./types";
 import { ErrorBox, Loading } from "./components/ui";
@@ -8,8 +9,18 @@ import PatientApp from "./patient/PatientApp";
 import { DemoBanner } from "./patient/DemoBanner";
 import ClinicApp from "./clinic/ClinicApp";
 import { useAppIdentity } from "./components/AppIdentity";
+import DoctorPage from "./doctor/DoctorPage";
 
+/** /doctor/:code is the visiting doctor's page: it never touches the patient vault, so it skips the setup and unlock gate. */
 export default function App() {
+  const { pathname } = useLocation();
+  if (matchPath("/doctor/:code", pathname)) {
+    return <><div className="ambient" aria-hidden><span /><span /><span /></div><DoctorPage /></>;
+  }
+  return <Main />;
+}
+
+function Main() {
   const { t } = useT();
   const [health, setHealth] = useState<Health | null>(null);
   const [err, setErr] = useState<string | null>(null);

@@ -57,6 +57,24 @@ Extraction env (patient mode): `CLARIO_SC_N` (self-consistency samples, default 
 
 `SharePackage` splits facts from conclusions in code (`clario/second_opinion.py`). Facts, in every package: the entries, quotes, terms, labs, `tried: TriedTreatment[]` (`{treatment, started, duration, effect: none|partial|good|worse|unknown, note}`) and `tested: PriorTest[]` (`{test, date, result, abnormal}`), up to the end date. Conclusions: `previous: PriorOpinion` (`{clinician, date, diagnosis: [{name, disease_id}], conditions: [{name, disease_id}], accepted: [str], rejected: [str], notes}`), sent only when `second_opinion=true`, and `second_opinion` marks the package. The clinic server returns `previous: null` from `GET /api/inbox/{id}` and keeps it out of the overview, the differential, the term candidates and the brief model's input (which does get `already_tried` and `already_tested`); only `/compare` reads it, after the brief is final. The ranking never uses it. Stripping a "Diagnosis" section from an uploaded letter is not done (roadmap).
 
+### Doctor verify (demo, patient mode)
+A doctor in the room opens the patient's conclusions for one session, after the patient confirms the register line (`clario/doctor_verify.py`). Facts stay with the patient always; conclusions (`care.previous`: diagnosis and condition names) go only to the doctor's tab and never to a patient screen or a patient response. The register is a fixture of synthetic doctors (`REGISTER`, 9 entries, provinces Milano, Roma, Torino, Napoli, Bologna); every response carries `register: "demo"`. In a pilot a person checks the public Albo Unico; this app never calls or scrapes it. A match shows a name is on the albo, not that the phone holder is that doctor: the patient's Confirm, with the register line in front of them, is the check. One active session at a time (a new `start` ends the old one), state in memory (a restart ends it). `{code}` is 8 characters, case-insensitive. Doctor routes need no vault and no login; patient routes need the vault open (423 when locked).
+
+| Method | Path | Who | Body / header | Returns |
+|---|---|---|---|---|
+| POST | `/api/verify/start` | patient | | `{code, doctor_path: "/doctor/<code>", expires_at, register: "demo", register_note}`; the code works 15 minutes until the patient decides |
+| GET | `/api/verify/register` | doctor | | `{register: "demo", register_note, provinces: string[]}` (provinces in the fixture, for the form) |
+| POST | `/api/verify/{code}/lookup` | doctor | `{name, surname, province}` | `{register, register_note, hits: [{id, display}]}`; `display` = "Rossi Maria, Ordine di Milano, Albo medici chirurghi". Exact match on name and surname, and on province name or two-letter sigla, ignoring case, accents and spacing. State must be `waiting` (409 otherwise); at most 20 lookups per code (429) |
+| POST | `/api/verify/{code}/claim` | doctor | `{hit_id}` | `{register, doctor_token, hit_display}`; the token is random, returned once, kept in the doctor tab's memory only. State becomes `claimed`; a second claim is 409 |
+| GET | `/api/verify/{code}/status` | patient | | `{register, state: waiting\|claimed\|confirmed\|rejected\|ended\|expired, hit_display, expires_at, audit: [{ts, event: started\|claimed\|confirmed\|rejected\|opened\|ended\|expired, who}]}`. Never the conclusions. `who` is the register hit; `opened` is logged each time the doctor reads them |
+| POST | `/api/verify/{code}/confirm` | patient | | `VerifyStatus`; only from `claimed` (409 otherwise). Takes the snapshot of `care.previous` that the doctor may read and extends the session to 60 minutes |
+| POST | `/api/verify/{code}/reject` | patient | | `VerifyStatus`, state `rejected`; the token is dropped |
+| GET | `/api/verify/{code}/doctor-status` | doctor | `X-Doctor-Token` | `{state, hit_display}` for the doctor's polling; 403 with a wrong token once claimed. Never the conclusions |
+| GET | `/api/verify/{code}/conclusions` | doctor | `X-Doctor-Token` | 403 until the patient has confirmed, then `{register, doctor: <hit display>, previous: PriorOpinion[], message}`; `previous` is empty with a message when the vault holds no previous opinion |
+| POST | `/api/verify/{code}/end` | either | `X-Doctor-Token`, or the vault open | `{ok, state: "ended"}`; the token and the snapshot are dropped. The doctor page also calls it on `pagehide` |
+
+The open is logged in the session `audit` list (who = the register hit, when), returned by `status`; it is not in the AI call log, whose records are model calls. Frontend: the patient section is on the Share page (`patient/VerifyDoctor.tsx`), the doctor page is `/doctor/:code` (`doctor/DoctorPage.tsx`), which skips the setup and unlock gate and keeps the token in component state only. For a phone to reach the patient server, open the app on the patient's LAN address.
+
 ## Clinic mode
 | Method | Path | Body | Returns |
 |---|---|---|---|

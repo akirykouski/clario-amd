@@ -243,6 +243,74 @@ class PriorOpinion(BaseModel):
     notes: str | None = None
 
 
+# ---- doctor verify (demo): a doctor's tab gets the conclusions only after the patient confirms the register hit
+VerifyState = Literal["waiting", "claimed", "confirmed", "rejected", "ended", "expired"]
+
+class DemoRegister(BaseModel):
+    """Every verify response says the register is the demo fixture, never a real one (JSON key `register`; the Python
+    attribute is `register_` because `register` shadows a deprecated pydantic attribute)."""
+
+    register_: Literal["demo"] = Field("demo", alias="register")
+
+
+class VerifyStarted(DemoRegister):
+    code: str
+    doctor_path: str
+    expires_at: str
+    register_note: str
+
+
+class VerifyLookupIn(BaseModel):
+    name: str
+    surname: str
+    province: str
+
+
+class VerifyHit(BaseModel):
+    id: str
+    display: str = Field(description="e.g. 'Rossi Maria, Ordine di Milano, Albo medici chirurghi'")
+
+
+class VerifyLookup(DemoRegister):
+    register_note: str
+    hits: list[VerifyHit]
+
+
+class VerifyClaimIn(BaseModel):
+    hit_id: str
+
+
+class VerifyClaim(DemoRegister):
+    doctor_token: str = Field(description="Returned once; the doctor tab keeps it in memory only")
+    hit_display: str
+
+
+class VerifyAuditRow(BaseModel):
+    ts: str
+    event: Literal["started", "claimed", "confirmed", "rejected", "opened", "ended", "expired"]
+    who: str | None = Field(None, description="The register hit (display line), once a doctor has claimed")
+
+
+class VerifyStatus(DemoRegister):
+    """What the patient screen gets. Never the conclusions."""
+
+    state: VerifyState
+    hit_display: str | None = None
+    expires_at: str
+    audit: list[VerifyAuditRow] = Field(default_factory=list)
+
+
+class VerifyDoctorStatus(BaseModel):
+    state: VerifyState
+    hit_display: str | None = None
+
+
+class VerifyConclusions(DemoRegister):
+    doctor: str
+    previous: list[PriorOpinion]
+    message: str | None = None
+
+
 class SharePackage(BaseModel):
     """Decrypted payload a clinic receives: the entries in the period, their terms and lab rows (never rejected ones).
     Low-confidence items carry `needs_review` for the clinician.
