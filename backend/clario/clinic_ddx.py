@@ -12,7 +12,7 @@ import numpy as np
 
 from .i18n import disease_name, term_label
 from .knowledge import Ontology
-from .models import ClinicQuestion, Condition, ConditionFeature, Entity, Entry
+from .models import ClinicQuestion, Condition, ConditionFeature, Entity, Entry, SharedEntity, SharePackage, Term
 from .next_question import EPS, FLOOR, MIN_PF, expected_gain
 from .patterns import (DEFAULT_FREQ, MIN_TERMS, annotated_freq, evidence_from, has_frequency_info, is_generic,
                        negated_ids, scored_diseases)
@@ -78,6 +78,56 @@ def with_answers(entries: list[Entry], answers: list[dict], rejected: set[str]) 
                 for i, a in enumerate(asked)]
         out.append(Entry(id="clinic_answers", created_at="", occurred_on="9999-12-31", text="", extraction="done",
                          entities=ents))
+    return out
+
+
+CANDIDATES = 6  # replacement terms offered for one unsure term
+
+
+def _as_finding(t: str) -> str:
+    return "finding" if t in ("trigger", "medication") else t
+
+
+def with_corrections(pkg: SharePackage, corrections: dict[str, dict]) -> SharePackage:
+    """The package with the clinician's replaced terms applied: `corrections[ent_id] = {"from", "to", "label"}`.
+    The term keeps its quote and date and now carries the clinician's HPO id; it counts as reviewed. A trigger or
+    medication the clinician maps to a phenotype term becomes a finding, so the overview lists it like any other."""
+    if not corrections:
+        return pkg
+
+    def fix_shared(x: SharedEntity) -> SharedEntity:
+        c = corrections.get(x.id or "")
+        if not c:
+            return x
+        return x.model_copy(update={"hpo_id": c["to"], "canonical": c["label"], "needs_review": False, "reviewed": True,
+                                    "type": _as_finding(x.type)})
+
+    def fix_entity(x: Entity) -> Entity:
+        c = corrections.get(x.id)
+        if not c:
+            return x
+        flags = [f for f in x.flags if not f.startswith(("hpo_", "no_hpo"))] + ["fixed_by_clinician"]
+        return x.model_copy(update={"hpo_id": c["to"], "hpo_label": c["label"], "canonical": c["label"],
+                                    "review": "corrected", "flags": flags, "type": _as_finding(x.type)})
+
+    entries = [e.model_copy(update={"entities": [fix_entity(x) for x in e.entities]}) for e in pkg.entries]
+    return pkg.model_copy(update={"entries": entries, "entities": [fix_shared(x) for x in pkg.entities]})
+
+
+def replacement_candidates(onto: Ontology, quote: str, canonical: str, current: str | None, lang: str = "en",
+                           limit: int = CANDIDATES) -> list[Term]:
+    """Ontology terms that could stand for the quote instead of the current one: the same lookup the extractor's HPO
+    pick uses (label and synonym match on the clinical name plus the patient's words), current term left out."""
+    seen = {current} if current else set()
+    out = []
+    for phrase in (f"{canonical} {quote}", quote, canonical):
+        for t in onto.search(phrase, 20):
+            if t.hpo_id in seen:
+                continue
+            seen.add(t.hpo_id)
+            out.append(Term(hpo_id=t.hpo_id, label=term_label(t.hpo_id, t.label, lang)))
+            if len(out) == limit:
+                return out
     return out
 
 
