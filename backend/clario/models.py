@@ -268,15 +268,17 @@ class SharePackage(BaseModel):
 
 
 class BriefItem(BaseModel):
-    """One AI-drafted line of the clinician brief. Must be reviewed before it is final."""
+    """One line of the clinician brief. AI lines are a draft until the clinician signs the brief text."""
 
     id: str
     section: Literal["summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions"]
     text: str
     cites: list[str] = Field(default_factory=list, description="entry ids")
-    origin: Literal["patient", "ai", "document"] = Field(
-        "ai", description="patient: straight from the diary; document: a lab line read from an imported report (pending until every row is checked); ai: drafted by the model")
-    review: Literal["pending", "accepted", "rejected", "edited"] = "pending"
+    origin: Literal["patient", "ai", "document", "clinician"] = Field(
+        "ai", description="patient: straight from the diary; document: a lab line read from an imported report (pending until every row is checked); "
+                          "ai: drafted by the model; clinician: a line the clinician wrote in the signed text")
+    review: Literal["pending", "accepted", "rejected", "edited"] = Field(
+        "pending", description="AI lines: pending in the draft; at signing, accepted (kept as drafted), edited (changed) or rejected (removed)")
     flag: Literal["citation_mismatch"] | None = Field(
         None, description="Set by code when the item names a term that none of its cited entries confirms; the clinician sees it")
     flag_term: str | None = Field(None, description="With `flag`: the term the line names that its citations do not record")
@@ -298,8 +300,22 @@ class Brief(BaseModel):
     lang: Literal["en", "it"] = Field("en", description="Language of the text: the AI items are drafted in it; patient-origin items are rendered in it")
     audience: Literal["clinician", "patient"] = "clinician"
     review_seconds: float | None = Field(
-        None, description="Seconds from opening the package in the clinic UI to finalize, as measured by the UI; set at finalize")
-    finalized_at: str | None = None
+        None, description="Seconds from opening the package in the clinic UI to signing, as measured by the UI; set at signing")
+    finalized_at: str | None = Field(None, description="When the clinician signed the brief")
+    signed_by: str | None = Field(None, description="Name the clinician typed when signing")
+    text: str | None = Field(None, description="The brief text exactly as the clinician signed it (sections as '## Title', lines as '- ...')")
+    specialty: str | None = Field(None, description="Specialty focus the signed text was prepared for (rheumatology, nephrology); null = general practice")
+    pseudonymized: bool | None = Field(None, description="Whether the model input was pseudonymised before the call (names, contacts, ids, dates)")
+    model_remote: bool | None = Field(None, description="Whether the model ran off this server (AMD Token Factory or another remote endpoint)")
+
+
+class BriefWarning(BaseModel):
+    """A code check on the brief text in the editor. Shown as a warning; only `labs_pending` blocks signing."""
+
+    kind: Literal["citation", "hedge", "diagnosis", "unknown_section", "unknown_date", "labs_pending"]
+    section: str | None = None
+    line: str | None = Field(None, description="The line of the text the warning is about")
+    message: str
 
 
 class DecisionCounts(BaseModel):

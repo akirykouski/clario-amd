@@ -58,7 +58,7 @@ describe("clinic: second opinion", () => {
     expect(screen.getAllByTestId("so-tested-row")[0]).toHaveTextContent("Urine testProtein present");
     const button = within(screen.getByTestId("so-compare")).getByRole("button", { name: "Compare with the previous opinion" });
     expect(button).toBeDisabled();
-    expect(screen.getByTestId("so-compare")).toHaveTextContent("Opens after you finalize your brief");
+    expect(screen.getByTestId("so-compare")).toHaveTextContent("Opens after you sign your brief");
     expect(document.body.textContent).not.toMatch(/fibromyalg/i);
     expect(cmp).not.toHaveBeenCalled();
   });

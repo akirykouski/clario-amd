@@ -4,12 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { api, ApiError, buildUrl, onLocked } from "../api";
 import { initialRun, runReducer } from "../runReducer";
 import { SignalPill } from "../components/ui";
-import { FinalizeButton } from "../clinic/BriefPanel";
 import { HeatStrip } from "../components/HeatStrip";
 import { buildHeat, weekStart, splitQuotes } from "../lib";
 import { LabRow, qualKind, refText, valueText } from "../patient/LabsPage";
 import { gpuLoad } from "../patient/ImportPage";
-import type { BriefItem, Brief, LabValue } from "../types";
+import type { Brief, LabValue } from "../types";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -67,19 +66,6 @@ describe("signal pill", () => {
     const { container } = render(<SignalPill signal={sig} />);
     expect(screen.getByText(word)).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/%|\d/);
-  });
-});
-
-const item = (id: string, review: BriefItem["review"]): BriefItem => ({ id, section: "summary", text: id, cites: [], origin: "ai", review });
-describe("finalize button", () => {
-  it("is disabled while any item is pending", () => {
-    render(<FinalizeButton items={[item("a", "accepted"), item("b", "pending")]} onClick={() => {}} />);
-    expect(screen.getByRole("button", { name: /finalize/i })).toBeDisabled();
-    expect(screen.getByText(/1 item still needs review/)).toBeInTheDocument();
-  });
-  it("is enabled once all are reviewed", () => {
-    render(<FinalizeButton items={[item("a", "accepted"), item("b", "rejected"), item("c", "edited")]} onClick={() => {}} />);
-    expect(screen.getByRole("button", { name: /finalize/i })).toBeEnabled();
   });
 });
 

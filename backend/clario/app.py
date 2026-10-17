@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -119,13 +119,16 @@ class LabBulkIn(BaseModel):
     entry_id: str | None = None
 
 
-class ReviewIn(BaseModel):
-    review: str
-    text: str | None = None
+class BriefTextIn(BaseModel):
+    text: str
+    specialty: str | None = None
 
 
-class FinalizeIn(BaseModel):
-    seconds: float | None = None  # opening the package to finalize, measured in the clinic UI
+class SignIn(BaseModel):
+    text: str  # the brief as the clinician edited it (sections as "## Title", lines as "- ...")
+    clinician: str  # the name printed under "Reviewed and signed by"
+    specialty: str | None = None  # the focus the text was prepared for (#21)
+    seconds: float | None = None  # opening the package to signing, measured in the clinic UI
 
 
 class TermDecisionIn(BaseModel):
@@ -970,10 +973,16 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         save_decisions(pid, d)
         return await asyncio.to_thread(differential, pkg, d, norm_lang(lang))
 
+    # Whether the brief's model input leaves pseudonymised (on whenever the model is remote, CLARIO_PSEUDONYMIZE wins)
+    pseudo = bool(getattr(llm, "pseudonymize", False))
+    remote = not s.offline and (s.llm_host or "") not in privacy.LOCAL_HOSTS
+
     async def draft(rid: str, pkg: SharePackage, lang: str = "en") -> None:
         try:
             await runs.emit(rid, "draft", "Reading the shared diary", 0.05, backend=llm.backend, model=llm.model)
-            msgs = [{"role": "system", "content": briefing.SYSTEM}, {"role": "user", "content": briefing.model_input(pkg, lang)}]
+            # pseudonymised input carries day numbers instead of dates ("day 12"); the drafted text gets the dates back
+            msgs = [{"role": "system", "content": briefing.SYSTEM},
+                    {"role": "user", "content": briefing.model_input(pkg, lang, relative_dates=pseudo)}]
             text, stats, n, last = "", None, 0, time.perf_counter()
             t0 = time.perf_counter()
             async for delta, st in llm.stream("brief", msgs, max_tokens=1500,
@@ -995,8 +1004,9 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             parsed = briefing.DraftOut.model_validate(extract_json(text))
             items = specialty.tag(pkg, briefing.patient_items(pkg, lang) + briefing.check_ai_items(pkg, parsed, lang), onto)
             b = save_brief(Brief(package_id=pkg.package_id, items=items, model=llm.model, backend=llm.backend,
-                                 stats=stats.as_dict() if stats else {}, lang=lang))  # type: ignore[arg-type]
-            await runs.emit(rid, "done", "Brief drafted. Review each AI item.", 1.0, backend=llm.backend,
+                                 stats=stats.as_dict() if stats else {}, lang=lang,  # type: ignore[arg-type]
+                                 pseudonymized=pseudo, model_remote=remote))
+            await runs.emit(rid, "done", "Brief drafted: AI draft, not reviewed. Edit and sign it.", 1.0, backend=llm.backend,
                             model=llm.model, **({k: v for k, v in stats.as_dict().items()
                                                  if k in ("tokens", "tokens_per_s", "latency_ms")} if stats else {}),
                             payload=b.model_dump(mode="json"))
@@ -1019,7 +1029,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             raise HTTPException(404, "No brief yet")
         aud = audience or "clinician"
         if aud == "patient" and not b.finalized:
-            raise HTTPException(409, "The patient copy is available after the clinician finalizes the brief")
+            raise HTTPException(409, "The patient copy is available after the clinician signs the brief")
         return pkg, b, aud, norm_lang(lang) if lang else b.lang
 
     @app.get("/api/inbox/{pid}/brief")
@@ -1028,46 +1038,53 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         out = briefing.render_brief(pkg, b, aud, lg, onto)
         return specialty.tag_brief(pkg, out, onto) if aud == "clinician" else out
 
-    @app.patch("/api/brief-items/{pid}/{item_id}")
-    def review(pid: str, item_id: str, body: ReviewIn):
-        open_pkg(pid)
+    def draft_view(pid: str, specialty_: str | None) -> tuple[SharePackage, Brief, list, int]:
+        """The unsigned brief as the editor and the draft PDF see it: lab lines rebuilt from the clinic's decisions,
+        specialty tags, only checked labs, filtered for the specialty."""
+        pkg = decided(open_pkg(pid), drop_rejected=True)
         b = load_brief(pid)
         if not b:
             raise HTTPException(404, "No brief yet")
+        b = specialty.tag_brief(pkg, briefing.with_labs(b, pkg, b.lang), onto)
+        pending = sum(1 for l in pkg.labs if lab_needs_check(l))
+        return pkg, b, briefing.shown_items(pkg, b, specialty_), pending
+
+    @app.get("/api/inbox/{pid}/brief/text")
+    def brief_text(pid: str, specialty: str | None = None) -> dict:
+        """The draft as plain text for "Edit and sign" (sections kept), with the code checks as warnings."""
+        pkg, b, shown, pending = draft_view(pid, specialty)
+        if b.finalized:
+            return {"text": b.text or "", "warnings": [], "lang": b.lang, "signed": True}
+        text = briefing.brief_text(pkg, shown, b.lang)
+        warns = briefing.text_warnings(pkg, b, text, b.lang, pending)
+        return {"text": text, "warnings": [w.model_dump() for w in warns], "lang": b.lang, "signed": False}
+
+    @app.post("/api/inbox/{pid}/brief/check")
+    def brief_check(pid: str, body: BriefTextIn) -> dict:
+        """Warnings for the edited text: citation check, hedge validator, diagnostic or dosing words, labs to check."""
+        pkg, b, _shown, pending = draft_view(pid, body.specialty)
+        return {"warnings": [w.model_dump() for w in briefing.text_warnings(pkg, b, body.text, b.lang, pending)]}
+
+    @app.post("/api/inbox/{pid}/brief/sign")
+    def sign(pid: str, body: SignIn) -> Brief:
+        """The clinician signs the edited text: it becomes the brief (and the signed PDF). 409 while a lab reading still
+        needs a check or once signed; 422 without a name or text. Appends the pilot counts to `decisions.jsonl`."""
+        pkg, b, shown, pending = draft_view(pid, body.specialty)
         if b.finalized:
             raise HTTPException(409, "Brief is final")
-        if body.review not in ("pending", "accepted", "rejected", "edited"):
-            raise HTTPException(422, "review must be pending, accepted, rejected or edited")
-        for i, it in enumerate(b.items):
-            if it.id == item_id:
-                upd: dict[str, Any] = {"review": body.review}
-                if body.review == "edited":
-                    if not (body.text or "").strip():
-                        raise HTTPException(422, "Edited items need text")
-                    upd["text"] = body.text.strip()
-                b.items[i] = it.model_copy(update=upd)
-                save_brief(b)
-                return b.items[i]
-        raise HTTPException(404, "item not found")
-
-    @app.post("/api/inbox/{pid}/brief/finalize")
-    def finalize(pid: str, body: FinalizeIn | None = None) -> Brief:
-        open_pkg(pid)
-        b = load_brief(pid)
-        if not b:
-            raise HTTPException(404, "No brief yet")
-        dpkg = decided(open_pkg(pid), drop_rejected=True)
-        unchecked = [l for l in dpkg.labs if lab_needs_check(l)]
-        if unchecked:
-            raise HTTPException(409, f"{len(unchecked)} lab reading(s) still need a check")
-        pending = [i for i in b.items if i.review == "pending" and i.section != "labs"]
         if pending:
-            raise HTTPException(409, f"{len(pending)} AI item(s) still need review")
-        b = specialty.tag_brief(dpkg, briefing.with_labs(b, dpkg, b.lang), onto)
-        b.finalized = True
-        b.finalized_at = now_iso()
-        secs = body.seconds if body else None
-        b.review_seconds = round(secs, 1) if secs is not None and 0 <= secs < 86400 else None
+            raise HTTPException(409, f"{pending} lab reading(s) still need a check")
+        name = " ".join((body.clinician or "").split())[:120]
+        if not name:
+            raise HTTPException(422, "Sign with the clinician's name")
+        text = (body.text or "").strip()
+        if not briefing.parse_text(text)[0]:
+            raise HTTPException(422, "The brief text is empty")
+        items = specialty.tag(pkg, briefing.sign_items(pkg, shown, text, b.lang), onto)
+        secs = body.seconds
+        b = b.model_copy(update={"items": items, "finalized": True, "finalized_at": now_iso(), "signed_by": name,
+                                 "text": text + "\n", "specialty": specialty.norm_focus(body.specialty),
+                                 "review_seconds": round(secs, 1) if secs is not None and 0 <= secs < 86400 else None})
         save_brief(b)
         tally = DecisionCounts()
         for i in b.items:
@@ -1077,6 +1094,19 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         with decisions_file.open("a") as fh:
             fh.write(row.model_dump_json() + "\n")
         return b
+
+    @app.get("/api/inbox/{pid}/brief.pdf")
+    def brief_pdf(pid: str, specialty: str | None = None):
+        """One-page PDF: the AI draft (watermarked "AI draft, not reviewed", for `specialty`) until signed, then the
+        signed brief with the clinician's name, date and the model provenance."""
+        pkg, b, shown, _pending = draft_view(pid, specialty)
+        if b.finalized:
+            data = briefing.to_pdf(pkg, b, b.text or "", b.lang, b.specialty)
+        else:
+            data = briefing.to_pdf(pkg, b, briefing.brief_text(pkg, shown, b.lang), b.lang, specialty)
+        name = f"clario-brief-{pid}-{'signed' if b.finalized else 'draft'}.pdf"
+        return Response(data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{name}"',
+                                                                      "Cache-Control": "no-store"})
 
     @app.get("/api/clinic/metrics")
     def clinic_metrics() -> ClinicMetrics:
@@ -1096,14 +1126,14 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
 
     @app.get("/api/inbox/{pid}/compare")
     async def compare_opinions(pid: str, lang: str = "en") -> dict:
-        """Second opinion only, after this doctor finalized the brief: the previous doctor's conclusions next to this
+        """Second opinion only, after this doctor signed the brief: the previous doctor's conclusions next to this
         doctor's (conditions computed in code from the facts, brief lines as decided), disagreements marked."""
         full = open_full(pid)
         if not full.second_opinion:
             raise HTTPException(404, "This package is not a second opinion")
         b = load_brief(pid)
         if not b or not b.finalized:
-            raise HTTPException(409, "The previous opinion opens after you finalize your brief")
+            raise HTTPException(409, "The previous opinion opens after you sign your brief")
         lang = norm_lang(lang)
         pkg = second.facts_only(full)
         ddx = await asyncio.to_thread(differential, pkg, load_decisions(pid), lang)
@@ -1118,7 +1148,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         open_pkg(pid)
         b = load_brief(pid)
         if not b or not b.finalized:
-            raise HTTPException(409, "Finalize the brief first")
+            raise HTTPException(409, "Sign the brief first")
         pkg, b, aud, lg = view(pid, audience, lang)
         return briefing.to_markdown(pkg, b, aud, lg, onto)
 

@@ -47,8 +47,8 @@ def since_previous(pkg: SharePackage, prev_date: str | None, onto: Ontology, lan
 def compare(previous: PriorOpinion, conditions: list[Condition], brief: Brief, since: list[str]) -> dict:
     """Both opinions side by side. `rows` has one line per condition named on either side: `previous` is `diagnosis`,
     `considered` or null, `current_rank` the rank in this doctor's conditions to consider (computed in code from the
-    facts) or null; `agree` is true when both sides name it. The second doctor's lines are the AI lines of the
-    finalized brief as they decided them."""
+    facts) or null; `agree` is true when both sides name it. The second doctor's lines are the signed brief's AI lines as
+    they kept, edited or removed them, plus the lines they wrote themselves."""
     prev: list[tuple[PriorCondition, str]] = [(c, "diagnosis") for c in previous.diagnosis]
     prev += [(c, "considered") for c in previous.conditions
              if not any(_same(c.name, c.disease_id, d.name, d.disease_id) for d in previous.diagnosis)]
@@ -62,7 +62,7 @@ def compare(previous: PriorOpinion, conditions: list[Condition], brief: Brief, s
     for x in conditions:
         if x.disease_id not in used:
             rows.append({"name": x.name, "disease_id": x.disease_id, "previous": None, "current_rank": x.rank, "agree": False})
-    ai = [i for i in brief.items if i.origin == "ai"]
+    ai = [i for i in brief.items if i.origin in ("ai", "clinician")]
     return {
         "previous": previous.model_dump(),
         "current": {"conditions": [{"disease_id": c.disease_id, "name": c.name, "rank": c.rank, "signal": c.signal}

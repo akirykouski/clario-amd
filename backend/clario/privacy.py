@@ -3,7 +3,7 @@
 Three parts:
   * `pseudonymize(text)`: rule-based removal of direct identifiers. Returns the redacted text and a list of
     replacements (type and positions only, never the original value).
-  * `PrivacyLLM`: wraps any LLM. In patient mode with a remote backend it redacts user messages before the call,
+  * `PrivacyLLM`: wraps any LLM. With a remote backend (patient or clinic mode) it redacts user messages before the call,
     then maps returned quotes back to the ORIGINAL text so grounding still works. Every call is logged.
   * `CallLog`: hash chain of calls. hash = sha256(prev_hash + payload_sha256 + ts + backend + model + purpose),
     so changing, removing or reordering a record is detectable with `verify()`.
@@ -636,10 +636,11 @@ class CallLog:
 
 # ====================================================================== LLM wrapper
 def should_pseudonymize(s) -> bool:
-    """CLARIO_PSEUDONYMIZE=1|0 wins. Default: on for patient mode when the model is remote."""
+    """CLARIO_PSEUDONYMIZE=1|0 wins. Default: on whenever the model is remote, in patient and clinic mode alike (the
+    clinic's brief prompt quotes the diary). Off for offline fixtures and a model on this machine."""
     if s.pseudonymize is not None:
         return s.pseudonymize
-    if s.mode != "patient" or s.offline:
+    if s.offline:
         return False
     return (s.llm_host or "") not in LOCAL_HOSTS
 

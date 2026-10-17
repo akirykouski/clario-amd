@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { act, render, screen } from "@testing-library/react";
 import { api } from "../api";
 import { setLang } from "../i18n";
-import { BriefPanel, countDecisions } from "../clinic/BriefPanel";
+import { countDecisions } from "../clinic/BriefPanel";
 import { DecisionLine, InboxMetrics } from "../clinic/Metrics";
-import type { Brief, BriefItem, ClinicMetrics, SharePackage } from "../types";
+import type { BriefItem, ClinicMetrics } from "../types";
 
 afterEach(() => { vi.restoreAllMocks(); act(() => setLang("en")); });
 
@@ -20,16 +19,16 @@ describe("pilot metric", () => {
 
   it("renders the line in English and Italian with minutes and seconds", () => {
     render(<DecisionLine counts={{ accepted: 12, edited: 2, rejected: 1 }} seconds={220} />);
-    expect(screen.getByTestId("decision-line")).toHaveTextContent("This package · AI lines: accepted 12 · edited 2 · rejected 1 · 3 min 40 s to finalize");
+    expect(screen.getByTestId("decision-line")).toHaveTextContent("This package · AI lines: accepted 12 · edited 2 · rejected 1 · 3 min 40 s to sign");
     act(() => setLang("it"));
-    expect(screen.getByTestId("decision-line")).toHaveTextContent("Questo pacchetto · Righe dell'IA: accettate 12 · modificate 2 · scartate 1 · 3 min 40 s per chiudere il riepilogo");
+    expect(screen.getByTestId("decision-line")).toHaveTextContent("Questo pacchetto · Righe dell'IA: accettate 12 · modificate 2 · scartate 1 · 3 min 40 s per firmare il riepilogo");
   });
 
   it("shows seconds only under a minute and omits the time when unknown", () => {
     const { rerender } = render(<DecisionLine counts={{ accepted: 1, edited: 0, rejected: 0 }} seconds={40} />);
-    expect(screen.getByTestId("decision-line")).toHaveTextContent("40 s to finalize");
+    expect(screen.getByTestId("decision-line")).toHaveTextContent("40 s to sign");
     rerender(<DecisionLine counts={{ accepted: 1, edited: 0, rejected: 0 }} />);
-    expect(screen.getByTestId("decision-line")).not.toHaveTextContent("finalize");
+    expect(screen.getByTestId("decision-line")).not.toHaveTextContent("to sign");
   });
 
   it("inbox header shows totals and the average, and stays hidden with no finalized brief", async () => {
@@ -43,24 +42,10 @@ describe("pilot metric", () => {
     render(<InboxMetrics />);
     const strip = await screen.findByTestId("inbox-metrics");
     expect(strip).toHaveTextContent("AI lines in all briefs on this server");
-    expect(strip).toHaveTextContent("2 finalized briefs · 1 min 35 s average to finalize");
+    expect(strip).toHaveTextContent("2 signed briefs · 1 min 35 s average to sign");
     expect(screen.getByTestId("metric-accepted")).toHaveTextContent("12accepted");
     expect(screen.getByTestId("metric-edited")).toHaveTextContent("2edited");
     expect(screen.getByTestId("metric-rejected")).toHaveTextContent("1rejected");
   });
 
-  it("sends the time since the package was opened when finalizing", async () => {
-    vi.spyOn(api, "gpu").mockResolvedValue(null);
-    const brief: Brief = { package_id: "pkg_1", items: [item("a", "accepted"), item("b", "rejected")], model: null, backend: null, finalized: false, stats: {} };
-    const fin = vi.spyOn(api, "finalize").mockResolvedValue({ ...brief, finalized: true, review_seconds: 12 });
-    const setBrief = vi.fn();
-    const pkg = { package_id: "pkg_1", patient_alias: "Ash-001", entries: [], entities: [], labs: [], patterns: [], period: ["2026-09-01", "2026-10-02"] } as unknown as SharePackage;
-    render(<MemoryRouter><BriefPanel pkg={pkg} brief={brief} setBrief={setBrief} /></MemoryRouter>);
-    expect(screen.getByTestId("decision-line")).toHaveTextContent("AI lines: accepted 1 · edited 0 · rejected 1");
-    fireEvent.click(screen.getByRole("button", { name: "Finalize brief" }));
-    await vi.waitFor(() => expect(fin).toHaveBeenCalled());
-    expect(fin.mock.calls[0][0]).toBe("pkg_1");
-    expect(typeof fin.mock.calls[0][1]).toBe("number");
-    expect(fin.mock.calls[0][1] as number).toBeGreaterThanOrEqual(0);
-  });
 });

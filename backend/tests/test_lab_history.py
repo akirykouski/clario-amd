@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from clario.app import create_app
 from clario.models import LabResult
 from clario.share import shared_labs
-from conftest import confirm_all, demo_referti_with_unsure, settings, sse, wait_extracted
+from conftest import confirm_all, demo_referti_with_unsure, settings, sign_brief, sse, wait_extracted
 from test_judge_share import share_body
 
 
@@ -30,7 +30,7 @@ def test_history_keeps_earlier_positive_and_recent_out_of_range_tests():
     assert got[2].name_en == "ANA" and got[1].name_en == "Anti-dsDNA"
 
 
-def test_clinic_decides_unchecked_labs_before_finalize(unlocked, clinic_server, tmp_path):
+def test_clinic_decides_unchecked_labs_before_signing(unlocked, clinic_server, tmp_path):
     unlocked.post("/api/entries", json={"text": "Knees ache. Tired. Rash on my cheeks."})
     wait_extracted(unlocked)
     confirm_all(unlocked)
@@ -51,10 +51,10 @@ def test_clinic_decides_unchecked_labs_before_finalize(unlocked, clinic_server, 
         events = sse(clinic, clinic.post(f"/api/inbox/{pid}/brief").json()["run_id"])
         texts = [i["text"] for i in events[-1]["payload"]["items"] if i["section"] == "labs"]
         assert any("low-confidence reading, please check" in t for t in texts)
-        for it in clinic.get(f"/api/inbox/{pid}/brief").json()["items"]:
-            if it["review"] == "pending":
-                clinic.patch(f"/api/brief-items/{pid}/{it['id']}", json={"review": "accepted"})
-        assert clinic.post(f"/api/inbox/{pid}/brief/finalize").status_code == 409  # labs undecided
+        draft = clinic.get(f"/api/inbox/{pid}/brief/text").json()
+        assert any(w["kind"] == "labs_pending" for w in draft["warnings"])
+        assert "please check" not in draft["text"]  # only checked readings go into the PDF (#19)
+        assert sign_brief(clinic, pid).status_code == 409  # labs undecided
         assert clinic.put(f"/api/inbox/{pid}/labs/nope", json={"decision": "accepted"}).status_code == 404
         assert clinic.put(f"/api/inbox/{pid}/labs/{unchecked[0]['id']}", json={"decision": "maybe"}).status_code == 422
         rejected = unchecked[0]
@@ -66,7 +66,8 @@ def test_clinic_decides_unchecked_labs_before_finalize(unlocked, clinic_server, 
         got = {l["id"]: l for l in clinic.get(f"/api/inbox/{pid}").json()["labs"]}
         assert got[rejected["id"]]["decision"] == "rejected" and got[unchecked[-1]["id"]]["decision"] == "confirmed"
         assert clinic.patch(f"/api/inbox/{pid}/labs/{unchecked[0]['id']}", json={"decision": "confirmed"}).status_code == 200  # theirs: PATCH, same handler
-        fin = clinic.post(f"/api/inbox/{pid}/brief/finalize")
+        assert not any(w["kind"] == "labs_pending" for w in clinic.get(f"/api/inbox/{pid}/brief/text").json()["warnings"])
+        fin = sign_brief(clinic, pid)
         assert fin.status_code == 200, fin.text
         md = clinic.get(f"/api/inbox/{pid}/brief.md").text
         assert "please check" not in md

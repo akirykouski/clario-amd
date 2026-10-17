@@ -2,7 +2,8 @@
 
 from fastapi.testclient import TestClient
 
-from conftest import settings, sse, wait_extracted
+from clario.brief_pdf import page_count
+from conftest import settings, sign_brief, sse, wait_extracted
 from test_share_clinic import share_body
 from clario.app import create_app
 from clario.knowledge import Ontology
@@ -48,12 +49,18 @@ def test_giulia_brief_lines_carry_specialties(unlocked, clinic_server, tmp_path)
             assert any(sp == ["nephrology"] for sp in labs.values())  # sodium or creatinine
             note = next(i for i in items if i.get("kind") == "patient_note")
             assert note["specialties"] == []  # the summary is shown for every specialty
-        # the tags survive review and finalize (lab lines are rebuilt then)
-        pending = [i for i in items if i["review"] == "pending" and i["origin"] == "ai"]
-        for i in pending:
-            clinic.patch(f"/api/brief-items/{pid}/{i['id']}", json={"review": "accepted"})
+        # the tags survive signing (lab lines are rebuilt then); the selected specialty filters what goes into the PDF
         for l in clinic.get(f"/api/inbox/{pid}").json()["labs"]:
             if l.get("needs_review"):
                 clinic.patch(f"/api/inbox/{pid}/labs/{l['id']}", json={"decision": "confirmed"})
-        fin = clinic.post(f"/api/inbox/{pid}/brief/finalize").json()
-        assert fin["finalized"] and {i["id"]: i["specialties"] for i in fin["items"]}.get("bi_lab_c3") == ["rheumatology", "nephrology"]
+        general = clinic.get(f"/api/inbox/{pid}/brief/text").json()["text"]
+        rheum = clinic.get(f"/api/inbox/{pid}/brief/text", params={"specialty": "rheumatology"}).json()["text"]
+        neph_only = [i["text"] for i in items if i["section"] == "labs" and i["specialties"] == ["nephrology"]]
+        assert neph_only and all(t.split(":")[0] in general for t in neph_only)
+        assert not any(t.split(":")[0] in rheum for t in neph_only)
+        assert rheum.index("## Recorded symptoms") < rheum.index("## Timeline")  # rheumatology reads symptoms first
+        assert page_count(clinic.get(f"/api/inbox/{pid}/brief.pdf", params={"specialty": "rheumatology"}).content) == 1
+        fin = sign_brief(clinic, pid, specialty="rheumatology").json()
+        assert fin["finalized"] and fin["specialty"] == "rheumatology"
+        assert {i["id"]: i["specialties"] for i in fin["items"]}.get("bi_lab_c3") == ["rheumatology", "nephrology"]
+        assert not any(i["section"] == "labs" and i["specialties"] == ["nephrology"] for i in fin["items"])

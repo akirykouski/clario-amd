@@ -1,6 +1,6 @@
 import type {
-  AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicMetrics, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
-  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition, Overview, Profile, LabCorrection,
+  AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefText, BriefWarning, ClinicMetrics, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
+  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition, Overview, Profile, LabCorrection, Specialty,
   Care, Comparison,
 } from "./types";
 
@@ -77,10 +77,14 @@ export const api = {
     request<SharePackage>("POST", `/inbox/${encodeURIComponent(pkg)}/labs/decide`, { body: b }),
   startBrief: (id: string, lang?: string) => request<{ run_id: string }>("POST", `/inbox/${encodeURIComponent(id)}/brief${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
   brief: (id: string, v?: BriefView) => request<Brief>("GET", `/inbox/${encodeURIComponent(id)}/brief`, { params: v }),
-  reviewItem: (pkg: string, item: string, b: { review: BriefItem["review"]; text?: string }) =>
-    request<BriefItem>("PATCH", `/brief-items/${encodeURIComponent(pkg)}/${encodeURIComponent(item)}`, { body: b }),
-  finalize: (id: string, seconds?: number) =>
-    request<Brief>("POST", `/inbox/${encodeURIComponent(id)}/brief/finalize`, seconds === undefined ? {} : { body: { seconds } }),
+  briefText: (id: string, specialty?: Specialty) =>
+    request<BriefText>("GET", `/inbox/${encodeURIComponent(id)}/brief/text`, { params: { specialty } }),
+  checkBrief: (id: string, text: string, specialty?: Specialty) =>
+    request<{ warnings: BriefWarning[] }>("POST", `/inbox/${encodeURIComponent(id)}/brief/check`, { body: { text, specialty } }),
+  signBrief: (id: string, b: { text: string; clinician: string; specialty?: Specialty; seconds?: number }) =>
+    request<Brief>("POST", `/inbox/${encodeURIComponent(id)}/brief/sign`, { body: b }),
+  /** One-page PDF: the AI draft (watermarked, for `specialty`) until signed, then the signed brief. `v` busts the cache. */
+  briefPdfUrl: (id: string, v?: { specialty?: Specialty; v?: string }) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.pdf`, v),
   clinicMetrics: () => request<ClinicMetrics>("GET", "/clinic/metrics"),
   briefMdUrl: (id: string, v?: BriefView) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.md`, v),
   privacyPreview: (entryId: string) => request<PrivacyPreview>("GET", "/privacy/preview", { params: { entry_id: entryId } }),

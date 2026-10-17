@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from conftest import confirm_all, settings, sse, wait_extracted
 from clario.app import create_app
+from clario.brief_pdf import page_count
 from clario.share import ClinicKeys, build_package, seal
 
 
@@ -13,7 +14,7 @@ def share_body(url, **kw):
             "note": "Is the joint pain and rash connected?", **kw}
 
 
-def test_share_draft_review_finalize(unlocked, clinic_server, tmp_path):
+def test_share_draft_edit_sign(unlocked, clinic_server, tmp_path):
     unlocked.post("/api/demo", json={"persona": "giulia"})
     wait_extracted(unlocked)
     confirm_all(unlocked)
@@ -44,25 +45,51 @@ def test_share_draft_review_finalize(unlocked, clinic_server, tmp_path):
         assert all(i["review"] == "pending" for i in ai)
         assert any(i["origin"] == "patient" and "Is the joint pain" in i["text"] for i in brief["items"])
 
-        assert clinic.post(f"/api/inbox/{pid}/brief/finalize").status_code == 409
-        for i, item in enumerate(ai):
-            review = ["accepted", "rejected", "edited"][i % 3]
-            body = {"review": review} | ({"text": "Edited by clinician."} if review == "edited" else {})
-            assert clinic.patch(f"/api/brief-items/{pid}/{item['id']}", json=body).status_code == 200
+              # the draft opens as a one-page PDF marked as an unreviewed AI draft
+        pdf = clinic.get(f"/api/inbox/{pid}/brief.pdf")
+        assert pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf" and pdf.content[:5] == b"%PDF-"
+        assert page_count(pdf.content) == 1 and "draft" in pdf.headers["content-disposition"]
+
+        # "Edit and sign": plain text with the sections kept, code checks as warnings
+        t = clinic.get(f"/api/inbox/{pid}/brief/text").json()
+        text = t["text"]
+        assert t["signed"] is False and "## Summary" in text and "## Timeline" in text
+        lines = {i["id"]: next(l for l in text.splitlines() if i["text"] in l) for i in ai}
+        flagged = next(i for i in ai if i["flag"] == "citation_mismatch")
+        assert any(w["kind"] == "citation" and w["line"] == lines[flagged["id"]][2:] for w in t["warnings"])
+        assert not any(w["kind"] in ("hedge", "diagnosis") for w in t["warnings"])
+        other = next(i for i in ai if i["section"] == "questions")
+        edited = text.replace(lines[flagged["id"]] + "\n", "")  # reject the flagged line
+        edited = edited.replace(other["text"], other["text"].rstrip(".") + ", and since when.")  # edit one
+        edited += "\n## Patterns\n- You have lupus.\n"
+        w = clinic.post(f"/api/inbox/{pid}/brief/check", json={"text": edited}).json()["warnings"]
+        assert {x["kind"] for x in w} >= {"hedge", "diagnosis"} and not any(x["kind"] == "citation" for x in w)
+        edited = edited.replace("- You have lupus.", "- Joint pain and rash together may be worth discussing.")
+        assert clinic.post(f"/api/inbox/{pid}/brief/check", json={"text": edited}).json()["warnings"] == []
+
+        assert clinic.post(f"/api/inbox/{pid}/brief/sign", json={"text": edited, "clinician": "  "}).status_code == 422
+        assert clinic.post(f"/api/inbox/{pid}/brief/sign", json={"text": "", "clinician": "Dr Rossi"}).status_code == 422
         assert clinic.get("/api/clinic/metrics").json() == {"briefs": [], "totals": {"accepted": 0, "edited": 0, "rejected": 0},
                                                             "finalized": 0, "timed": 0, "mean_review_seconds": None}
-        fin = clinic.post(f"/api/inbox/{pid}/brief/finalize", json={"seconds": 220.44}).json()
-        assert fin["finalized"] is True and fin["review_seconds"] == 220.4
-        want = {k: sum(1 for j in range(len(ai)) if ["accepted", "rejected", "edited"][j % 3] == k) for k in ("accepted", "rejected", "edited")}
+        fin = clinic.post(f"/api/inbox/{pid}/brief/sign", json={"text": edited, "clinician": "Dr Anna Rossi", "seconds": 220.44}).json()
+        assert fin["finalized"] is True and fin["review_seconds"] == 220.4 and fin["signed_by"] == "Dr Anna Rossi"
+        assert fin["text"].strip() == edited.strip() and fin["pseudonymized"] is False  # offline fixtures: nothing left the server
+        by_id = {i["id"]: i for i in fin["items"]}
+        assert by_id[flagged["id"]]["review"] == "rejected" and by_id[other["id"]]["review"] == "edited"
+        assert any(i["origin"] == "clinician" and i["section"] == "patterns" for i in fin["items"])
+        want = {"accepted": len(ai) - 2, "edited": 1, "rejected": 1}
         m = clinic.get("/api/clinic/metrics").json()
         assert m["finalized"] == 1 and m["timed"] == 1 and m["mean_review_seconds"] == 220.4
         assert m["totals"] == want and m["briefs"][0]["package_id"] == pid and m["briefs"][0]["accepted"] == want["accepted"]
         assert "text" not in m["briefs"][0]
         md = clinic.get(f"/api/inbox/{pid}/brief.md").text
-        rejected = [it["text"] for k, it in enumerate(ai) if k % 3 == 1]
-        assert all(t not in md for t in rejected)
-        assert "Edited by clinician." in md and "reviewed by the clinician" in md
-        assert clinic.patch(f"/api/brief-items/{pid}/{ai[0]['id']}", json={"review": "pending"}).status_code == 409
+        assert flagged["text"] not in md and "and since when." in md and "may be worth discussing" in md
+        assert clinic.get(f"/api/inbox/{pid}/brief/text").json() == {"text": fin["text"], "warnings": [], "lang": "en", "signed": True}
+
+        signed = clinic.get(f"/api/inbox/{pid}/brief.pdf")
+        assert page_count(signed.content) == 1 and "signed" in signed.headers["content-disposition"]
+        assert clinic.post(f"/api/inbox/{pid}/brief/sign", json={"text": edited, "clinician": "Dr Rossi"}).status_code == 409
+        assert clinic.get("/api/inbox").json()[0]["brief_state"] == "final"
 
 
 def test_clinic_rejects_foreign_and_expired_packages(tmp_path):

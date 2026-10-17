@@ -92,3 +92,33 @@ def tag(pkg: SharePackage, items: list[BriefItem], onto: Ontology) -> list[Brief
 
 def tag_brief(pkg: SharePackage, brief: Brief, onto: Ontology) -> Brief:
     return brief.model_copy(update={"items": tag(pkg, brief.items, onto)})
+
+
+# Section order per specialty: what that clinic reads first. General practice keeps the default order.
+SECTION_ORDER = ("summary", "timeline", "symptoms", "labs", "medications", "patterns", "questions")
+FOCUS_SECTIONS: dict[str, tuple[str, ...]] = {
+    "rheumatology": ("summary", "symptoms", "labs", "patterns", "timeline", "medications", "questions"),
+    "nephrology": ("summary", "labs", "symptoms", "medications", "timeline", "patterns", "questions"),
+}
+ALWAYS = ("summary", "medications", "questions")  # every specialty sees these in full
+LABELS = {"en": {"general": "General practice", "rheumatology": "Rheumatology", "nephrology": "Nephrology"},
+          "it": {"general": "Medicina generale", "rheumatology": "Reumatologia", "nephrology": "Nefrologia"}}
+
+
+def norm_focus(focus: str | None) -> str | None:
+    return focus if focus in SPECIALTIES else None
+
+
+def focus_items(items: list[BriefItem], focus: str | None) -> list[BriefItem]:
+    """The brief for one specialty, as it goes into the PDF: sections reordered, lines of that specialty first, lines of
+    other specialties left out (summary, medications and questions stay whole). No focus: every line, default order."""
+    focus = norm_focus(focus)
+    out: list[BriefItem] = []
+    for sec in FOCUS_SECTIONS.get(focus or "", SECTION_ORDER):
+        rows = [i for i in items if i.section == sec]
+        if focus and sec not in ALWAYS:
+            rows = [i for i in rows if focus in i.specialties]
+        elif focus:
+            rows = [i for i in rows if focus in i.specialties] + [i for i in rows if focus not in i.specialties]
+        out += rows
+    return out

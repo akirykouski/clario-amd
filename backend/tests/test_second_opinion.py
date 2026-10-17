@@ -37,9 +37,9 @@ def finalize(clinic, pid):
     events = sse(clinic, clinic.post(f"/api/inbox/{pid}/brief").json()["run_id"])
     assert events[-1]["stage"] == "done", events[-1]
     ai = [i for i in events[-1]["payload"]["items"] if i["origin"] == "ai"]
-    for k, it in enumerate(ai):
-        clinic.patch(f"/api/brief-items/{pid}/{it['id']}", json={"review": "rejected" if k == 0 else "accepted"})
-    r = clinic.post(f"/api/inbox/{pid}/brief/finalize")
+    text = clinic.get(f"/api/inbox/{pid}/brief/text").json()["text"]  # sign with the first AI line removed
+    text = "\n".join(l for l in text.splitlines() if ai[0]["text"] not in l)
+    r = clinic.post(f"/api/inbox/{pid}/brief/sign", json={"text": text, "clinician": "Dr Second"})
     assert r.status_code == 200, r.text
     return ai
 

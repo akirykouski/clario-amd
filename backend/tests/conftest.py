@@ -83,3 +83,9 @@ def clinic_server(tmp_path):
         time.sleep(0.02)
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
+
+
+def sign_brief(clinic, pid, clinician="Dr Test", **params):
+    """Sign the brief as drafted: the draft text unchanged, so every AI line counts as accepted."""
+    text = clinic.get(f"/api/inbox/{pid}/brief/text", params=params).json()["text"]
+    return clinic.post(f"/api/inbox/{pid}/brief/sign", json={"text": text, "clinician": clinician, **params})

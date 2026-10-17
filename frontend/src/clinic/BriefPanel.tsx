@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Pencil, Printer, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, FileText, PenLine, RotateCcw } from "lucide-react";
 import { api } from "../api";
-import type { Brief, BriefItem, BriefSection, SharePackage, Specialty } from "../types";
-import { canFinalize, fmtDate, fmtNum } from "../lib";
+import type { Brief, BriefItem, BriefSection, BriefWarning, SharePackage, Specialty } from "../types";
+import { fmtDate, fmtNum } from "../lib";
 import { ErrorBox, Spinner } from "../components/ui";
 import { tn, useT, type Key } from "../i18n";
 import { useRun } from "./useRun";
@@ -14,30 +14,8 @@ const sectionTitle = (s: BriefSection) => `brief.section.${s}` as Key;
 
 export type Focus = "general" | Specialty;
 export const FOCUSES: Focus[] = ["general", "rheumatology", "nephrology"];
-/** Section order per specialty: what that clinic reads first. General practice keeps the default order. */
-const FOCUS_SECTIONS: Record<Focus, BriefSection[]> = {
-  general: SECTIONS,
-  rheumatology: ["summary", "symptoms", "labs", "patterns", "timeline", "medications", "questions"],
-  nephrology: ["summary", "labs", "symptoms", "medications", "timeline", "patterns", "questions"],
-};
-/** Sections every specialty sees in full: the patient's question, medicines, questions to ask. */
-const ALWAYS: BriefSection[] = ["summary", "medications", "questions"];
-
-/** The brief for one specialty: sections reordered, lines of that specialty first, other lines hidden. A line that
- *  still needs a decision (an AI draft or an unchecked lab line) is never hidden, so finalizing is never blocked by
- *  something off screen. Specialties come from the server (HPO organ systems and lab tests, no model). */
-export function focusBrief(items: BriefItem[], focus: Focus): { sections: { s: BriefSection; items: BriefItem[] }[]; hidden: number } {
-  const ours = (i: BriefItem) => focus !== "general" && (i.specialties ?? []).includes(focus);
-  let hidden = 0;
-  const sections = FOCUS_SECTIONS[focus].map((s) => {
-    const all = items.filter((i) => i.section === s);
-    if (focus === "general") return { s, items: all };
-    const keep = all.filter((i) => ALWAYS.includes(s) || ours(i) || i.review === "pending");
-    hidden += all.length - keep.length;
-    return { s, items: [...keep.filter(ours), ...keep.filter((i) => !ours(i))] };
-  });
-  return { sections, hidden };
-}
+/** The specialty query for the server: it filters and orders what goes into the PDF (#21). */
+const specialtyOf = (f: Focus): Specialty | undefined => (f === "general" ? undefined : f);
 
 export function SpecialtySelect({ value, onChange }: { value: Focus; onChange: (f: Focus) => void }) {
   const { t } = useT();
@@ -85,58 +63,51 @@ export function RunChips({ model, backend, tokensPerS, latencyMs }: { model?: st
   );
 }
 
-export function FinalizeButton({ items, onClick, busy, pendingLabs = 0 }: { items: BriefItem[]; onClick: () => void; busy?: boolean; pendingLabs?: number }) {
-  const { t } = useT();
-  const pending = items.filter((i) => i.review === "pending" && i.origin === "ai").length;
-  return (
-    <div>
-      <button className="btn btn-primary" onClick={onClick} disabled={!canFinalize(items) || pendingLabs > 0 || busy}>{t("brief.finalize")}</button>
-      {pending > 0 && <p className="text-sm text-muted mt-1" aria-live="polite">{tn("brief.pending", pending)}</p>}
-      {pendingLabs > 0 && <p className="text-sm text-muted mt-1" aria-live="polite" data-testid="labs-pending">{tn("pkg.labsPending", pendingLabs)}</p>}
-    </div>
-  );
+const NAME_KEY = "clario.clinicianName";
+function savedName(): string {
+  try { return localStorage.getItem(NAME_KEY) ?? ""; } catch { return ""; }
+}
+function saveName(n: string) {
+  try { localStorage.setItem(NAME_KEY, n); } catch { /* private window: the name is typed again */ }
 }
 
+/** Generate brief -> one-page PDF marked "AI draft, not reviewed" -> Edit and sign (plain text, code checks as warnings)
+ *  -> signed PDF. The PDF is rendered by the clinic server; the selected specialty filters what goes into it. */
 export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief: Brief | null; setBrief: (b: Brief) => void }) {
   const pendingLabs = pkg.labs.filter((l) => l.needs_review && !l.decision).length;
   const { t, lang } = useT();
   const { state, start } = useRun();
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const openedAt = useRef(Date.now()); // the panel mounts when the clinician opens the package
   const [copy, setCopy] = useState<"clinician" | "patient">("clinician");
   const [patientCopy, setPatientCopy] = useState<Brief | null>(null);
   const [focus, setFocus] = useState<Focus>("general");
+  const [editing, setEditing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const shown = brief ?? (state.status === "done" ? state.brief ?? null : null);
-  useEffect(() => { if (state.status === "done" && state.brief) setBrief(state.brief); }, [state.status, state.brief]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (state.status === "done" && state.brief) { setBrief(state.brief); setEditing(false); } }, [state.status, state.brief]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the PDF is fetched again whenever the brief changes (a new draft, a lab decision, signing)
+  const [rev, setRev] = useState(0);
+  useEffect(() => { setRev((r) => r + 1); }, [shown]);
 
-  const finalized = !!shown?.finalized;
-  const focused = shown ? focusBrief(shown.items, focus) : null;
+  const signed = !!shown?.finalized;
   useEffect(() => {
-    if (!finalized || copy !== "patient") return;
+    if (!signed || copy !== "patient") return;
     setPatientCopy(null);
     api.brief(pkg.package_id, { audience: "patient", lang }).then(setPatientCopy).catch((x: Error) => setErr(x.message));
-  }, [finalized, copy, lang, pkg.package_id]);
+  }, [signed, copy, lang, pkg.package_id]);
 
-  const update = (it: BriefItem) => shown && setBrief({ ...shown, items: shown.items.map((x) => (x.id === it.id ? it : x)) });
-  const review = async (it: BriefItem, r: BriefItem["review"], text?: string) => {
-    setErr(null);
-    try { update(await api.reviewItem(pkg.package_id, it.id, text !== undefined ? { review: r, text } : { review: r })); }
-    catch (x) { setErr((x as Error).message); }
-  };
-  const finalize = async () => {
-    setBusy(true); setErr(null);
-    try { setBrief(await api.finalize(pkg.package_id, (Date.now() - openedAt.current) / 1000)); } catch (x) { setErr((x as Error).message); }
-    setBusy(false);
-  };
+  const pdfUrl = api.briefPdfUrl(pkg.package_id, { specialty: signed ? undefined : specialtyOf(focus), v: String(rev) });
+  const modelLabel = state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.clinicModel");
 
   return (
     <aside className="lg:sticky lg:top-4 space-y-4" aria-label={t("brief.title")} data-tour="brief">
       <div className="no-print flex items-center justify-between gap-3">
         <h2 className="text-2xl">{t("brief.title")}</h2>
-        <button className="btn btn-primary" onClick={() => start(pkg.package_id, lang)} disabled={state.status === "running" || finalized}>
-          {shown ? t("brief.draftAgain") : t("brief.draft")}
-        </button>
+        {!signed && !editing && (
+          <button className="btn btn-primary" onClick={() => start(pkg.package_id, lang)} disabled={state.status === "running"}>
+            {shown ? t("brief.draftAgain") : t("brief.draft")}
+          </button>
+        )}
       </div>
 
       <div aria-live="polite" className="no-print">
@@ -148,66 +119,146 @@ export function BriefPanel({ pkg, brief, setBrief }: { pkg: SharePackage; brief:
           </div>
         )}
         {state.status === "error" && <ErrorBox error={state.error ?? t("brief.error")} retry={() => start(pkg.package_id, lang)} />}
-        {state.status === "done" && <p className="text-sm text-muted">{t("brief.draftedBy", { model: state.backend === OFFLINE ? t("brief.chipDemo") : state.model ?? t("brief.clinicModel"), rate: state.backend !== OFFLINE && state.tokensPerS ? t("brief.draftedRate", { n: fmtNum(state.tokensPerS, 1) }) : "" })}</p>}
+        {state.status === "done" && !signed && <p className="text-sm text-muted">{t("brief.draftedBy", { model: modelLabel, rate: state.backend !== OFFLINE && state.tokensPerS ? t("brief.draftedRate", { n: fmtNum(state.tokensPerS, 1) }) : "" })}</p>}
       </div>
       {err && <ErrorBox error={err} />}
       <RunChips model={state.model ?? shown?.model} backend={state.backend ?? shown?.backend}
         tokensPerS={state.tokensPerS ?? shown?.stats?.tokens_per_s} latencyMs={state.latencyMs ?? shown?.stats?.latency_ms} />
+      {shown?.pseudonymized && <p className="no-print text-xs text-muted" data-testid="sent-pseudonymised">{t("brief.sentPseudo")}</p>}
 
       {!shown && state.status === "idle" && <p className="text-muted no-print">{t("brief.none")}</p>}
 
-      {shown && (
+      {shown && !signed && !editing && (
+        <div className="space-y-3" data-testid="brief-draft">
+          <SpecialtySelect value={focus} onChange={setFocus} />
+          <PdfView url={pdfUrl} badge={t("brief.aiDraftBadge")} />
+          <div className="flex gap-2 flex-wrap items-center">
+            <button className="btn btn-primary" onClick={() => setEditing(true)}><PenLine size={16} aria-hidden /> {t("brief.editSign")}</button>
+            <a className="btn" href={pdfUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden /> {t("brief.openPdf")}</a>
+          </div>
+        </div>
+      )}
+
+      {shown && !signed && editing && (
+        <BriefEditor pkg={pkg} focus={focus} pendingLabs={pendingLabs} onCancel={() => setEditing(false)}
+          onSigned={(b) => { setBrief(b); setEditing(false); }} openedAt={openedAt.current} />
+      )}
+
+      {shown && signed && (
         <>
-          {finalized && (
-            <div role="tablist" aria-label={t("brief.title")} className="no-print flex gap-2">
-              {(["clinician", "patient"] as const).map((c) => (
-                <button key={c} role="tab" aria-selected={copy === c} className="btn flex-1" onClick={() => setCopy(c)}
-                  style={copy === c ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
-                  {c === "clinician" ? t("brief.copyClinician") : t("brief.copyPatient")}
-                </button>
-              ))}
-            </div>
-          )}
-          {copy === "patient" && finalized ? (
-            <PatientCopy pkg={pkg} view={patientCopy} />
-          ) : (
-            <>
-              <div className="no-print space-y-4">
-                <SpecialtySelect value={focus} onChange={setFocus} />
-                {focused && focused.hidden > 0 && (
-                  <p className="text-sm text-muted" aria-live="polite" data-testid="specialty-hidden">
-                    {tn("brief.specialtyHidden", focused.hidden, { sp: t(`brief.specialty.${focus}` as Key) })}{" "}
-                    <button className="font-bold text-accent underline underline-offset-4" onClick={() => setFocus("general")}>{t("brief.specialtyShowAll")}</button>
-                  </p>
-                )}
-                {(focused?.sections ?? []).map(({ s, items }) => {
-                  if (!items.length) return null;
-                  return (
-                    <section key={s} aria-label={t(sectionTitle(s))}>
-                      <h3 className="text-lg mb-1">{t(sectionTitle(s))}</h3>
-                      <ul className="space-y-2">{items.map((it) => <ItemRow key={it.id} it={it} pkg={pkg} locked={shown.finalized} onReview={review} />)}</ul>
-                    </section>
-                  );
-                })}
-                {shown.items.some((i) => i.origin === "ai" && i.review !== "pending") && (
-                  <DecisionLine counts={countDecisions(shown.items)} seconds={shown.finalized ? shown.review_seconds : null} />
-                )}
-                <div className="flex items-start gap-3 flex-wrap">
-                  {!shown.finalized && <FinalizeButton items={shown.items} onClick={finalize} busy={busy} pendingLabs={pendingLabs} />}
-                  {shown.finalized && (
-                    <>
-                      <a className="btn" href={api.briefMdUrl(pkg.package_id)} target="_blank" rel="noreferrer">{t("brief.openMd")}</a>
-                      <button className="btn" onClick={() => window.print()}><Printer size={16} aria-hidden /> {t("brief.print")}</button>
-                    </>
-                  )}
-                </div>
+          <div role="tablist" aria-label={t("brief.title")} className="no-print flex gap-2">
+            {(["clinician", "patient"] as const).map((c) => (
+              <button key={c} role="tab" aria-selected={copy === c} className="btn flex-1" onClick={() => setCopy(c)}
+                style={copy === c ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
+                {c === "clinician" ? t("brief.copyClinician") : t("brief.copyPatient")}
+              </button>
+            ))}
+          </div>
+          {copy === "patient" ? <PatientCopy pkg={pkg} view={patientCopy} /> : (
+            <div className="space-y-3" data-testid="brief-signed">
+              <p className="text-sm font-bold" data-testid="signed-by">
+                {t("brief.signedBy", { name: shown.signed_by ?? "?", date: fmtDate(shown.finalized_at ?? "", { day: "numeric", month: "short", year: "numeric" }) })}
+                {shown.specialty ? ` · ${t(`brief.specialty.${shown.specialty}` as Key)}` : ""}
+              </p>
+              <PdfView url={pdfUrl} />
+              <DecisionLine counts={countDecisions(shown.items)} seconds={shown.review_seconds} />
+              <div className="flex gap-2 flex-wrap">
+                <a className="btn btn-primary" href={pdfUrl} target="_blank" rel="noreferrer"><FileText size={16} aria-hidden /> {t("brief.openSignedPdf")}</a>
+                <a className="btn" href={api.briefMdUrl(pkg.package_id)} target="_blank" rel="noreferrer">{t("brief.openMd")}</a>
               </div>
-              <PrintBrief pkg={pkg} brief={shown} />
-            </>
+            </div>
           )}
         </>
       )}
     </aside>
+  );
+}
+
+function PdfView({ url, badge }: { url: string; badge?: string }) {
+  const { t } = useT();
+  return (
+    <div className="relative">
+      {badge && <span className="chip text-xs absolute top-2 left-2 z-10" style={{ borderColor: "var(--moderate)", background: "var(--amber-bg)", color: "var(--ink)" }} data-testid="draft-badge">{badge}</span>}
+      <iframe title={t("brief.pdfTitle")} src={url} className="w-full rounded-lg border border-line bg-panel" style={{ height: "min(78vh, 900px)" }} />
+    </div>
+  );
+}
+
+/** Plain text editor for the draft: sections kept as "## Title", one "- line" per item. Code checks (citation check,
+ *  hedge validator, diagnostic or dosing words) run on the server as the clinician types and show as warnings; only
+ *  lab readings that still need a check block signing. */
+function BriefEditor({ pkg, focus, pendingLabs, onCancel, onSigned, openedAt }: {
+  pkg: SharePackage; focus: Focus; pendingLabs: number; onCancel: () => void; onSigned: (b: Brief) => void; openedAt: number;
+}) {
+  const { t } = useT();
+  const [text, setText] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<BriefWarning[]>([]);
+  const [name, setName] = useState(savedName);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const first = useRef(true);
+  const load = () => {
+    setErr(null);
+    api.briefText(pkg.package_id, specialtyOf(focus))
+      .then((r) => { first.current = true; setText(r.text); setWarnings(r.warnings); })
+      .catch((x: Error) => setErr(x.message));
+  };
+  useEffect(load, [pkg.package_id, focus]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (text === null) return;
+    if (first.current) { first.current = false; return; }  // the loaded text came with its warnings
+    const id = setTimeout(() => {
+      api.checkBrief(pkg.package_id, text, specialtyOf(focus)).then((r) => setWarnings(r.warnings)).catch(() => undefined);
+    }, 400);
+    return () => clearTimeout(id);
+  }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sign = async () => {
+    if (text === null) return;
+    setBusy(true); setErr(null);
+    try {
+      saveName(name.trim());
+      onSigned(await api.signBrief(pkg.package_id, { text, clinician: name.trim(), specialty: specialtyOf(focus), seconds: (Date.now() - openedAt) / 1000 }));
+    } catch (x) { setErr((x as Error).message); }
+    setBusy(false);
+  };
+  if (text === null) return err ? <ErrorBox error={err} retry={load} /> : <Spinner label={t("common.loading")} />;
+  const shownWarnings = warnings.filter((w) => w.kind !== "labs_pending");
+  return (
+    <div className="space-y-3 no-print" data-testid="brief-editor">
+      {focus !== "general" && <p className="text-sm text-muted">{t("brief.focusFixed", { sp: t(`brief.specialty.${focus}` as Key) })}</p>}
+      <div>
+        <label htmlFor="brief-text" className="label">{t("brief.editorLabel")}</label>
+        <p className="text-sm text-muted mb-1">{t("brief.editorHint")}</p>
+        <textarea id="brief-text" className="input font-mono text-[13px] leading-snug" style={{ minHeight: "min(60vh, 640px)" }}
+          value={text} onChange={(e) => setText(e.target.value)} spellCheck />
+      </div>
+      <section aria-label={t("brief.warnings")} aria-live="polite" data-testid="brief-warnings" className="space-y-1.5">
+        {shownWarnings.length === 0
+          ? <p className="text-sm text-muted">{t("brief.noWarnings")}</p>
+          : shownWarnings.map((w, i) => (
+            <div key={i} className="rounded-lg border p-2 text-sm" style={{ borderColor: "var(--moderate)", background: "var(--amber-bg)" }} role="note" data-testid="brief-warning">
+              <p className="flex gap-1.5 items-start"><AlertTriangle size={15} className="shrink-0 mt-0.5" aria-hidden /><span>{w.message}</span></p>
+              {w.line && <p className="text-muted mt-0.5 truncate" title={w.line}>{w.line}</p>}
+            </div>
+          ))}
+      </section>
+      <div>
+        <label htmlFor="brief-signer" className="label">{t("brief.signName")}</label>
+        <input id="brief-signer" className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+      </div>
+      {err && <ErrorBox error={err} />}
+      <div className="flex gap-2 flex-wrap items-start">
+        <div>
+          <button className="btn btn-primary" onClick={sign} disabled={busy || !name.trim() || !text.trim() || pendingLabs > 0}>
+            <PenLine size={16} aria-hidden /> {t("brief.sign")}
+          </button>
+          {pendingLabs > 0 && <p className="text-sm text-muted mt-1" aria-live="polite" data-testid="labs-pending">{tn("pkg.labsPending", pendingLabs)}</p>}
+        </div>
+        <button className="btn" onClick={load} disabled={busy}><RotateCcw size={16} aria-hidden /> {t("brief.reset")}</button>
+        <button className="btn" onClick={onCancel} disabled={busy}>{t("common.cancel")}</button>
+      </div>
+    </div>
   );
 }
 
@@ -224,118 +275,13 @@ function PatientCopy({ pkg, view }: { pkg: SharePackage; view: Brief | null }) {
         return (
           <section key={s} aria-label={t(sectionTitle(s))}>
             <h3 className="text-lg mb-1">{t(sectionTitle(s))}</h3>
-            <ul className="space-y-2">{items.map((it) => <li key={it.id} className="card text-[15px]">{noteLabel(it, true) && <span className="block text-sm font-bold text-muted">{t(noteLabel(it, true) as Key)}</span>}{it.text}</li>)}</ul>
+            <ul className="space-y-2">{items.map((it) => <li key={it.id} className="card text-[15px]">{it.kind === "patient_note" && <span className="block text-sm font-bold text-muted">{t("brief.patientNoteOwn")}</span>}{it.text}</li>)}</ul>
           </section>
         );
       })}
       <div className="no-print flex gap-3 flex-wrap">
         <a className="btn" href={api.briefMdUrl(pkg.package_id, { audience: "patient", lang })} target="_blank" rel="noreferrer">{t("brief.openPatientMd")}</a>
       </div>
-    </div>
-  );
-}
-
-/** The patient's own question has no label in its text: the UI says whose words these are. */
-const noteLabel = (it: BriefItem, own = false): Key | null => (it.kind === "patient_note" ? (own ? "brief.patientNoteOwn" : "brief.patientNote") : null);
-
-function FlagReason({ it, pkg }: { it: BriefItem; pkg: SharePackage }) {
-  const { t } = useT();
-  const date = (id: string) => pkg.entries.find((e) => e.id === id)?.occurred_on;
-  const cited = it.cites.map((c, i) => { const d = date(c); return d ? `${t("brief.entryN", { n: i + 1 })}, ${fmtDate(d)}` : t("brief.entryN", { n: i + 1 }); }).join("; ");
-  const term = `"${it.flag_term ?? ""}"`;
-  const dates = [...new Set((it.flag_entries ?? []).map(date).filter((d): d is string => !!d))].sort().slice(0, 3).map((d) => fmtDate(d)).join(", ");
-  return (
-    <p className="mt-2 text-sm" role="note" data-testid="flag-reason">
-      {t("brief.flagWhy", { term, cited })} {dates ? t("brief.flagWhere", { term, dates }) : t("brief.flagNowhere")}
-    </p>
-  );
-}
-
-function ItemRow({ it, pkg, locked, onReview }: { it: BriefItem; pkg: SharePackage; locked: boolean; onReview: (it: BriefItem, r: BriefItem["review"], text?: string) => void }) {
-  const { t } = useT();
-  const [editing, setEditing] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [text, setText] = useState(it.text);
-  const ai = it.origin === "ai";
-  const flagged = it.flag === "citation_mismatch";
-  const tone = it.review === "accepted" || it.review === "edited" ? "var(--accent)" : it.review === "rejected" ? "var(--line)" : "var(--moderate)";
-  const origin = ai ? t("brief.aiDraft") : it.origin === "document" ? t("brief.fromDocuments") : it.from_question ? t("brief.askedByApp") : t("brief.fromPatient");
-  const lead = noteLabel(it);
-  if (ai && !locked && it.review !== "pending" && !editing) {  // decided: one line and an Undo
-    return (
-      <li className="card text-[15px] py-2 flex items-center gap-2" style={{ borderLeft: `4px solid ${tone}` }} data-testid="item-decided">
-        <span className="chip text-xs shrink-0">{t(`brief.review.${it.review}`)}</span>
-        <span className={`truncate min-w-0 flex-1 ${it.review === "rejected" ? "line-through text-muted" : ""}`} title={it.text}>{it.text}</span>
-        <button className="btn shrink-0" onClick={() => onReview(it, "pending")}>{t("brief.undo")}</button>
-      </li>
-    );
-  }
-  return (
-    <li className="card !py-3 text-[15px]" style={{ borderLeft: `4px solid ${tone}`, opacity: it.review === "rejected" ? 0.6 : 1, background: flagged && it.review === "pending" ? "var(--amber-bg)" : undefined }}>
-      {editing ? (
-        <div>
-          <label htmlFor={`t-${it.id}`} className="label">{t("brief.editItem")}</label>
-          <textarea id={`t-${it.id}`} className="input min-h-[90px]" value={text} onChange={(e) => setText(e.target.value)} />
-          <div className="flex gap-2 mt-2">
-            <button className="btn btn-primary" onClick={() => { onReview(it, "edited", text); setEditing(false); setConfirming(false); }} disabled={!text.trim()}>{t("brief.saveEdit")}</button>
-            <button className="btn" onClick={() => { setText(it.text); setEditing(false); }}>{t("common.cancel")}</button>
-          </div>
-        </div>
-      ) : (
-        <>
-          {lead && <p className="text-sm font-bold text-muted">{t(lead)}</p>}
-          <p className={it.review === "rejected" ? "line-through" : ""}>{it.text}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="chip text-xs">{origin}</span>
-            <span className="chip text-xs">{t(`brief.review.${it.review}`)}</span>
-            {flagged && <span className="chip text-xs" style={{ borderColor: "var(--moderate)", color: "var(--ink)", background: "var(--amber-bg)" }} role="note">{t("brief.flagged")}</span>}
-            {it.cites.map((c, i) => <button key={c} className="chip hover:border-accent" onClick={() => jumpTo(c)} aria-label={t("brief.goTo", { n: i + 1 })}>{t("brief.entryN", { n: i + 1 })}</button>)}
-            {(it.pages ?? []).map((p) => <span key={`p${p}`} className="chip text-xs">{t("brief.reportPage", { n: p })}</span>)}
-          </div>
-          {flagged && it.review === "pending" && <FlagReason it={it} pkg={pkg} />}
-          {ai && !locked && confirming && (
-            <div className="mt-2 space-y-2" data-testid="flag-confirm">
-              <p className="text-sm font-bold">{t("brief.flagConfirm")}</p>
-              <div className="flex gap-1.5 flex-wrap">
-                <button className="btn btn-sm" onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> {t("brief.edit")}</button>
-                <button className="btn btn-sm" onClick={() => { setConfirming(false); onReview(it, "accepted"); }}><Check size={14} aria-hidden /> {t("brief.acceptAnyway")}</button>
-                <button className="btn btn-sm" onClick={() => setConfirming(false)}>{t("common.cancel")}</button>
-              </div>
-            </div>
-          )}
-          {ai && !locked && !confirming && (
-            <div className="mt-2 flex gap-1.5 flex-wrap">
-              <button className="btn btn-sm" onClick={() => (flagged ? setConfirming(true) : onReview(it, "accepted"))} aria-pressed={it.review === "accepted"}
-                style={it.review === "accepted" ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}><Check size={14} aria-hidden /> {t("brief.accept")}</button>
-              <button className="btn btn-sm" onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> {t("brief.edit")}</button>
-              <button className="btn btn-sm" onClick={() => onReview(it, "rejected")} aria-pressed={it.review === "rejected"}><X size={14} aria-hidden /> {t("brief.reject")}</button>
-            </div>
-          )}
-        </>
-      )}
-    </li>
-  );
-}
-
-function PrintBrief({ pkg, brief }: { pkg: SharePackage; brief: Brief }) {
-  const { t } = useT();
-  const kept = brief.items.filter((i) => i.review === "accepted" || i.review === "edited" || i.origin === "patient");
-  const label = (id: string) => { const e = pkg.entries.find((x) => x.id === id); return e ? fmtDate(e.occurred_on) : id; };
-  return (
-    <div className="print-only">
-      <h1 style={{ fontSize: "20pt" }}>{t("brief.printTitle", { alias: pkg.patient_alias })}</h1>
-      <p>{t("brief.printTo", { a: fmtDate(pkg.period[0], { day: "numeric", month: "long", year: "numeric" }), b: fmtDate(pkg.period[1], { day: "numeric", month: "long", year: "numeric" }) })}</p>
-      {SECTIONS.map((s) => {
-        const items = kept.filter((i) => i.section === s);
-        if (!items.length) return null;
-        return (
-          <section key={s} style={{ marginTop: "10pt" }}>
-            <h2 style={{ fontSize: "14pt" }}>{t(sectionTitle(s))}</h2>
-            <ul>{items.map((i) => <li key={i.id}>{noteLabel(i) ? `${t(noteLabel(i) as Key)}: ` : ""}{i.text}{i.cites.length > 0 && <em> ({i.cites.map(label).join(", ")})</em>}</li>)}</ul>
-          </section>
-        );
-      })}
-      <p style={{ marginTop: "16pt", fontSize: "9pt" }}>{t("brief.printFooter")}</p>
     </div>
   );
 }
