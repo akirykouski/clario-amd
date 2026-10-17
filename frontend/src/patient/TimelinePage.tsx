@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { SYSTEM_COLOR } from "../lib";
-import { GlassBead } from "../components/GlassBead";
+import { DayStrip } from "../components/DayStrip";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { buildHeat, fmtDate, pastWhen, weeklyMood } from "../lib";
@@ -58,14 +58,14 @@ export default function TimelinePage() {
           </div>
           {heat.rows.length > 0 && (
             <p aria-hidden className="flex items-center gap-1 text-[13px] text-muted">
-              <GlassBead color="var(--aqua)" count={1} size={26} /><GlassBead color="var(--aqua)" count={2} size={26} /><GlassBead color="var(--aqua)" count={3} size={26} />
-              <span className="ml-1">{t("timeline.legend")}</span>
+              <DayStrip days={[false, false, true, false, false, true, false]} color="var(--accent)" lit />
+              <span className="ml-2 max-w-[340px]">{t("timeline.legend")}</span>
             </p>
           )}
         </div>
         {heat.rows.length === 0 ? <p className="text-muted mt-1">{t("timeline.confirmHint")}</p> : (
           <>
-            <HeatStrip heat={heat} mood={mood} onPick={(p) => setPick(pick && pick.hpo_id === p.hpo_id && pick.week === p.week ? null : p)}
+            <HeatStrip heat={heat} mood={mood} entryDates={dates} onPick={(p) => setPick(pick && pick.hpo_id === p.hpo_id && pick.week === p.week ? null : p)}
               selected={pick} />
           </>
         )}
@@ -77,7 +77,7 @@ export default function TimelinePage() {
             aria-live="polite" data-testid="heat-picked">
             <div className="flex items-start justify-between gap-4">
               <p className="font-semibold text-[17px] flex items-center gap-2">
-                <GlassBead color={SYSTEM_COLOR[(data.systems ?? {})[pick.hpo_id] ?? "other"] ?? SYSTEM_COLOR.other} count={1} size={28} />
+                <span aria-hidden className="w-3 h-3 rounded-[3px]" style={{ background: SYSTEM_COLOR[(data.systems ?? {})[pick.hpo_id] ?? "other"] ?? SYSTEM_COLOR.other }} />
                 {t("timeline.notesFor", { label: pick.label, date: fmtDate(pick.week) })}
               </p>
               <button type="button" className="btn btn-sm !px-0 w-9 shrink-0" onClick={() => setPick(null)} aria-label={t("common.close")} title={t("common.close")}><X size={15} aria-hidden /></button>
