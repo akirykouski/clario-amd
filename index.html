@@ -7,48 +7,61 @@
 <meta name="description" content="A private symptom diary for people on a long road to a diagnosis, and a review console for the clinic that receives it.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@500;600;700&family=Funnel+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f7f8f8;--card:#fff;--ink:#16211f;--muted:#5b6b68;--line:#e2e8e7;--accent:#1F6F78;--accent-ink:#fff;--soft:#e8f2f3;--good:#1F6F78}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f1514;--card:#162020;--ink:#e6efed;--muted:#9fb1ae;--line:#26332f;--accent:#4fb3bf;--accent-ink:#0f1514;--soft:#1b2a2b}}
-:root[data-theme="dark"]{--bg:#0f1514;--card:#162020;--ink:#e6efed;--muted:#9fb1ae;--line:#26332f;--accent:#4fb3bf;--accent-ink:#0f1514;--soft:#1b2a2b}
+:root{--ice:#E9F3F6;--ink:#14323A;--muted:#45616A;--accent:#0E7380;--aqua:#3FB8C9;--lilac:#8A7CF0;--coral:#FF8A6B;--edge:rgba(255,255,255,.85);--rim:rgba(20,50,58,.12)}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,-apple-system,sans-serif}
-.wrap{max-width:960px;margin:0 auto;padding:40px 16px 64px}
-header{display:flex;align-items:center;gap:12px;margin-bottom:28px}
-header img{width:36px;height:36px}
-header b{font-size:20px;letter-spacing:-.01em}
-header a{margin-left:auto;color:var(--muted);text-decoration:none;font-size:14px}
-h1{font-size:clamp(28px,5vw,44px);line-height:1.12;letter-spacing:-.02em;margin:0 0 14px;max-width:760px}
-.lead{color:var(--muted);font-size:18px;max-width:680px;margin:0 0 28px}
+html{background:var(--ice)}
+body{margin:0;color:var(--ink);font:16.5px/1.55 "Funnel Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.ambient{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+.ambient span{position:absolute;width:60vmax;height:60vmax;border-radius:50%;will-change:transform;animation:drift 50s cubic-bezier(.16,1,.3,1) infinite alternate}
+.ambient span:nth-child(1){left:-18vmax;top:-24vmax;background:radial-gradient(closest-side,rgba(63,184,201,.55),transparent)}
+.ambient span:nth-child(2){right:-22vmax;top:-8vmax;background:radial-gradient(closest-side,rgba(138,124,240,.42),transparent);animation-duration:60s}
+.ambient span:nth-child(3){left:20vmax;bottom:-34vmax;background:radial-gradient(closest-side,rgba(255,138,107,.32),transparent);animation-duration:66s}
+@keyframes drift{0%{transform:translate3d(0,0,0)}100%{transform:translate3d(-5vmax,7vmax,0) scale(1.06)}}
+@media (prefers-reduced-motion:reduce){.ambient span{animation:none}}
+.wrap{max-width:1040px;margin:0 auto;padding:40px 16px 64px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:36px}
+header img{width:34px;height:34px}
+header b{font:700 24px/1 "Funnel Display",sans-serif;letter-spacing:-.03em}
+header a{margin-left:auto;color:var(--muted);text-decoration:none;font-size:14px;font-weight:600}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin:0 0 30px;max-width:560px}
+.week span{--c:var(--aqua);height:64px;border-radius:16px;position:relative;border:1px solid color-mix(in srgb,var(--c) 55%,#fff);background:radial-gradient(120% 70% at 50% 0%,rgba(255,255,255,.55),transparent 60%),linear-gradient(175deg,color-mix(in srgb,var(--c) 58%,#fff),color-mix(in srgb,var(--c) 82%,#fff));box-shadow:0 1px 0 #fff inset,0 -8px 14px -10px color-mix(in srgb,var(--c) 85%,#000) inset,0 14px 22px -16px color-mix(in srgb,var(--c) 95%,#000)}
+.week span:nth-child(3n+2){--c:var(--lilac)}.week span:nth-child(3n){--c:var(--coral)}
+.week span.open{background:linear-gradient(170deg,rgba(255,255,255,.95),rgba(255,255,255,.62));border-color:var(--edge);transform:translateY(-6px)}
+h1{font:600 clamp(32px,5vw,52px)/1.06 "Funnel Display",sans-serif;letter-spacing:-.035em;margin:0 0 16px;max-width:780px}
+h2{font:600 26px/1.15 "Funnel Display",sans-serif;letter-spacing:-.02em;margin:0 0 6px}
+h3{font:600 17px/1.3 "Funnel Display",sans-serif;margin:0 0 6px}
+.lead{color:var(--muted);font-size:19px;max-width:680px;margin:0 0 30px}
 .cta{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px}
-.btn{display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:0 20px;border-radius:12px;font-weight:600;text-decoration:none;border:1px solid var(--line);color:var(--ink);background:var(--card)}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.note{color:var(--muted);font-size:13px;margin:0 0 40px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:44px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
-.card h3{margin:0 0 6px;font-size:16px}
-.card p{margin:0;color:var(--muted);font-size:14px}
-h2{font-size:22px;letter-spacing:-.01em;margin:0 0 6px}
-.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
-.tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:12px}
-table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
-th,td{padding:11px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+.btn{display:inline-flex;align-items:center;min-height:50px;padding:0 24px;border-radius:999px;font-weight:600;text-decoration:none;color:var(--ink);border:1px solid var(--edge);background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(255,255,255,.6));box-shadow:0 1px 0 #fff inset,0 10px 22px -14px rgba(20,50,58,.5);transition:transform .25s cubic-bezier(.16,1,.3,1)}
+.btn:active{transform:scale(.97)}
+.btn.primary{color:#fff;border-color:color-mix(in srgb,var(--accent) 70%,#fff);background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 78%,#fff),var(--accent) 55%,color-mix(in srgb,var(--accent) 88%,#000));box-shadow:0 1px 0 rgba(255,255,255,.55) inset,0 14px 26px -14px var(--accent)}
+.note{color:var(--muted);font-size:13px;margin:0 0 44px}
+.glass{background:rgba(255,255,255,.5);-webkit-backdrop-filter:blur(22px) saturate(170%);backdrop-filter:blur(22px) saturate(170%);border:1px solid var(--edge);border-radius:26px;box-shadow:0 1px 0 #fff inset,0 18px 40px -22px rgba(20,50,58,.35)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:48px}
+.grid>div{padding:20px}
+.grid p,.step p{margin:0;color:var(--muted);font-size:14.5px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:14.5px}
+.tablewrap{overflow-x:auto;margin-bottom:12px}
+table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:560px;font-variant-numeric:tabular-nums}
+th,td{padding:12px 16px;text-align:right;border-bottom:1px solid var(--rim);white-space:nowrap}
 th:first-child,td:first-child{text-align:left;white-space:normal}
-th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+th{font-weight:600;color:var(--muted);font-size:12.5px}
 tr:last-child td{border-bottom:0}
-tr.ours td{background:var(--soft);font-weight:600}
-.bar{display:inline-block;height:8px;border-radius:4px;background:var(--accent);vertical-align:middle;margin-left:8px;opacity:.85}
-.fine{color:var(--muted);font-size:13px;margin:0 0 44px}
-.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:44px}
-.step{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
-.step span{display:inline-block;font-size:12px;font-weight:600;color:var(--accent);margin-bottom:6px}
-.step p{margin:0;font-size:14px;color:var(--muted)}
-footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:18px}
-footer a{color:var(--muted)}
+tr.ours td{background:color-mix(in srgb,var(--aqua) 18%,transparent);font-weight:600}
+.bar{display:inline-block;height:8px;border-radius:4px;background:var(--accent);vertical-align:middle;margin-left:8px}
+.fine{color:var(--muted);font-size:13px;margin:0 0 48px}
+.fine a,footer a{color:var(--muted)}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:48px}
+.step{padding:18px}
+.step span{display:inline-block;font-size:13px;font-weight:600;color:var(--accent);margin-bottom:6px}
+footer{color:var(--muted);font-size:13px;border-top:1px solid var(--rim);padding-top:18px}
+::selection{background:color-mix(in srgb,var(--accent) 28%,transparent)}
 </style>
 </head>
 <body>
+<div class="ambient" aria-hidden="true"><span></span><span></span><span></span></div>
 <div class="wrap">
   <header>
     <img src="favicon.svg" alt="">
@@ -56,6 +69,7 @@ footer a{color:var(--muted)}
     <a href="https://github.com/akirykouski/clario-amd">GitHub</a>
   </header>
 
+  <div class="week" aria-hidden="true"><span></span><span></span><span></span><span></span><span class="open"></span><span></span><span></span></div>
   <h1>The months before a diagnosis, written down and ready for the clinic.</h1>
   <p class="lead">A private symptom diary for people on a long road to a diagnosis, and a review console for the clinician who receives it. Everyday words become clinical terms with the patient's own quote as the source. Clario organises information. It never diagnoses.</p>
 
@@ -63,18 +77,18 @@ footer a{color:var(--muted)}
     <a class="btn primary" href="https://se4wer--clario-patient.us-east.modal.run">Open the patient app</a>
     <a class="btn" href="https://se4wer--clario-clinic.us-east.modal.run">Open the clinic console</a>
   </div>
-  <p class="note">Demo servers with synthetic patients only. The first visit after a quiet period can take up to a minute while the server starts.</p>
+  <p class="note">Demo servers with synthetic patients only. After a quiet period the first note can take a few minutes while the model server starts.</p>
 
   <div class="grid">
-    <div class="card"><h3>Private by design</h3><p>The diary is encrypted on the patient's side. Names and ID numbers in the text are replaced before it reaches a model.</p></div>
-    <div class="card"><h3>Every term has a source</h3><p>Each clinical term links back to the exact words the patient wrote, so the clinician can check it in one look.</p></div>
-    <div class="card"><h3>A person always reviews</h3><p>Uncertain terms and lab readings go to the clinician to confirm or reject before anything reaches the brief.</p></div>
-    <div class="card"><h3>Gemma 4, fine-tuned</h3><p>A 4B Gemma 4 model tuned for this task reads the diary. Gemma 4 31B on AMD Token Factory writes the clinic brief.</p></div>
+    <div class="glass"><h3>Private by design</h3><p>The diary is encrypted on the patient's side. Names and ID numbers in the text are replaced before it reaches a model.</p></div>
+    <div class="glass"><h3>Every term has a source</h3><p>Each clinical term links back to the exact words the patient wrote, so the clinician can check it in one look.</p></div>
+    <div class="glass"><h3>A person always reviews</h3><p>Uncertain terms and lab readings go to the clinician to confirm or reject before anything reaches the brief.</p></div>
+    <div class="glass"><h3>Gemma 4, fine-tuned</h3><p>A 4B Gemma 4 model tuned for this task reads the diary. Gemma 4 31B on AMD Token Factory writes the clinic brief.</p></div>
   </div>
 
   <h2>Benchmark</h2>
   <p class="sub">Same 100 held-out diary entries (conditions never seen in training), same scorer. A term counts as correct only when the HPO code, the "denied" flag and the "a relative's" flag all match.</p>
-  <div class="tablewrap">
+  <div class="tablewrap glass">
     <table>
       <thead><tr><th>Model</th><th>F1</th><th>Precision</th><th>Recall</th><th>Time per entry</th></tr></thead>
       <tbody>
@@ -91,10 +105,10 @@ footer a{color:var(--muted)}
   <h2>How it works</h2>
   <p class="sub">One diary entry, from the patient's words to the clinician's brief.</p>
   <div class="flow">
-    <div class="step"><span>1 · Write</span><p>The patient writes in everyday words, in English or Italian, and can add photos of lab reports.</p></div>
-    <div class="step"><span>2 · Understand</span><p>The fine-tuned model lists each symptom with its quote, the clinical term, and whether it is denied or a relative's.</p></div>
-    <div class="step"><span>3 · Share</span><p>The patient picks a time window and sends a sealed package that expires.</p></div>
-    <div class="step"><span>4 · Review</span><p>The clinician sees a plain-words overview, conditions to consider and the one question that would separate them, and signs off a one-page brief.</p></div>
+    <div class="step glass"><span>1 · Write</span><p>The patient writes in everyday words, in English or Italian, and can add photos of lab reports.</p></div>
+    <div class="step glass"><span>2 · Understand</span><p>The fine-tuned model lists each symptom with its quote, the clinical term, and whether it is denied or a relative's.</p></div>
+    <div class="step glass"><span>3 · Share</span><p>The patient picks a time window and sends a sealed package that expires.</p></div>
+    <div class="step glass"><span>4 · Review</span><p>The clinician sees a plain-words overview, conditions to consider and the one question that would separate them, and signs off a one-page brief.</p></div>
   </div>
 
   <footer>Built for the AMD Developer Hackathon ACT III, Health and Wellbeing track. MIT licence. <a href="https://github.com/akirykouski/clario-amd">Source and results</a>.</footer>
