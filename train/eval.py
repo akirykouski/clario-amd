@@ -258,10 +258,10 @@ def load_gold(path):
              "gold_complete": r.get("gold_complete", True), "partial": r.get("partial", False)} for r in rows]
 
 
-def make_complete(base_url, model, key, max_tokens=1024, timeout=300, confidence=False):
+def make_complete(base_url, model, key, max_tokens=1024, timeout=300, confidence=False, max_retries=2):
     """-> complete(diary) -> (text, seconds, completion_tokens) against an OpenAI-compatible endpoint."""
     from openai import OpenAI
-    client = OpenAI(base_url=base_url, api_key=key or "none", timeout=timeout, max_retries=2)
+    client = OpenAI(base_url=base_url, api_key=key or "none", timeout=timeout, max_retries=max_retries)
 
     def complete(diary):
         t0 = time.time()
@@ -433,6 +433,7 @@ def main(argv=None):
                          "With --confidence too, the verbalized number is kept as confidence_verbalized for comparison")
     ap.add_argument("--concurrency", type=int, default=4); ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--timeout", type=float, default=300); ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--max-retries", type=int, default=2, help="API retries with backoff on 429/5xx (shared-quota APIs: 8)")
     ap.add_argument("--out-dir", default=DEFAULT_OUT)
     ap.add_argument("--hf-model", default="", help="run this HF model in-process instead of calling --base-url")
     ap.add_argument("--adapter", default="", help="LoRA adapter dir for --hf-model")
@@ -459,7 +460,7 @@ def main(argv=None):
         else:
             if not (a.base_url and a.model): ap.error("--base-url and --model required (or --hf-model)")
             key = os.environ.get(a.api_key_env, "") if a.api_key_env else "none"
-            complete = make_complete(a.base_url, a.model, key, a.max_tokens, a.timeout, a.confidence)
+            complete = make_complete(a.base_url, a.model, key, a.max_tokens, a.timeout, a.confidence, a.max_retries)
         recs, wall = run_records(gold, complete, a.concurrency, a.sc_n, a.batch_size if a.hf_model else 1)
         m = score(recs); label = a.label
         resolve = None if a.no_resolve else make_resolver()

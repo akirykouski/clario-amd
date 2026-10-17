@@ -21,7 +21,19 @@ def checkpoints(run):
     cks = sorted((d for d in glob.glob(os.path.join(run, "checkpoint-*")) if os.path.exists(os.path.join(d, "adapter_config.json"))),
                  key=lambda d: int(re.sub(r"\D", "", os.path.basename(d)) or 0))
     final = os.path.join(run, "adapter")
-    return cks + ([final] if os.path.exists(os.path.join(final, "adapter_config.json")) else [])
+    has_final = os.path.exists(os.path.join(final, "adapter_config.json"))
+    if has_final and cks and _same_weights(cks[-1], final):  # the last checkpoint is the final adapter: score it once
+        return cks
+    return cks + ([final] if has_final else [])
+
+
+def _same_weights(a, b):
+    import hashlib
+    def digest(d):
+        p = os.path.join(d, "adapter_model.safetensors")
+        return hashlib.sha1(open(p, "rb").read()).hexdigest() if os.path.exists(p) else None
+    da = digest(a)
+    return da is not None and da == digest(b)
 
 
 def value(res, metric=METRIC):
@@ -36,6 +48,11 @@ def pick(scores):
         if s[1] is not None and (best is None or s[1] > best[1]):
             best = s
     return best
+
+
+def raw_f1(run_summary):
+    """Plain entity F1 of a run's chosen checkpoint: the tie-break between runs with the same selection metric."""
+    return next((c.get("entity_f1") or 0 for c in run_summary.get("checkpoints", []) if c["checkpoint"] == run_summary.get("best")), 0)
 
 
 def score_run(a):
@@ -80,7 +97,7 @@ def summary(a):
         runs.append(b)
     if not runs:
         raise SystemExit(f"no {a.out}/{a.tag}-*/best.json; run select_ckpt.py --run on each run first")
-    win = max(runs, key=lambda b: (b["value"] is not None, b["value"] or 0))
+    win = max(runs, key=lambda b: (b["value"] is not None, round(b["value"] or 0, 3), raw_f1(b)))
     base = os.path.join(a.out, f"sweep-{a.tag}", f"extraction_{a.tag}-base-val.json")
     body = {"label": f"sweep_{a.tag}", "metric": win["metric"], "split": "val", "winner": win["run"],
             "winner_adapter": os.path.join(win["path"], "best_adapter"), "winner_checkpoint": win["best"],

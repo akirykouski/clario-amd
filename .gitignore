@@ -7,3 +7,4 @@ train/data/
 train/out/
 .env
 deploy/amd/logs/
+models/

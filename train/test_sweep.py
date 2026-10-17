@@ -106,3 +106,22 @@ def test_summary_picks_the_best_run_and_writes_the_winner(tmp_path, monkeypatch)
     body = json.load(open(tmp_path / "results" / "sweep_e4b.json"))
     assert body["winner"] == "e4b-r32-lr1e-4" and body["split"] == "val"
     assert (tmp_path / "sweep-e4b" / "WINNER").read_text().strip().endswith("e4b-r32-lr1e-4/best_adapter")
+
+
+def test_final_adapter_identical_to_last_checkpoint_is_scored_once(tmp_path):
+    for d, w in (("checkpoint-150", b"a"), ("checkpoint-300", b"b"), ("adapter", b"b")):
+        os.makedirs(tmp_path / d)
+        (tmp_path / d / "adapter_config.json").write_text("{}")
+        (tmp_path / d / "adapter_model.safetensors").write_bytes(w)
+    assert [os.path.basename(c) for c in sc.checkpoints(str(tmp_path))] == ["checkpoint-150", "checkpoint-300"]
+
+
+def test_summary_breaks_a_tie_on_raw_f1(tmp_path, monkeypatch):
+    monkeypatch.setattr(sc, "RESULTS", str(tmp_path / "results"))
+    for run, raw in (("e4b-r16-lr2e-4", 0.57), ("e4b-r32-lr2e-4", 0.62)):
+        os.makedirs(tmp_path / run)
+        (tmp_path / run / "best.json").write_text(json.dumps({"run": run, "metric": sc.METRIC, "best": "checkpoint-300", "value": 0.7031,
+            "checkpoints": [{"checkpoint": "checkpoint-300", sc.METRIC: 0.7031, "entity_f1": raw}]}))
+    os.makedirs(tmp_path / "sweep-e4b")
+    sc.main(["--summary", "--tag", "e4b", "--out", str(tmp_path)])
+    assert json.load(open(tmp_path / "results" / "sweep_e4b.json"))["winner"] == "e4b-r32-lr2e-4"

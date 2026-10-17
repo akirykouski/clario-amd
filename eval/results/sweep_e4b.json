@@ -1,0 +1,64 @@
+{
+  "label": "sweep_e4b",
+  "metric": "resolved_entity_f1",
+  "split": "val",
+  "winner": "e4b-r16-lr2e-4",
+  "winner_adapter": "/work/train/out/e4b-r16-lr2e-4/best_adapter",
+  "winner_checkpoint": "checkpoint-450",
+  "base_val": 0.36951501154734406,
+  "runs": [
+    {
+      "run": "e4b-r16-lr1e-4",
+      "best": "checkpoint-450",
+      "value": 0.6737841043890866,
+      "rank": 16,
+      "alpha": 16,
+      "lr": 0.0001,
+      "epochs": 3.0,
+      "train_wall_s": 3585.007880449295,
+      "gpu": "NVIDIA L40S",
+      "precision": "bf16",
+      "load_in_4bit": false
+    },
+    {
+      "run": "e4b-r16-lr2e-4",
+      "best": "checkpoint-450",
+      "value": 0.7151370679380216,
+      "rank": 16,
+      "alpha": 16,
+      "lr": 0.0002,
+      "epochs": 3.0,
+      "train_wall_s": 3546.5632231235504,
+      "gpu": "NVIDIA L40S",
+      "precision": "bf16",
+      "load_in_4bit": false
+    },
+    {
+      "run": "e4b-r32-lr1e-4",
+      "best": "checkpoint-450",
+      "value": 0.6904761904761905,
+      "rank": 32,
+      "alpha": 32,
+      "lr": 0.0001,
+      "epochs": 3.0,
+      "train_wall_s": 3535.636512517929,
+      "gpu": "NVIDIA L40S",
+      "precision": "bf16",
+      "load_in_4bit": false
+    },
+    {
+      "run": "e4b-r32-lr2e-4",
+      "best": "checkpoint-450",
+      "value": 0.7144563918757467,
+      "rank": 32,
+      "alpha": 32,
+      "lr": 0.0002,
+      "epochs": 3.0,
+      "train_wall_s": 3544.5562205314636,
+      "gpu": "NVIDIA L40S",
+      "precision": "bf16",
+      "load_in_4bit": false
+    }
+  ],
+  "note": "selection on val only; test is scored once, on the winner, by sweep.sh"
+}
