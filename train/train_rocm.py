@@ -3,8 +3,29 @@ Trains on the extraction_v3 chat files written by prep.py (data/v3/*_sft.jsonl).
   python train_rocm.py --model google/gemma-4-E4B-it --out out/e4b-r16 --epochs 3                      # big GPU, bf16
   python train_rocm.py --model google/gemma-4-E4B-it --out out/e4b-r16 --epochs 2 --load-in-4bit --bsz 2 --grad-accum 8   # 16 GB
 Precision: --precision auto uses bf16 when the GPU supports it (MI300X, RTX 30xx+), else fp16 (Kaggle T4/P100).
+LoRA goes on the language model only (attention + dense MLP); Gemma 4's vision and audio encoders reuse the same
+layer names and are left frozen. A checkpoint is saved every --eval-every epochs so select_ckpt.py can keep the
+one with the best extraction F1 on val (lowest loss and best extraction are often different checkpoints).
 """
-import argparse, json, os, time
+import argparse, json, math, os, time
+
+LORA_SUFFIXES = ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj")
+NOT_LM = ("vision", "audio", "multi_modal", "projector", "embed")
+
+
+def lm_targets(named_modules, suffixes=LORA_SUFFIXES, experts=False):
+    """Full names of the Linear layers LoRA should adapt: the language model's attention and MLP projections.
+    named_modules: iterable of (name, module). Skips the vision/audio encoders and the embedding projections, and the
+    per-expert MLPs of an MoE model unless experts=True (hundreds of small adapters, slow, little gain on ~2k rows)."""
+    out = []
+    for name, mod in named_modules:
+        low = name.lower()
+        if name.rsplit(".", 1)[-1] not in suffixes or "Linear" not in type(mod).__name__:
+            continue
+        if any(x in low for x in NOT_LM) or (not experts and ".experts." in low):
+            continue
+        out.append(name)
+    return out
 
 
 def main():
@@ -13,13 +34,15 @@ def main():
     ap.add_argument("--data", default="data/v3/train_sft.jsonl")
     ap.add_argument("--val-data", default="data/v3/val_sft.jsonl", help="optional eval loss; '' to disable")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--rank", type=int, default=16); ap.add_argument("--alpha", type=int, default=32)
+    ap.add_argument("--rank", type=int, default=32); ap.add_argument("--alpha", type=int, default=32)
     ap.add_argument("--dropout", type=float, default=0.05)
-    ap.add_argument("--epochs", type=float, default=3); ap.add_argument("--lr", type=float, default=2e-4)
+    ap.add_argument("--epochs", type=float, default=3); ap.add_argument("--lr", type=float, default=1e-4)
+    ap.add_argument("--eval-every", type=float, default=0.5, help="save a checkpoint (and val loss) every this many epochs")
     ap.add_argument("--max-len", type=int, default=1536)
     ap.add_argument("--bsz", type=int, default=4); ap.add_argument("--grad-accum", type=int, default=4)
-    ap.add_argument("--target-modules", default="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
-                    help="comma list or 'all-linear'. For the MoE model, expert weights may be fused params that LoRA skips; attention+dense MLP still get adapted.")
+    ap.add_argument("--target-modules", default="lm",
+                    help="'lm' (default: language-model attention + MLP, see lm_targets), a comma list of suffixes, or 'all-linear'")
+    ap.add_argument("--lora-experts", action="store_true", help="MoE: also adapt every expert MLP (off by default)")
     ap.add_argument("--bf16", action="store_true", default=True, help=argparse.SUPPRESS)  # kept for old commands
     ap.add_argument("--precision", default="auto", choices=["auto", "bf16", "fp16"])
     ap.add_argument("--load-in-4bit", action="store_true", help="QLoRA: 4-bit NF4 base (bitsandbytes, CUDA) for 16 GB GPUs")
@@ -80,7 +103,14 @@ def main():
         ev = load_dataset("json", data_files=a.val_data, split="train")
         ev = ev.map(conv, remove_columns=ev.column_names)
 
-    tm = "all-linear" if a.target_modules == "all-linear" else a.target_modules.split(",")
+    if a.target_modules == "all-linear":
+        tm = "all-linear"
+    else:
+        sfx = LORA_SUFFIXES if a.target_modules == "lm" else tuple(a.target_modules.split(","))
+        tm = lm_targets(model.named_modules(), sfx, a.lora_experts)
+        if not tm:
+            raise SystemExit(f"no LoRA target layers matched {sfx}; print model.named_modules() and pass --target-modules")
+        print(f"LoRA targets: {len(tm)} layers, e.g. {tm[0]}")
     peft_cfg = LoraConfig(r=a.rank, lora_alpha=a.alpha, lora_dropout=a.dropout, target_modules=tm,
                           task_type="CAUSAL_LM", bias="none")
 
@@ -92,10 +122,12 @@ def main():
             torch.cuda.synchronize(); now = time.time(); self.step_t.append(now - self.last); self.last = now
 
     cb = Metrics()
+    steps_per_epoch = max(1, math.ceil(len(ds) / (a.bsz * a.grad_accum)))
+    every = max(1, round(steps_per_epoch * a.eval_every))
     cfg = SFTConfig(output_dir=a.out, num_train_epochs=a.epochs, learning_rate=a.lr, lr_scheduler_type="cosine",
                     warmup_ratio=0.05, per_device_train_batch_size=a.bsz, gradient_accumulation_steps=a.grad_accum,
-                    bf16=use_bf16, fp16=not use_bf16, max_length=a.max_len, logging_steps=5, save_strategy="epoch", save_total_limit=2,
-                    eval_strategy="epoch" if ev is not None else "no", per_device_eval_batch_size=a.bsz,
+                    bf16=use_bf16, fp16=not use_bf16, max_length=a.max_len, logging_steps=5, save_strategy="steps", save_steps=every,
+                    save_total_limit=None, eval_strategy="steps" if ev is not None else "no", eval_steps=every, per_device_eval_batch_size=a.bsz,
                     gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False},
                     seed=a.seed, report_to="none", completion_only_loss=True)
     trainer = SFTTrainer(model=model, args=cfg, train_dataset=ds, eval_dataset=ev, processing_class=tok,
@@ -113,6 +145,7 @@ def main():
         "hip": getattr(torch.version, "hip", None), "cuda": torch.version.cuda, "precision": "bf16" if use_bf16 else "fp16",
         "load_in_4bit": a.load_in_4bit, "rank": a.rank, "alpha": a.alpha, "epochs": a.epochs,
         "lr": a.lr, "max_len": a.max_len, "bsz": a.bsz, "grad_accum": a.grad_accum,
+        "lora_targets": len(tm) if isinstance(tm, list) else tm, "checkpoint_every_steps": every,
         "train_wall_s": wall, "train_loss": res.training_loss,
         "step_time_mean_s": sum(cb.step_t) / max(1, len(cb.step_t)),
         "step_time_p50_s": steps[len(steps) // 2] if steps else None,

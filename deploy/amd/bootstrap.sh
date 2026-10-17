@@ -348,7 +348,7 @@ step_train() {
   docker run --rm --device=/dev/kfd --device=/dev/dri --group-add video --ipc=host --shm-size 64G \
     --security-opt seccomp=unconfined -e HF_TOKEN \
     -v "$REPO/train:/workspace/train" -v "$REPO/eval:/workspace/eval" -v "$HF_CACHE_DIR:/workspace/hf-cache" clario-train \
-    bash -c "python train_rocm.py --model $SMALL_MODEL --data data/v3/train_sft.jsonl --val-data data/v3/val_sft.jsonl --out out/$RUN --epochs 3 --bf16; rc=\$?; chown -R $(id -u):$(id -g) out data /workspace/eval/results 2>/dev/null; exit \$rc"
+    bash -c "python train_rocm.py --model $SMALL_MODEL --data data/v3/train_sft.jsonl --val-data data/v3/val_sft.jsonl --out out/$RUN --epochs 3 --rank 16 --alpha 32 --lr 2e-4 --bf16; rc=\$?; chown -R $(id -u):$(id -g) out data /workspace/eval/results 2>/dev/null; exit \$rc"
   [ -f "$ADAPTER_DEFAULT/adapter_config.json" ] || die "training finished without an adapter at $ADAPTER_DEFAULT"
   python3 "$REPO/eval/hardware.py" stamp "$REPO/eval/results/train_$RUN.json"
   check_result "$REPO/eval/results/train_$RUN.json"

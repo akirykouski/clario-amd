@@ -8,10 +8,13 @@ Writes <out-dir>/extraction_<label>.json with n, dataset, model, backend, date a
 Metrics: entity F1 (HPO id), fuzzy-name F1, HPO-ID accuracy, negation / family-history / onset /
 severity accuracy on matched entities, quote grounding, JSON validity (lenient parse) and strict
 v3 schema validity, ECE and Brier when the model emits confidence, latency p50/p95.
+With the backend importable (it is in this repo), predictions are also scored after the app's deterministic HPO
+resolver (clario.extract.resolve_hpo: keep the model's id only when the ontology agrees with the words, else the
+ontology's own best match). Those are the resolved_* metrics: what the app stores, minus the optional model pick.
 Gold rows: {"diary", "target": {"entities": [...]}} in v3 or the older dataset shape.
 A row with "gold_complete": false (PsyTAR) means unlabelled mentions exist, so precision is a lower bound.
 """
-import argparse, datetime, difflib, json, os, re, sys, time, unicodedata
+import argparse, copy, datetime, difflib, json, os, re, sys, time, unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from prompt import build_messages, from_dataset_entities, parse, strict_valid
 
@@ -218,6 +221,37 @@ def score(records):
     return out
 
 
+def make_resolver():
+    """-> resolve(entity) -> hpo_id | None using the app's ontology check, or None when the backend is not importable."""
+    backend = os.path.join(os.path.dirname(HERE), "backend")
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    try:
+        from clario.extract import resolve_hpo
+        from clario.knowledge import Ontology
+    except Exception as e:  # noqa: BLE001 - optional; plain metrics still work
+        print("resolver unavailable:", repr(e)[:160])
+        return None
+    onto = Ontology.load()
+
+    def resolve(e):
+        return resolve_hpo(e.get("hpo_id"), e.get("quote") or "", e.get("canonical") or "", onto)[0]
+    return resolve
+
+
+def resolved_metrics(records, resolve):
+    """Score the same predictions after the resolver rewrote every hpo_id. Returns resolved_* keys."""
+    recs = []
+    for r in records:
+        pred = copy.deepcopy(r["pred"]) if r["pred"] is not None else None
+        for e in pred or []:
+            e["hpo_id"] = resolve(e)
+        recs.append({**r, "pred": pred})
+    m = score(recs)
+    keep = ("entity_precision", "entity_recall", "entity_f1", "hpo_id_accuracy", "tp", "fp", "fn")
+    return {f"resolved_{k}": m[k] for k in keep}
+
+
 def load_gold(path):
     rows = [json.loads(l) for l in open(path) if l.strip()]
     return [{"id": r.get("id"), "diary": r["diary"], "gold": from_dataset_entities(r["target"]["entities"]),
@@ -251,7 +285,13 @@ def make_complete_hf(model_id, adapter=None, load_in_4bit=False, max_tokens=1024
     import threading
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(adapter or model_id)
+    try:
+        tok = AutoTokenizer.from_pretrained(adapter or model_id)
+    except Exception:  # noqa: BLE001 - a bare checkpoint dir may hold no tokenizer files
+        tok = AutoTokenizer.from_pretrained(model_id)
+    tok.padding_side = "left"  # batched generation: prompts end at the same position
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
     dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     kw = dict(torch_dtype=dtype, device_map={"": 0})
     if load_in_4bit:
@@ -287,11 +327,28 @@ def make_complete_hf(model_id, adapter=None, load_in_4bit=False, max_tokens=1024
                                  num_return_sequences=n, use_cache=True)
         k = enc["input_ids"].shape[1]
         return [tok.decode(o[k:], skip_special_tokens=True) for o in out]
+    def batch(diaries):
+        """Greedy answers for several diaries in one padded batch: the same outputs as complete(), much faster."""
+        enc = tok.apply_chat_template([build_messages(d, confidence=confidence) for d in diaries], add_generation_prompt=True,
+                                      return_tensors="pt", return_dict=True, padding=True).to(model.device)
+        t0 = time.time()
+        with lock, torch.no_grad():
+            out = model.generate(**enc, max_new_tokens=max_tokens, do_sample=False, use_cache=True,
+                                 pad_token_id=tok.pad_token_id)
+        dt = (time.time() - t0) / len(diaries)
+        k = enc["input_ids"].shape[1]
+        res = []
+        for o in out:
+            gen = o[k:]
+            n = int((gen != tok.pad_token_id).sum())
+            res.append((tok.decode(gen, skip_special_tokens=True), dt, n))
+        return res
     complete.samples = samples
+    complete.batch = batch
     return complete
 
 
-def run_records(gold, complete, concurrency=4, sc_n=0):
+def run_records(gold, complete, concurrency=4, sc_n=0, batch_size=1):
     """Run complete(diary) over gold rows. Returns (records, wall_seconds).
     sc_n > 1: also draw sc_n samples per row and set every predicted entity's confidence to its self-consistency
     (agreement rate across the samples, the app's signal); a verbalized confidence the model wrote moves to `verbalized`."""
@@ -308,6 +365,20 @@ def run_records(gold, complete, concurrency=4, sc_n=0):
         except Exception as e:
             return {**g, "pred": None, "strict": False, "dt": 0.0, "toks": 0, "raw": "", "err": repr(e)}
     t0 = time.time()
+    if getattr(complete, "batch", None) and sc_n <= 1 and batch_size > 1:  # in-process model: padded batches
+        recs = []
+        for i in range(0, len(gold), batch_size):
+            chunk = gold[i:i + batch_size]
+            try:
+                outs = complete.batch([g["diary"] for g in chunk])
+            except Exception as e:  # noqa: BLE001 - e.g. out of memory: fall back to one at a time
+                print("batch failed, one by one:", repr(e)[:160])
+                recs += [one(g) for g in chunk]
+                continue
+            for g, (text, dt, toks) in zip(chunk, outs):
+                recs.append({**g, "pred": parse(text), "strict": strict_valid(text), "dt": dt, "toks": toks,
+                             "raw": text, "err": None})
+        return recs, time.time() - t0
     with ThreadPoolExecutor(concurrency) as ex:
         recs = list(ex.map(one, gold))
     return recs, time.time() - t0
@@ -327,7 +398,7 @@ def infer_backend(url):
 
 def table(label, m):
     def f(v): return "n/a" if v is None else f"{v:.3f}"
-    rows = [("entity F1 (HPO id)", m["entity_f1"]), ("precision", m["entity_precision"]), ("recall", m["entity_recall"]),
+    rows = [("entity F1 (HPO id)", m["entity_f1"]), ("entity F1 after resolver", m.get("resolved_entity_f1")), ("precision", m["entity_precision"]), ("recall", m["entity_recall"]),
             ("fuzzy-name F1", m["fuzzy_f1"]), (f"HPO-ID accuracy (n={m.get('n_gold_with_hpo_id', 0)})", m["hpo_id_accuracy"]),
             (f"negated recall (n={m.get('n_negated_gold', 0)})", m.get("negated_recall")),
             (f"family-history recall (n={m.get('n_family_history_gold', 0)})", m.get("family_history_recall")),
@@ -366,6 +437,8 @@ def main(argv=None):
     ap.add_argument("--hf-model", default="", help="run this HF model in-process instead of calling --base-url")
     ap.add_argument("--adapter", default="", help="LoRA adapter dir for --hf-model")
     ap.add_argument("--load-in-4bit", action="store_true", help="--hf-model in 4-bit (16 GB GPUs)")
+    ap.add_argument("--batch-size", type=int, default=16, help="--hf-model: diaries per padded generate() call")
+    ap.add_argument("--no-resolve", action="store_true", help="skip the resolved_* metrics (app HPO resolver)")
     a = ap.parse_args(argv)
     gold = load_gold(a.data)
     if a.limit: gold = gold[:a.limit]
@@ -387,8 +460,11 @@ def main(argv=None):
             if not (a.base_url and a.model): ap.error("--base-url and --model required (or --hf-model)")
             key = os.environ.get(a.api_key_env, "") if a.api_key_env else "none"
             complete = make_complete(a.base_url, a.model, key, a.max_tokens, a.timeout, a.confidence)
-        recs, wall = run_records(gold, complete, a.concurrency, a.sc_n)
+        recs, wall = run_records(gold, complete, a.concurrency, a.sc_n, a.batch_size if a.hf_model else 1)
         m = score(recs); label = a.label
+        resolve = None if a.no_resolve else make_resolver()
+        if resolve:
+            m.update(resolved_metrics(recs, resolve), resolver="clario.extract.resolve_hpo (ontology check, no model pick)")
         lat = [r["dt"] for r in recs if r["err"] is None]
         m.update(latency_p50_s=pct(lat, .5), latency_p95_s=pct(lat, .95),
                  tokens_per_s=sum(r["toks"] for r in recs) / wall if wall else 0.0,
