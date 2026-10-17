@@ -1,3 +1,4 @@
+import { CircleHelp } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { driver, type Driver, type DriveStep, type PopoverDOM, type State } from "driver.js";
@@ -330,7 +331,7 @@ export function TourButton({ steps }: { steps: TourPlan }) {
   return (
     <button ref={btn} type="button" className="btn !px-0 w-11 text-lg no-print" onClick={open}
       aria-label={tt("tour.open")} title={tt("tour.open")} aria-haspopup="dialog" data-testid="tour-open">
-      <span aria-hidden>?</span>
+      <CircleHelp size={18} aria-hidden />
     </button>
   );
 }

@@ -31,7 +31,7 @@ export function HeatStrip({ heat, mood, onPick, selected }: {
           return (
             <div key={r.hpo_id}>
               {head && (
-                <div className="text-[11px] font-bold uppercase tracking-wide mt-2 mb-0.5" style={{ color }} data-testid="heat-group">
+                <div className="text-[13px] font-semibold mt-2 mb-0.5" style={{ color }} data-testid="heat-group">
                   {t(`sys.${r.group}` as Key)}
                 </div>
               )}

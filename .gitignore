@@ -9,3 +9,10 @@ train/out/
 deploy/amd/logs/
 models/
 eval/.cache/
+
+# Impeccable working files (comps, review captures, build state)
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/build/
+.impeccable/decision-payload.json
+.impeccable/questions/

@@ -13,7 +13,7 @@ export function AppMark({ role, size = "md" }: { role: AppRole; size?: "md" | "l
   const big = size === "lg";
   return (
     <span className={`inline-flex items-center min-w-0 ${big ? "gap-2" : "gap-1.5 sm:gap-2"}`} data-testid="app-mark" data-role={role}>
-      <span className={`font-display leading-none ${big ? "text-4xl" : "text-xl sm:text-2xl"}`}>Clario</span>
+      <span className={`font-display font-semibold tracking-[-0.04em] leading-none ${big ? "text-5xl" : "text-2xl sm:text-[28px]"}`}>Clario</span>
       <span aria-hidden className={`text-muted leading-none ${big ? "" : "hidden sm:inline"}`}>·</span>
       <span className={`app-role ${big ? "app-role-lg" : ""}`}>
         <Icon size={big ? 16 : 14} strokeWidth={2.25} aria-hidden className={big ? "" : "hidden sm:block"} />

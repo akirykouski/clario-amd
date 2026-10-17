@@ -97,7 +97,7 @@ export default function PackagePage() {
           {data.labs.length > 0 && <LabsBlock labs={data.labs} decisions={decisions} />}
           <Details pkg={data} />
         </div>
-        <div className={`min-w-0 ${pane === "package" ? "hidden xl:block print:block" : ""}`}><BriefPanel pkg={data} brief={brief} setBrief={setBrief} /></div>
+        <div className={`min-w-0 glass p-6 self-start xl:sticky xl:top-[calc(var(--demo-h,0px)+16px)] print:p-0 ${pane === "package" ? "hidden xl:block print:block" : ""}`}><BriefPanel pkg={data} brief={brief} setBrief={setBrief} /></div>
       </div>
     </div>
   );
@@ -128,7 +128,7 @@ function Header({ pkg, brief, version = 0 }: { pkg: SharePackage; brief: Brief |
       <section className="card space-y-3" data-testid="pkg-why" aria-labelledby="ov-title">
         <h2 id="ov-title" className="text-xl">{t("ov.title")}</h2>
         <div className="rounded-lg p-3" style={{ background: "color-mix(in srgb, var(--accent) 7%, transparent)" }}>
-          <p className="text-xs font-bold uppercase tracking-wide text-muted flex items-center gap-1.5"><MessageSquareQuote size={14} aria-hidden />{t("ov.asks")}</p>
+          <p className="text-[13px] font-semibold text-muted flex items-center gap-1.5"><MessageSquareQuote size={14} aria-hidden />{t("ov.asks")}</p>
           {pkg.note ? <p className="text-lg mt-0.5">“{pkg.note}”</p>
             : ov?.asks.length ? ov.asks.slice(0, 2).map((a) => (
               <p key={a.entry_id} className="text-lg mt-0.5">“{a.text}” <button className="text-sm text-muted underline underline-offset-2" onClick={() => jumpTo(a.entry_id)}>{t("ov.asksFromNotes", { date: fmtDate(a.date) })}</button></p>
@@ -151,7 +151,7 @@ function Header({ pkg, brief, version = 0 }: { pkg: SharePackage; brief: Brief |
         )}
         {summary && (
           <div className="border-t border-line pt-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted">{t("pkg.aiSummary")}</p>
+            <p className="text-[13px] font-semibold text-muted">{t("pkg.aiSummary")}</p>
             <p className="text-[15px] mt-0.5">{summary.text}</p>
           </div>
         )}
@@ -178,7 +178,7 @@ function NeedsCheck({ pkg, decisions, onDecide, onReplace, onDecideLab, onCorrec
   const pages = new Map<string, { entry: string | null; page: number; n: number }>();
   openLabs.forEach((l) => { const k = `${l.entry_id}|${l.page}`; pages.set(k, { entry: l.entry_id, page: l.page, n: (pages.get(k)?.n ?? 0) + 1 }); });
   return (
-    <section aria-labelledby="chk" className="card space-y-2" style={{ borderLeft: "5px solid var(--moderate)" }} data-testid="needs-check" data-tour="needs-check">
+    <section aria-labelledby="chk" className="card card-amber space-y-2" data-testid="needs-check" data-tour="needs-check">
       <h2 id="chk" className="text-xl flex items-center gap-2"><AlertTriangle size={20} aria-hidden style={{ color: "var(--moderate)" }} />{tn("check.title", open)}</h2>
       <p className="text-sm text-muted">{t("check.sub")}</p>
       {labs.length > 0 && <p className="text-sm text-muted" data-testid="lab-counts-note">{t("check.labCounts")}</p>}

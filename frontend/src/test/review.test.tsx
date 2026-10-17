@@ -68,7 +68,7 @@ describe("review", () => {
     render(<MemoryRouter><EntryCard initial={entry} pii={2} /></MemoryRouter>);
     const link = screen.getByRole("link", { name: /Arthralgia/ });
     expect(link).toHaveAttribute("href", "/entry/e1");
-    expect(link.style.borderStyle).toBe("dashed");
+    expect(link.className).toContain("chip-review");
     expect(screen.getByText("Fatigue").closest("a")).toBeNull();
     expect(screen.queryByText(/to check/)).toBeNull();
     expect(screen.queryByText(/Review terms/)).toBeNull();

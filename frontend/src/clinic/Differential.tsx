@@ -43,7 +43,7 @@ export function Differential({ pid, version }: { pid: string; version: number })
   };
 
   return (
-    <section aria-labelledby="ddx-title" className="card space-y-4" style={{ borderLeft: "5px solid var(--accent)" }} data-testid="ddx" data-tour="ddx">
+    <section aria-labelledby="ddx-title" className="card card-accent space-y-4" data-testid="ddx" data-tour="ddx">
       <div>
         <h2 id="ddx-title" className="text-2xl flex items-center gap-2"><Sparkles size={22} aria-hidden className="text-accent" />{t("ddx.title")}</h2>
         <p className="text-sm text-muted mt-1">{t("ddx.sub")}</p>
@@ -66,7 +66,7 @@ export function Differential({ pid, version }: { pid: string; version: number })
               <p className="text-xl font-bold">{ddx.question.question}</p>
               <p className="text-sm text-muted">{t("ddx.qSub")}</p>
               <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-muted mb-1">{t("ddx.freqTitle")}</p>
+                <p className="text-[13px] font-semibold text-muted mb-1">{t("ddx.freqTitle")}</p>
                 <ul className="text-sm space-y-0.5">
                   {ddx.question.freq_by.map((f) => (
                     <li key={f.name} className="flex justify-between gap-3 max-w-md">
@@ -122,7 +122,7 @@ function ConditionCard({ c, move }: { c: Condition; move?: number | "new" }) {
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className="text-xs font-bold uppercase tracking-wide text-muted mr-1">{t("ddx.matched")}</span>
+        <span className="text-[13px] font-semibold text-muted mr-1">{t("ddx.matched")}</span>
         {c.matched.map((m) => (
           <span key={m.hpo_id} className="chip text-sm" style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 10%, transparent)" }}>
             {m.label}{m.count > 1 && <span className="text-muted text-xs">×{m.count}</span>}
@@ -136,7 +136,7 @@ function ConditionCard({ c, move }: { c: Condition; move?: number | "new" }) {
       </div>
       {c.missing.length > 0 && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-bold uppercase tracking-wide text-muted mr-1">{t("ddx.missing")}</span>
+          <span className="text-[13px] font-semibold text-muted mr-1">{t("ddx.missing")}</span>
           {c.missing.map((m) => (
             <span key={m.hpo_id} className="chip text-sm text-muted" style={{ borderStyle: "dashed" }}>
               {m.label}{m.freq !== null && <span className="text-xs">{pct(m.freq)}</span>}

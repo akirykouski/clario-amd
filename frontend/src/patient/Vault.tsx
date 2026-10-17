@@ -22,8 +22,14 @@ export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () =
   };
 
   return (
-    <main className="min-h-screen max-w-md mx-auto px-5 py-10 flex flex-col justify-center relative">
+    <main className="min-h-screen max-w-[520px] mx-auto px-5 py-10 flex flex-col justify-center relative">
       <div className="absolute top-4 right-5"><LangSwitch /></div>
+      <div aria-hidden className="grid grid-cols-7 gap-2 mb-6 px-6">
+        {["var(--aqua)", "var(--lilac)", "var(--coral)", "var(--aqua)", "var(--lilac)", "var(--coral)", "var(--aqua)"].map((c, i) => (
+          <span key={i} className="compartment !min-h-[46px] !rounded-[14px] pointer-events-none" style={{ ["--c" as string]: c }} />
+        ))}
+      </div>
+      <div className="glass p-8 sm:p-10">
       <h1 className="mb-3"><AppMark role="patient" size="lg" /></h1>
       <p className="text-muted mb-6">{setup ? t("vault.setupIntro") : t("vault.unlockIntro")}</p>
       <form onSubmit={submit} className="space-y-4">
@@ -47,6 +53,7 @@ export function Vault({ mode, onDone }: { mode: "setup" | "unlock"; onDone: () =
         {err && <p role="alert" className="text-strong text-sm">{err}</p>}
         <button className="btn btn-primary w-full" disabled={!valid || busy}>{busy ? t("common.oneMoment") : setup ? t("vault.create") : t("vault.unlock")}</button>
       </form>
+      </div>
     </main>
   );
 }

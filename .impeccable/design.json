@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-17T00:00:00Z",
+  "title": "Design System: Clario",
+  "extensions": {
+    "colorMeta": {
+      "ice": {"role": "neutral", "displayName": "Ice", "canonical": "#E9F3F6", "tonalRamp": ["#14323A", "#3C5A63", "#678790", "#93B0B8", "#B7CFD5", "#D0E3E8", "#E9F3F6", "#F6FAFB"]},
+      "ink": {"role": "neutral", "displayName": "Deep Teal Ink", "canonical": "#14323A", "tonalRamp": ["#0A1A1E", "#14323A", "#2A4B54", "#45616A", "#6B858D", "#94AAB0", "#BFCED2", "#E4ECEE"]},
+      "accent": {"role": "primary", "displayName": "Deep Aqua Accent", "canonical": "#0E7380", "tonalRamp": ["#05262B", "#0A4A53", "#0E7380", "#1B94A3", "#3FB8C9", "#7FD0DC", "#B6E5EB", "#E3F5F8"]},
+      "accent-clinic": {"role": "primary", "displayName": "Clinic Indigo Accent", "canonical": "#4F42C8", "tonalRamp": ["#1A1550", "#2F2792", "#4F42C8", "#6A5FDB", "#8A7CF0", "#AFA5F5", "#D2CCFA", "#EFEDFD"]},
+      "aqua": {"role": "secondary", "displayName": "Candy Aqua", "canonical": "#3FB8C9", "tonalRamp": ["#0F3B42", "#1B6772", "#2A93A3", "#3FB8C9", "#6CCDDA", "#98DDE7", "#C4EDF2", "#EAF8FA"]},
+      "lilac": {"role": "secondary", "displayName": "Candy Lilac", "canonical": "#8A7CF0", "tonalRamp": ["#2A2466", "#463CA3", "#665AD2", "#8A7CF0", "#A59AF4", "#C0B8F8", "#DAD6FB", "#F1EFFE"]},
+      "coral": {"role": "secondary", "displayName": "Candy Coral", "canonical": "#FF8A6B", "tonalRamp": ["#5C1F10", "#A03E24", "#E06042", "#FF8A6B", "#FFA48B", "#FFBDAB", "#FFD6CB", "#FFEFEA"]}
+    },
+    "typographyMeta": {
+      "display": {"displayName": "Display", "purpose": "Today prompt over the note field."},
+      "headline": {"displayName": "Headline", "purpose": "Section titles."},
+      "title": {"displayName": "Title", "purpose": "Panel headings."},
+      "body": {"displayName": "Body", "purpose": "Notes and prose."},
+      "label": {"displayName": "Label", "purpose": "Buttons, nav, field labels."},
+      "code": {"displayName": "Code", "purpose": "HPO ids and fingerprints only."}
+    },
+    "shadows": [
+      {"name": "shadow-glass", "value": "0 1px 0 0 rgba(255,255,255,0.85) inset, 0 -1px 0 0 rgba(20,50,58,0.04) inset, 0 18px 40px -22px rgba(20,50,58,0.35), 0 2px 6px -2px rgba(20,50,58,0.08)", "purpose": "Panels, cards, tray."},
+      {"name": "shadow-lift", "value": "0 1px 0 0 rgba(255,255,255,0.85) inset, 0 24px 48px -24px rgba(20,50,58,0.45), 0 4px 10px -4px rgba(20,50,58,0.12)", "purpose": "Raised overlays."},
+      {"name": "shadow-control", "value": "0 1px 0 0 #fff inset, 0 8px 18px -12px rgba(20,50,58,0.45)", "purpose": "Glass buttons."}
+    ],
+    "motion": [
+      {"name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Default state transitions, sheen, ambient drift."},
+      {"name": "ease-liquid", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Press squish and compartment lift."},
+      {"name": "spring-nav", "value": "spring stiffness 420, damping 32, mass 0.8", "purpose": "Nav liquid indicator glide."},
+      {"name": "spring-day", "value": "spring stiffness 380, damping 30, mass 0.9", "purpose": "Selected-day neck glide."},
+      {"name": "drift", "value": "46s to 64s alternate, transform only", "purpose": "Ambient light fields. All motion stops under prefers-reduced-motion."}
+    ],
+    "breakpoints": [
+      {"name": "sm", "value": "640px"},
+      {"name": "lg", "value": "1024px"}
+    ]
+  },
+  "components": [
+    {
+      "name": "Glass Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default glass pill with hover sheen.",
+      "html": "<button class=\"ds-btn\">Save note</button>",
+      "css": ".ds-btn{position:relative;overflow:hidden;min-height:44px;padding:0 20px;border-radius:999px;border:1px solid rgba(255,255,255,0.85);background:linear-gradient(180deg,rgba(255,255,255,0.86),rgba(255,255,255,0.58));box-shadow:0 1px 0 0 #fff inset,0 8px 18px -12px rgba(20,50,58,0.45);color:#14323A;font:600 15px 'Funnel Sans',system-ui,sans-serif;cursor:pointer;transition:transform 380ms cubic-bezier(0.22,1,0.36,1),box-shadow 240ms cubic-bezier(0.16,1,0.3,1)}.ds-btn:hover{box-shadow:0 1px 0 0 #fff inset,0 12px 22px -12px rgba(20,50,58,0.5)}.ds-btn:active{transform:scale(0.965);transition-duration:120ms}.ds-btn:focus-visible{outline:2.5px solid #0E7380;outline-offset:3px}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Liquid accent pill for the one main action.",
+      "html": "<button class=\"ds-btn-primary\">Share package</button>",
+      "css": ".ds-btn-primary{min-height:44px;padding:0 20px;border-radius:999px;border:1px solid color-mix(in srgb,#0E7380 70%,#fff);background:linear-gradient(180deg,color-mix(in srgb,#0E7380 78%,#fff) 0%,#0E7380 55%,color-mix(in srgb,#0E7380 88%,#000) 100%);box-shadow:0 1px 0 0 rgba(255,255,255,0.55) inset,0 -2px 6px 0 rgba(0,0,0,0.12) inset,0 12px 24px -12px color-mix(in srgb,#0E7380 80%,transparent);color:#fff;font:600 15px 'Funnel Sans',system-ui,sans-serif;cursor:pointer;transition:transform 380ms cubic-bezier(0.22,1,0.36,1)}.ds-btn-primary:active{transform:scale(0.965)}.ds-btn-primary:focus-visible{outline:2.5px solid #0E7380;outline-offset:3px}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Inset frosted field with soft accent focus ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"How did today feel\">",
+      "css": ".ds-input{width:100%;min-height:46px;padding:10px 16px;border-radius:16px;border:1px solid rgba(20,50,58,0.10);background:rgba(255,255,255,0.62);box-shadow:0 2px 6px -2px rgba(20,50,58,0.12) inset,0 1px 0 0 rgba(255,255,255,0.9);color:#14323A;font:400 16.5px 'Funnel Sans',system-ui,sans-serif;caret-color:#0E7380;transition:box-shadow 220ms cubic-bezier(0.16,1,0.3,1),background-color 220ms}.ds-input:focus{outline:none;background:rgba(255,255,255,0.85);box-shadow:0 0 0 3px rgba(63,184,201,0.22),0 2px 6px -2px rgba(20,50,58,0.12) inset}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Near-white glass card.",
+      "html": "<div class=\"ds-card\">Recent note</div>",
+      "css": ".ds-card{padding:20px;border-radius:22px;border:1px solid rgba(255,255,255,0.85);background:linear-gradient(180deg,rgba(255,255,255,0.78),rgba(255,255,255,0.56));box-shadow:0 1px 0 0 rgba(255,255,255,0.85) inset,0 18px 40px -22px rgba(20,50,58,0.35),0 2px 6px -2px rgba(20,50,58,0.08);color:#14323A;font:400 16.5px 'Funnel Sans',system-ui,sans-serif}"
+    },
+    {
+      "name": "Capsule States",
+      "kind": "chip",
+      "refersTo": "chip-filled",
+      "description": "Filled counted, hollow ring unsure, struck rejected.",
+      "html": "<span class=\"ds-chip ds-chip-filled\">Fatigue</span> <span class=\"ds-chip ds-chip-review\">Joint pain</span> <span class=\"ds-chip ds-chip-struck\">Fever</span>",
+      "css": ".ds-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;border-radius:999px;font:500 15px 'Funnel Sans',system-ui,sans-serif;color:#14323A;border:1px solid rgba(255,255,255,0.85);background:linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,255,255,0.62));box-shadow:0 1px 0 0 #fff inset,0 6px 12px -10px rgba(20,50,58,0.55)}.ds-chip-filled{border-color:color-mix(in srgb,#3FB8C9 55%,#fff);background:linear-gradient(180deg,color-mix(in srgb,#3FB8C9 34%,#fff),color-mix(in srgb,#3FB8C9 22%,#fff))}.ds-chip-review{background:transparent;border:1.5px solid color-mix(in srgb,#14323A 50%,transparent);box-shadow:none}.ds-chip-struck{text-decoration:line-through;text-decoration-color:color-mix(in srgb,#A23B52 70%,transparent);color:#45616A;background:rgba(255,255,255,0.35)}"
+    },
+    {
+      "name": "Day Compartment",
+      "kind": "custom",
+      "refersTo": "compartment",
+      "description": "One of seven candy-plastic lids with hinge, specular streak and latch.",
+      "html": "<button class=\"ds-comp\"><span>Mon</span><b>12</b><i class=\"ds-latch\"></i></button>",
+      "css": ".ds-comp{--c:#3FB8C9;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:110px;min-height:116px;padding:16px 6px;border-radius:22px;color:#14323A;font:600 13px 'Funnel Sans',system-ui,sans-serif;cursor:pointer;border:1px solid color-mix(in srgb,var(--c) 60%,rgba(255,255,255,0.9));background:radial-gradient(120% 60% at 50% 0%,rgba(255,255,255,0.6),rgba(255,255,255,0) 62%),linear-gradient(175deg,color-mix(in srgb,var(--c) 42%,transparent) 0%,color-mix(in srgb,var(--c) 62%,transparent) 72%,color-mix(in srgb,var(--c) 52%,transparent) 100%);box-shadow:0 1px 0 0 rgba(255,255,255,0.95) inset,0 -10px 18px -10px color-mix(in srgb,var(--c) 80%,#000) inset,0 16px 26px -14px color-mix(in srgb,var(--c) 75%,transparent);transition:transform 420ms cubic-bezier(0.22,1,0.36,1)}.ds-comp b{font-size:30px;line-height:1;letter-spacing:-0.03em}.ds-comp::before{content:'';position:absolute;top:-5px;left:50%;width:38%;height:8px;transform:translateX(-50%);border-radius:6px;background:linear-gradient(180deg,#f6fafb,#c3d2d7);box-shadow:0 1px 2px rgba(20,50,58,0.25)}.ds-comp::after{content:'';position:absolute;top:7px;left:14%;right:14%;height:5px;border-radius:999px;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,0.95),rgba(255,255,255,0))}.ds-latch{position:absolute;bottom:-4px;left:50%;width:22%;height:7px;transform:translateX(-50%);border-radius:0 0 6px 6px;background:color-mix(in srgb,var(--c) 70%,#fff);border:1px solid color-mix(in srgb,var(--c) 60%,#fff);border-top:0}.ds-comp:hover{transform:translateY(-3px)}.ds-comp:focus-visible{outline:2.5px solid #0E7380;outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Pill Organizer in Glass",
+    "overview": "Clario is a translucent Y2K seven-day organizer in liquid glass. The week is always visible as seven candy-plastic compartments; the chosen day swells open and joins a large glass tray below. The ground is icy and lit by three slow colour fields. Both apps share this one light world: the patient app leads with aqua, the clinic console with lilac. Calm and precise, desktop-first, never the stock health-app white card.",
+    "keyCharacteristics": [
+      "Icy ground with per-app ambient light (patient aqua-led, clinic lilac-led).",
+      "Frosted glass for large surfaces; gradient-faked glass for small controls.",
+      "Seven compartments cycling aqua, lilac, coral; the selected one turns clear glass and joins the tray.",
+      "Fixed capsule state marks: filled, hollow ring, struck.",
+      "One liquid indicator (shared-layout glide) for nav and selected day.",
+      "Deep teal ink (indigo ink in the clinic), AA contrast on ice and on glass."
+    ],
+    "rules": [
+      {"name": "The Ambient Light Rule", "body": "Colour comes from three blurred fields behind the glass, not from flat fills on panels. The fields drift on transform only.", "section": "colors"},
+      {"name": "The Two-Accent Rule", "body": "Aqua leads in the patient app, lilac in the clinic. Switch with data-app, never by recolouring components.", "section": "colors"},
+      {"name": "The Candy Is Material Rule", "body": "Aqua, lilac and coral colour surfaces. Text always uses ink, muted, or the deep accent.", "section": "colors"},
+      {"name": "The Tabular Rule", "body": "Dates, counts and tables use tabular numerals.", "section": "typography"},
+      {"name": "The Mono Is For Codes Rule", "body": "Geist Mono appears only on identifiers, never on prose or labels.", "section": "typography"},
+      {"name": "The Large Surfaces Only Rule", "body": "backdrop-filter is allowed only on large surfaces. Small controls fake glass with white gradients.", "section": "elevation"},
+      {"name": "The Soft Offset Rule", "body": "Shadows are long, negative-spread and ink-tinted. No hard-edged or coloured offset shadows.", "section": "elevation"}
+    ],
+    "dos": [
+      "Do keep state marks fixed: filled is confirmed, hollow ring is unsure, struck is rejected.",
+      "Do put colour in ambient light and compartments; keep panels near-white glass.",
+      "Do use ease-out (0.16, 1, 0.3, 1) or ease-liquid (0.22, 1, 0.36, 1) for transitions, and framer-motion springs only for the nav indicator and selected-day neck.",
+      "Do animate ambient drift on transform only, and stop all animation and transition under prefers-reduced-motion.",
+      "Do keep text on ink, muted, or the deep accent so it holds 4.5:1.",
+      "Do keep copy free of em dashes and exclamation marks."
+    ],
+    "donts": [
+      "Don't put backdrop-filter on chips, buttons, or list items.",
+      "Don't use candy aqua, lilac or coral as text colour.",
+      "Don't use the stock health-app look of flat white cards on grey.",
+      "Don't use Geist Mono for anything but codes and fingerprints.",
+      "Don't blend patient aqua and clinic lilac leads on one screen; the root data-app decides."
+    ]
+  }
+}

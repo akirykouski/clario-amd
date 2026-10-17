@@ -60,13 +60,13 @@ export function EntryCard({ initial, onChange, pii = 0, tour = false }: { initia
         {entry.extraction === "failed" && <span className="text-sm text-muted">{t("entry.failedShort")}</span>}
         {entry.extraction === "done" && terms.length === 0 && <span className="text-sm text-muted">{t("entry.noTerms")}</span>}
         {terms.map((x) => x.review === "needs_review" ? (
-          <Link key={x.id} to={`/entry/${entry.id}`} className="chip" data-testid={x.past ? "past-chip" : undefined} style={{ borderStyle: "dashed", borderColor: "var(--moderate)" }}
+          <Link key={x.id} to={`/entry/${entry.id}`} className="chip chip-review" data-testid={x.past ? "past-chip" : undefined}
             title={t("entry.unsureTitle")} aria-label={`${name(x)}. ${t("entry.unsureTitle")}`}>
             {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{x.past && <span className="text-muted">{t("term.pastChip")}</span>}{name(x)}{x.past && <span className="text-muted"> ({pastWhen(x.past)})</span>}
-            <span aria-hidden className="text-xs" style={{ color: "var(--moderate)" }}>?</span>
+            <span aria-hidden className="text-xs text-muted">?</span>
           </Link>
         ) : (
-          <span key={x.id} className="chip" data-testid={x.past ? "past-chip" : undefined}>
+          <span key={x.id} className="chip chip-filled" data-testid={x.past ? "past-chip" : undefined}>
             {x.negated && <span className="text-muted">{t("term.absentChip")}</span>}{x.type === "trigger" && <span className="text-muted">{t("term.contextChip")}</span>}{x.family_history && <span className="text-muted">{t("term.relativeChip")}</span>}{x.past && <span className="text-muted">{t("term.pastChip")}</span>}{name(x)}{x.past && <span className="text-muted"> ({pastWhen(x.past)})</span>}
           </span>
         ))}

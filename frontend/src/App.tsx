@@ -20,6 +20,7 @@ export default function App() {
   if (!health) return <Loading label={t("app.connecting")} />;
   return (
     <>
+      <div className="ambient" aria-hidden><span /><span /><span /></div>
       {health.demo_instance && <DemoBanner />}
       {health.mode === "clinic" ? <ClinicApp health={health} /> : <PatientApp />}
     </>

@@ -11,7 +11,7 @@ export function SecondOpinionBanner({ pkg }: { pkg: SharePackage }) {
   const { t } = useT();
   if (!pkg.second_opinion) return null;
   return (
-    <section className="card space-y-1" role="note" data-testid="so-banner" style={{ borderLeft: "5px solid var(--accent)" }}>
+    <section className="card card-accent space-y-1" role="note" data-testid="so-banner">
       <p className="font-bold flex items-center gap-2"><EyeOff size={18} aria-hidden className="text-accent" />{t("so.banner")}</p>
       <p className="text-sm text-muted">{t("so.bannerSub")}</p>
     </section>
@@ -103,7 +103,7 @@ export function ComparePanel({ pkg, finalized }: { pkg: SharePackage; finalized:
           <h3 className="text-lg">{t("so.previous")}</h3>
           <Lines title={t("so.accepted")} lines={prev.accepted} />
           <Lines title={t("so.rejected")} lines={prev.rejected} />
-          {prev.notes && <div><p className="text-xs font-bold uppercase tracking-wide text-muted">{t("so.notes")}</p><p className="text-sm">{prev.notes}</p></div>}
+          {prev.notes && <div><p className="text-[13px] font-semibold text-muted">{t("so.notes")}</p><p className="text-sm">{prev.notes}</p></div>}
         </div>
         <div className="space-y-2" data-testid="so-yours">
           <h3 className="text-lg">{t("so.yours")}</h3>
@@ -114,7 +114,7 @@ export function ComparePanel({ pkg, finalized }: { pkg: SharePackage; finalized:
       </div>
       {cmp.since_previous.length > 0 && (
         <div className="rounded-lg p-3" style={{ background: "var(--amber-bg)" }} data-testid="so-after">
-          <p className="text-xs font-bold uppercase tracking-wide">{t("so.after")}</p>
+          <p className="text-[13px] font-semibold">{t("so.after")}</p>
           <p className="text-sm text-muted">{t("so.afterSub")}</p>
           <p className="text-sm mt-1">{cmp.since_previous.join(", ")}</p>
         </div>
@@ -141,7 +141,7 @@ function Lines({ title, lines }: { title: string; lines: string[] }) {
   const { t } = useT();
   return (
     <div>
-      <p className="text-xs font-bold uppercase tracking-wide text-muted">{title}</p>
+      <p className="text-[13px] font-semibold text-muted">{title}</p>
       {lines.length ? <ul className="list-disc pl-5 text-sm space-y-0.5">{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
         : <p className="text-sm text-muted">{t("so.none")}</p>}
     </div>

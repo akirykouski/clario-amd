@@ -22,9 +22,9 @@ export interface HeatModel { weeks: string[]; rows: HeatRow[]; max: number }
 export const SYSTEM_ORDER = ["skin", "joints", "kidney", "blood", "immune", "nervous", "heart", "lungs", "digestive", "eye",
   "endocrine", "metabolism", "head", "general", "other"];
 export const SYSTEM_COLOR: Record<string, string> = {
-  skin: "#C2410C", joints: "#1D4ED8", kidney: "#7C3AED", blood: "#B91C1C", immune: "#0F766E", nervous: "#A16207",
-  heart: "#BE185D", lungs: "#0369A1", digestive: "#4D7C0F", eye: "#6D28D9", endocrine: "#9333EA", metabolism: "#57534E",
-  head: "#C2410C", general: "#64748B", other: "#64748B",
+  skin: "#D9603F", joints: "#5E4FD0", kidney: "#2F7FC4", blood: "#C24A6A", immune: "#16808E", nervous: "#B47A12",
+  heart: "#C9506A", lungs: "#2F7FC4", digestive: "#2A8B6E", eye: "#7B6CE6", endocrine: "#8E5CCF", metabolism: "#5D717A",
+  head: "#D9603F", general: "#5D717A", other: "#5D717A",
 };
 
 /** entryDates maps entry id -> occurred_on. Cell = number of distinct entries with the term in that week.
