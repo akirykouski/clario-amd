@@ -641,7 +641,7 @@ export const it: Record<Key, string> = {
   "share.sendSecond": "Invia per un secondo parere",
   "share.sentSecond": "Inviato per un secondo parere. Il nuovo medico vede il parere precedente solo dopo aver dato il suo.",
 
-  "verify.title": "Mostra a un medico in stanza",
+  "verify.title": "Mostra al medico che hai davanti",
   "verify.intro": "Un medico in stanza può leggere il parere del tuo medico precedente solo per questa visita. Prima vedi chi è e decidi tu.",
   "verify.start": "Avvia",
   "verify.linkLabel": "Link per il medico",

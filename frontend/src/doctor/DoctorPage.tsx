@@ -12,9 +12,10 @@ type Phase = "form" | "waiting" | "open" | "closed";
 type Closed = "rejected" | "expired" | "ended" | "badLink";
 
 /** The doctor's page: no patient vault, no storage. The token lives in this component only. */
-export default function DoctorPage() {
+export default function DoctorPage({ code: fromProps }: { code?: string } = {}) {
   const { t } = useT();
-  const { code = "" } = useParams();
+  const params = useParams();
+  const code = fromProps ?? params.code ?? "";
   const [phase, setPhase] = useState<Phase>("form");
   const [closed, setClosed] = useState<Closed | null>(null);
   const [name, setName] = useState("");
@@ -116,7 +117,7 @@ export default function DoctorPage() {
                 {hits.map((h) => (
                   <div key={h.id} className="card flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
                     <p className="font-bold">{h.display}</p>
-                    <button className="btn btn-primary" onClick={() => choose(h)} disabled={busy}>{t("doctor.choose")}</button>
+                    <button className="btn btn-primary shrink-0 whitespace-nowrap" onClick={() => choose(h)} disabled={busy}>{t("doctor.choose")}</button>
                   </div>
                 ))}
               </div>

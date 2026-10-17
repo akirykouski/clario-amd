@@ -14,8 +14,10 @@ import DoctorPage from "./doctor/DoctorPage";
 /** /doctor/:code is the visiting doctor's page: it never touches the patient vault, so it skips the setup and unlock gate. */
 export default function App() {
   const { pathname } = useLocation();
-  if (matchPath("/doctor/:code", pathname)) {
-    return <><div className="ambient" aria-hidden><span /><span /><span /></div><DoctorPage /></>;
+  const doctor = matchPath("/doctor/:code", pathname);
+  if (doctor) {
+    // Rendered outside <Routes>, so the code is read from the match here (useParams would be empty).
+    return <><div className="ambient" aria-hidden><span /><span /><span /></div><DoctorPage code={doctor.params.code} /></>;
   }
   return <Main />;
 }
