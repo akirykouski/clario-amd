@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeftRight, Check, MessageSquareQuote, X } from "lucide-react";
 import { api } from "../api";
-import type { Brief, Decisions, Entry, Overview, OverviewTerm, SharedLab, SharePackage, Term, TermCorrection, TermDecision } from "../types";
+import type { Brief, Decisions, Entry, Overview, OverviewLab, OverviewTerm, SharedLab, SharePackage, Term, TermCorrection, TermDecision } from "../types";
 import { buildHeat, clinicFlagNote, fmtDate, fmtNum, splitQuotes, weeklyMood } from "../lib";
 import { ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
@@ -97,7 +97,8 @@ function Header({ pkg, brief, version = 0 }: { pkg: SharePackage; brief: Brief |
   useEffect(() => { api.overview(pkg.package_id, lang).then(setOv).catch(() => setOv(null)); }, [pkg.package_id, lang, version]);
   const mine = own(pkg);
   const terms = new Set(mine.filter((e) => e.type !== "lab").map((e) => e.hpo_id ?? e.canonical.toLowerCase())).size;
-  const abnormal = new Set(pkg.labs.filter((l) => l.flag === "low" || l.flag === "high").map((l) => l.test_name)).size;
+  // the same set the glance lists and the lab table marks: tests with an out-of-range result
+  const abnormal = ov ? ov.labs_off.length : new Set(pkg.labs.filter(isOff).map((l) => l.test_key || l.test_name)).size;
   const summary = brief?.items.find((i) => i.section === "summary" && i.origin === "ai" && i.review !== "rejected");
   const p = ov?.profile ?? pkg.profile;
   const who = [p?.sex ? t(`ov.${p.sex}` as Key) : null, p?.age ? t("ov.age", { age: p.age }) : null].filter(Boolean).join(", ");
@@ -127,7 +128,7 @@ function Header({ pkg, brief, version = 0 }: { pkg: SharePackage; brief: Brief |
               <dd>{ov.recent.map((x) => term(x, x.recent_count)).join(", ")}{ov.new.length > 0 && <span className="font-bold">{"; "}{t("ov.new", { list: ov.new.join(", ") })}</span>}</dd></>}
             {ov.first && <><dt className="text-muted">{t("ov.first")}</dt><dd>{ov.first.label}, {fmtDate(ov.first.first)}</dd></>}
             {ov.labs_off.length > 0 && <><dt className="text-muted">{t("ov.labs")}</dt>
-              <dd>{ov.labs_off.map((l) => `${l.name} ${t(l.flag === "low" ? "ov.low" : "ov.high")} (${l.value}${l.unit ? " " + l.unit : ""})`).join(", ")}</dd></>}
+              <dd data-testid="ov-labs">{ov.labs_off.map((l) => glanceLab(l, t)).join(", ")}</dd></>}
             {ov.family.length > 0 && <><dt className="text-muted">{t("ov.family")}</dt><dd>{t("ov.familyRelative", { list: ov.family.join(", ") })}</dd></>}
             {ov.denied.length > 0 && <><dt className="text-muted">{t("ov.denied")}</dt><dd>{ov.denied.join(", ")}</dd></>}
             {ov.mood && <><dt className="text-muted">{t("ov.mood")}</dt><dd>{t("ov.moodLine", { avg: fmtNum(ov.mood.avg), trend: t(`ov.trend.${ov.mood.trend}` as Key) })}</dd></>}
@@ -320,7 +321,13 @@ const labRange = (l: SharedLab, t: TFn) => {
   const lo = l.ref_low === null ? null : fmtNum(l.ref_low), hi = l.ref_high === null ? null : fmtNum(l.ref_high);
   return lo !== null && hi !== null ? t("labs.rangeBoth", { lo, hi }) : hi !== null ? t("labs.rangeUpTo", { hi }) : lo !== null ? t("labs.rangeFrom", { lo }) : "";
 };
-const isOff = (l: SharedLab) => l.abnormal || l.flag === "low" || l.flag === "high";
+const isOff = (l: SharedLab) => l.abnormal || l.flag === "low" || l.flag === "high" || l.flag === "positive";
+/** "Sodium high (147 mmol/L)", "C4 high (48 mg/dL, now in range)", "ANA Positive 1:160 (now negative)" */
+const glanceLab = (l: OverviewLab, t: TFn) => {
+  const later = l.latest_in_range ? t(l.flag === "positive" ? "ov.nowNegative" : "ov.nowInRange") : "";
+  if (l.flag === "positive") return `${l.name} ${labWord(l.value, t)}${later ? ` (${later})` : ""}`;
+  return `${l.name} ${t(l.flag === "low" ? "ov.low" : "ov.high")} (${l.value}${l.unit ? " " + l.unit : ""}${later ? ", " + later : ""})`;
+};
 
 function LabsBlock({ labs: all, decisions }: { labs: SharedLab[]; decisions: Decisions }) {
   const { t } = useT();
@@ -343,7 +350,8 @@ function LabsBlock({ labs: all, decisions }: { labs: SharedLab[]; decisions: Dec
 
 function LabsTable({ labs }: { labs: SharedLab[] }) {
   const { t, lang } = useT();
-  const flag = (l: SharedLab) => (l.flag ? t(`pkg.lab.${l.flag}` as const) : "");
+  // a qualitative result ("Positive 1:160") says it in its value: no second word in the flag column
+  const flag = (l: SharedLab) => (l.flag && l.value_numeric !== null ? t(`pkg.lab.${l.flag}` as const) : "");
   const note = (l: SharedLab) => (l.needs_review && !l.decision ? t("pkg.lab.unsure") : "");
   return (
     <div className="overflow-x-auto"><table className="w-full text-sm">

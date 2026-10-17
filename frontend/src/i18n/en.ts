@@ -529,6 +529,8 @@ export const en = {
   "ov.upTo": "up to {n}/10",
   "ov.low": "low",
   "ov.high": "high",
+  "ov.nowInRange": "now in range",
+  "ov.nowNegative": "now negative",
   "share.about": "About you (optional)",
   "share.aboutHint": "Age and sex help a clinician read your notes. Leave them empty if you prefer.",
   "share.age": "Age",

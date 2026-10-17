@@ -24,8 +24,8 @@ const pkg: SharePackage = {
   labs: [
     { test_name: "Cholesterol", value_numeric: 264, value_text: null, unit: "mg/dL", ref_low: 0, ref_high: 200, flag: "high", date: "2026-09-15", page: 2, entry_id: "e1", reviewed: true, id: "l1", test_key: "colesterolototale", name_en: null, abnormal: true, decision: null },
     { test_name: "Glucose", value_numeric: 90, value_text: null, unit: "mg/dL", ref_low: 70, ref_high: 100, flag: "normal", date: "2026-09-15", page: 3, entry_id: "e1", reviewed: false, needs_review: true, id: "l2", test_key: "glicemia", name_en: null, abnormal: false, decision: null },
-    { test_name: "ANA", value_numeric: null, value_text: "Positivo 1:160", unit: "", ref_low: null, ref_high: null, flag: null, date: "2026-04-07", page: 1, entry_id: "e1", reviewed: true, id: "l3", test_key: "ana", name_en: "ANA", abnormal: true, decision: null },
-    { test_name: "ANA", value_numeric: null, value_text: "Negativo", unit: "", ref_low: null, ref_high: null, flag: null, date: "2026-09-15", page: 1, entry_id: "e1", reviewed: true, id: "l4", test_key: "ana", name_en: "ANA", abnormal: false, decision: null },
+    { test_name: "ANA", value_numeric: null, value_text: "Positivo 1:160", unit: "", ref_low: null, ref_high: null, flag: "positive", date: "2026-04-07", page: 1, entry_id: "e1", reviewed: true, id: "l3", test_key: "ana", name_en: "ANA", abnormal: true, decision: null },
+    { test_name: "ANA", value_numeric: null, value_text: "Negativo", unit: "", ref_low: null, ref_high: null, flag: "normal", date: "2026-09-15", page: 1, entry_id: "e1", reviewed: true, id: "l4", test_key: "ana", name_en: "ANA", abnormal: false, decision: null },
     { test_name: "Glicemia", value_numeric: 80, value_text: null, unit: "mg/dL", ref_low: null, ref_high: null, flag: null, date: "2026-09-16", page: 3, entry_id: "e1", reviewed: true, id: "l5", test_key: "glicemia", name_en: "Glucose", abnormal: false, decision: null },
   ],
   patterns: [
@@ -51,18 +51,22 @@ const overview = {
   frequent: [{ label: "joint pain", count: 2, recent_count: 2, first: "2026-10-01", last: "2026-10-01", max_severity: 6 }],
   recent: [{ label: "joint pain", count: 2, recent_count: 2, first: "2026-10-01", last: "2026-10-01", max_severity: 6 }],
   new: ["joint pain"], first: { label: "joint pain", count: 2, recent_count: 2, first: "2026-10-01", last: "2026-10-01", max_severity: 6 },
-  severe: [], labs_off: [{ name: "Cholesterol", value: "264", unit: "mg/dL", flag: "high" as const, date: "2026-09-15" }],
+  severe: [], labs_off: [
+    { name: "Cholesterol", test_key: "colesterolototale", value: "264", unit: "mg/dL", flag: "high" as const, date: "2026-09-15", latest_in_range: false },
+    { name: "ANA", test_key: "ana", value: "Positivo 1:160", unit: "", flag: "positive" as const, date: "2026-04-07", latest_in_range: true },
+  ],
   family: ["Systemic lupus erythematosus"], denied: ["fever"], mood: { avg: 4, trend: "down" as const },
   asks: [{ text: "I want to ask about the joint pain.", entry_id: "e1", date: "2026-10-01" }],
 };
 
-function mount() {
+function mount(overviewDown = false) {
   vi.spyOn(api, "package").mockResolvedValue(pkg);
   vi.spyOn(api, "inbox").mockResolvedValue([{ package_id: "pkg_1", patient_alias: "Ash-001", period: pkg.period, received_at: "x", expires_at: "x", entities: 2, brief_state: "none" }]);
   vi.spyOn(api, "decisions").mockResolvedValue({ terms: {}, answers: [] });
   vi.spyOn(api, "termSystems").mockResolvedValue({ "HP:0002829": "joints" });
   vi.spyOn(api, "ddx").mockResolvedValue(ddx);
-  vi.spyOn(api, "overview").mockResolvedValue(overview);
+  if (overviewDown) vi.spyOn(api, "overview").mockRejectedValue(new Error("down"));
+  else vi.spyOn(api, "overview").mockResolvedValue(overview);
   render(<MemoryRouter initialEntries={["/p/pkg_1"]}><Routes><Route path="/p/:id" element={<PackagePage />} /></Routes></MemoryRouter>);
 }
 
@@ -71,12 +75,12 @@ describe("clinic package page", () => {
     mount();
     expect(await screen.findByTestId("pkg-counts")).toHaveTextContent("2 mentions of 1 terms");
     expect(await screen.findByTestId("pkg-overview")).toBeInTheDocument();
-    expect(screen.getByTestId("pkg-glance")).toHaveTextContent("1 notes over 1 weeks · 1 symptoms · 1 out-of-range labs");
+    expect(screen.getByTestId("pkg-glance")).toHaveTextContent("1 notes over 1 weeks · 1 symptoms · 2 out-of-range labs");  // = the glance list
     expect(screen.getByTestId("pkg-who")).toHaveTextContent("Woman, 29");
     const ov = screen.getByTestId("pkg-why");
     expect(ov).toHaveTextContent("“I want to ask about the joint pain.”");  // no note: the question comes from the notes
     expect(ov).toHaveTextContent("joint pain (2 notes, up to 6/10)");
-    expect(ov).toHaveTextContent("Cholesterol high (264 mg/dL)");
+    expect(screen.getByTestId("ov-labs")).toHaveTextContent("Cholesterol high (264 mg/dL), ANA Positive 1:160 (now negative)");
     expect(ov).toHaveTextContent("Systemic lupus erythematosus in a relative");
     expect(ov).toHaveTextContent("about 4/10, lower lately");
     expect(ov).not.toHaveTextContent("HP:");
@@ -109,6 +113,14 @@ describe("clinic package page", () => {
     expect(within(labs).getAllByText("Glucose").length).toBeGreaterThan(0);
     expect(within(labs).queryByText("Glicemia")).toBeNull();
     expect(within(labs).getAllByText(/70 to 100/).length).toBeGreaterThan(0);
+  });
+
+  it("without the overview the header still counts every test with an out-of-range result, positive ANA included", async () => {
+    mount(true);
+    await screen.findByTestId("pkg-labs");
+    await waitFor(() => expect(screen.getByTestId("pkg-glance")).toHaveTextContent("· 2 out-of-range labs"));
+    const off = within(screen.getByTestId("pkg-labs")).getAllByTestId("lab-row").slice(0, 2).map((r) => r.textContent);
+    expect(off.some((x) => x?.includes("Positive 1:160"))).toBe(true);  // the positive ANA sits in the out-of-range table
   });
 
   it("a low-confidence lab reading waits for the clinician and a rejected one leaves the tables", async () => {

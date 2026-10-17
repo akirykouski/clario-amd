@@ -79,7 +79,7 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         b = batches[bid]
         for i, rows in enumerate(pages):
             for r in rows:
-                store_row(bid, {**r, "flag": docs.compute_flag(r["value_numeric"], r["ref_low"], r["ref_high"], r["flag"]),
+                store_row(bid, {**r, "flag": docs.compute_flag(r["value_numeric"], r["ref_low"], r["ref_high"], r["flag"], r["value_text"]),
                                 "page": i + 1, "confidence": docs.TABLE_CONFIDENCE, "review": "auto"}, PRECOMPUTED_LABS)
             b["done"] += 1
         b["finished"] = time.monotonic()
@@ -191,13 +191,13 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         tests = []
         for key, grp in groups.items():
             grp.sort(key=lambda r: (r.date, r.page, r.id))
-            vals = [LabValue(id=r.id, date=r.date, value_numeric=r.value_numeric, value_text=r.value_text, flag=r.flag,
+            vals = [LabValue(id=r.id, date=r.date, value_numeric=r.value_numeric, value_text=r.value_text, flag=docs.lab_flag(r),
                              review=r.review, confidence=r.confidence, page=r.page, batch_id=r.batch_id) for r in grp]
             last = grp[-1]
             unit = next((r.unit for r in reversed(grp) if r.unit), "")
             tests.append(LabTest(test_key=key, test_name=last.test_name, unit=unit, ref_low=last.ref_low,
                                  ref_high=last.ref_high, latest=vals[-1], values=vals,
-                                 out_of_range=vals[-1].flag in ("low", "high") and vals[-1].review != "rejected"))
+                                 out_of_range=docs.is_off(vals[-1].flag) and vals[-1].review != "rejected"))
         tests.sort(key=lambda t: (not t.out_of_range, t.test_name.lower()))
         return LabsResponse(tests=tests, n_results=len(rows), out_of_range=sum(t.out_of_range for t in tests),
                             needs_review=sum(r.review == "needs_review" for r in rows))

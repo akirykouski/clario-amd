@@ -128,7 +128,7 @@ export interface RunEvent {
 }
 
 export type LabReview = "auto" | "needs_review" | "confirmed" | "corrected" | "rejected";
-export type LabFlag = "low" | "high" | "normal";
+export type LabFlag = "low" | "high" | "normal" | "positive"; // positive: a qualitative result such as ANA "Positivo 1:80"
 export interface LabValue {
   id: string; date: string; value_numeric: number | null; value_text: string | null; flag: LabFlag | null;
   review: LabReview; confidence: number | null; page: number; batch_id: string;
@@ -187,7 +187,11 @@ export interface Decisions { terms: Record<string, TermDecision>; corrections?: 
 export interface OverviewTerm { label: string; count: number; recent_count: number; first: string; last: string; max_severity: number | null }
 export interface Overview {
   profile: Profile | null; notes: number; weeks: number; frequent: OverviewTerm[]; recent: OverviewTerm[]; new: string[];
-  first: OverviewTerm | null; severe: OverviewTerm[]; labs_off: { name: string; value: string; unit: string; flag: "low" | "high"; date: string }[];
+  first: OverviewTerm | null; severe: OverviewTerm[]; labs_off: OverviewLab[];
   family: string[]; denied: string[]; mood: { avg: number; trend: "down" | "up" | "flat" } | null;
   asks: { text: string; entry_id: string; date: string }[];
+}
+/** One test with an out-of-range result: its latest out-of-range reading; `latest_in_range` when a later one is back in range. */
+export interface OverviewLab {
+  name: string; test_key: string; value: string; unit: string; flag: "low" | "high" | "positive"; date: string; latest_in_range: boolean;
 }

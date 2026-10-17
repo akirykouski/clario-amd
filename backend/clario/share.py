@@ -10,7 +10,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -20,6 +19,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from nacl.public import PrivateKey, PublicKey, SealedBox
 
+from .documents import is_off, lab_flag
 from .models import COUNTED, REVIEWED, Entity, Entry, LabResult, Pattern, SharedEntity, SharedLab, SharePackage
 
 
@@ -68,12 +68,12 @@ LAB_NAMES_EN = {
     "colesterolototale": "Total cholesterol", "sideremia": "Serum iron", "globulibianchi": "White blood cells",
     "globulirossi": "Red blood cells", "azotemia": "Blood urea nitrogen", "linfociti": "Lymphocytes",
 }
-_POSITIVE = re.compile(r"^\s*(positiv|reattiv|reactive|detected|rilevat)", re.I)
 RECENT_DAYS = 365
 
 
-def lab_abnormal(l: LabResult) -> bool:
-    return l.flag in ("low", "high") or bool(l.value_text and _POSITIVE.match(l.value_text))
+def lab_abnormal(l: LabResult | SharedLab) -> bool:
+    """Out of range: low, high, or a positive qualitative result (one rule, `documents.compute_flag`)."""
+    return is_off(lab_flag(l))
 
 
 def lab_needs_check(l: SharedLab) -> bool:
@@ -92,7 +92,7 @@ def shared_labs(labs: list[LabResult], since: str, until: str, batch_entry: dict
     rows = [l for l in ok if l.test_key in in_period or (l.date >= floor and lab_abnormal(l))]
     rows.sort(key=lambda l: (l.date, l.test_key, l.page))
     return [SharedLab(id=l.id, test_name=l.test_name, value_numeric=l.value_numeric, value_text=l.value_text, unit=l.unit,
-                      ref_low=l.ref_low, ref_high=l.ref_high, flag=l.flag, date=l.date, page=l.page,
+                      ref_low=l.ref_low, ref_high=l.ref_high, flag=lab_flag(l), date=l.date, page=l.page,
                       entry_id=batch_entry.get(l.batch_id), reviewed=l.review in REVIEWED, confidence=l.confidence,
                       needs_review=l.review == "needs_review", test_key=l.test_key, name_en=LAB_NAMES_EN.get(l.test_key),
                       abnormal=lab_abnormal(l)) for l in rows]

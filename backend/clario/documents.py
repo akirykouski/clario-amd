@@ -238,14 +238,46 @@ def test_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", fold(name))
 
 
-def compute_flag(num: float | None, lo: float | None, hi: float | None, given: str | None = None) -> str | None:
+# Qualitative results (no number, no range): a positive / present / reactive reading is out of range at any titre.
+_QUAL_NEG = re.compile(r"^\s*(negativ|assente|absent|non\s*-?\s*(reattiv|reactive|rilevat|present)|not\s+(detected|present)|"
+                       r"nonreactive)", re.I)
+_QUAL_POS = re.compile(r"^\s*(positiv|presente|present|reattiv|reactive|rilevat|detected)", re.I)
+OFF_FLAGS = ("low", "high", "positive")
+
+
+def qualitative_flag(text: str | None) -> str | None:
+    """"Positivo 1:80", "Presente", "Reattivo" -> positive; "Negativo", "Assente" -> normal; any other text -> None."""
+    if not text:
+        return None
+    if _QUAL_NEG.match(text):
+        return "normal"
+    if _QUAL_POS.match(text):
+        return "positive"
+    return None
+
+
+def compute_flag(num: float | None, lo: float | None, hi: float | None, given: str | None = None,
+                 text: str | None = None) -> str | None:
+    """The one place a lab flag is decided. `given` (what the model or the page said) is never trusted."""
     if num is not None and (lo is not None or hi is not None):
         if hi is not None and num > hi:
             return "high"
         if lo is not None and num < lo:
             return "low"
         return "normal"
+    if num is None:
+        return qualitative_flag(text)
     return None  # no printed range to compare with: never claim "normal"
+
+
+def lab_flag(lab: Any) -> str | None:
+    """Flag of a stored or shared lab row, recomputed, so rows stored before a rule change (an ANA "Positivo 1:80"
+    saved with no flag) read the same as new ones. The stored flag stays when the rule has nothing to say."""
+    return compute_flag(lab.value_numeric, lab.ref_low, lab.ref_high, text=lab.value_text) or lab.flag
+
+
+def is_off(flag: str | None) -> bool:
+    return flag in OFF_FLAGS
 
 
 def _vkey(r: RawLab) -> str:
@@ -429,7 +461,7 @@ def _rows_out(doc: RawDoc, confs: list, page_no: int, page_date: str | None, thr
             c, review = (None if c is None else min(c, UNGROUNDED_CAP)), "needs_review"
         rows.append({"test_name": r.test_name, "value_numeric": r.value_numeric, "value_text": r.value_text,
                      "unit": r.unit, "ref_low": r.ref_low, "ref_high": r.ref_high,
-                     "flag": compute_flag(r.value_numeric, r.ref_low, r.ref_high, r.flag),
+                     "flag": compute_flag(r.value_numeric, r.ref_low, r.ref_high, r.flag, r.value_text),
                      "date": r.date or page_date, "page": page_no, "confidence": c, "review": review})
     return rows
 
@@ -494,7 +526,7 @@ def apply_lab_action(lab: LabResult, action: str, given: dict | None = None) -> 
     else:
         raise ValueError("action must be confirm, correct or reject")
     new = lab.model_copy(update=upd)
-    return new.model_copy(update={"flag": compute_flag(new.value_numeric, new.ref_low, new.ref_high, new.flag)})
+    return new.model_copy(update={"flag": compute_flag(new.value_numeric, new.ref_low, new.ref_high, text=new.value_text)})
 
 
 def parse_lab_value(value: str) -> dict:

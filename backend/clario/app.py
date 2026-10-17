@@ -790,7 +790,10 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     @app.get("/api/inbox/{pid}/overview")
     def get_overview(pid: str, lang: str = "en") -> dict:
         """Plain-words summary of the package for the first look: no model call, no codes."""
-        pkg = clinic_ddx.with_corrections(open_pkg(pid), load_decisions(pid)["corrections"])
+        d = load_decisions(pid)
+        pkg = clinic_ddx.with_corrections(open_pkg(pid), d["corrections"])
+        rejected = {k for k, v in (d.get("labs") or {}).items() if v == "rejected"}  # as the lab table leaves them out
+        pkg = pkg.model_copy(update={"labs": [l for l in pkg.labs if l.id not in rejected]})
         return overview_mod.overview(pkg, onto, norm_lang(lang))
 
     @app.get("/api/inbox/{pid}/decisions")

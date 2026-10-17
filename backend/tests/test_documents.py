@@ -189,7 +189,7 @@ def test_batch_upload_sse_and_labs(unlocked, folder):
     assert c3["unit"] == "mg/dL"
     assert data["out_of_range"] == sum(t["out_of_range"] for t in data["tests"])
     for t in data["tests"]:
-        assert t["out_of_range"] == (t["latest"]["flag"] in ("low", "high"))
+        assert t["out_of_range"] == (t["latest"]["flag"] in ("low", "high", "positive"))
 
 
 def test_progress_stream_carries_the_gpu_reading(tmp_path, folder):

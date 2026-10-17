@@ -90,7 +90,8 @@ def _times(n: int, lang: str) -> str:
     return {1: "once", 2: "twice"}.get(n, f"{n} times")
 
 
-_LAB_FLAG = {"en": {"low": "low", "high": "high", "normal": "in range"}, "it": {"low": "basso", "high": "alto", "normal": "nella norma"}}
+_LAB_FLAG = {"en": {"low": "low", "high": "high", "normal": "in range", "positive": "positive"},
+             "it": {"low": "basso", "high": "alto", "normal": "nella norma", "positive": "positivo"}}
 
 
 def _num(n: float, lang: str = "en") -> str:
@@ -135,7 +136,7 @@ def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         name = rows[0].name_en if lang == "en" and rows[0].name_en else rows[0].test_name
         parts = []
         for r in rows:
-            flag = f", {_LAB_FLAG[lang][r.flag]}" if r.flag else ""
+            flag = f", {_LAB_FLAG[lang][r.flag]}" if r.flag and r.value_numeric is not None else ""  # "Positivo 1:80" says it
             parts.append(f"{(_lab_value(r, lang) + ' ' + r.unit).strip()}{flag} ({fdate(r.date, lang, year)}, {'pagina' if it else 'page'} {r.page})")
         rng = next((r for r in rows if r.ref_low is not None or r.ref_high is not None), None)
         rtxt = f"; {_range_text(rng.ref_low, rng.ref_high, lang)}" if rng else ""

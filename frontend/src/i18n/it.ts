@@ -530,6 +530,8 @@ export const it: Record<Key, string> = {
   "ov.upTo": "fino a {n}/10",
   "ov.low": "basso",
   "ov.high": "alto",
+  "ov.nowInRange": "ora nella norma",
+  "ov.nowNegative": "ora negativo",
   "share.about": "Su di te (facoltativo)",
   "share.aboutHint": "Età e sesso aiutano il medico a leggere le tue note. Lasciali vuoti se preferisci.",
   "share.age": "Età",
