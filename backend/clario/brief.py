@@ -58,13 +58,22 @@ def _day(pkg: SharePackage, iso: str) -> str:
         return iso
 
 
+def entry_aliases(pkg: SharePackage) -> dict[str, str]:
+    """Entry id -> short alias ("E1" is the first shared entry). Pseudonymised input carries these instead of the ids:
+    the pseudonymiser reads the digits in an id as a record number and would cut it ("e_[RECORD_NO]"), so the model
+    could only cite ids that do not exist. An alias has too few digits to look like an identifier."""
+    return {e.id: f"E{n + 1}" for n, e in enumerate(pkg.entries)}
+
+
 def model_input(pkg: SharePackage, lang: str = "en", relative_dates: bool = False) -> str:
     """The user message for the brief model. `relative_dates` (on whenever the input is pseudonymised): calendar
-    dates become day numbers in the period ("day 12"), so no date leaves the server; `restore_days` maps them back."""
+    dates become day numbers in the period ("day 12"), so no date leaves the server; `restore_days` maps them back.
+    Entry ids become aliases ("E3", `entry_aliases`) the pseudonymiser leaves alone; `restore_cites` maps them back."""
     when = (lambda d: _day(pkg, d)) if relative_dates else (lambda d: d)
-    entries = [{"id": e.id, "date": when(e.occurred_on), "text": e.text} for e in pkg.entries]
+    alias = entry_aliases(pkg) if relative_dates else {}
+    entries = [{"id": alias.get(e.id, e.id), "date": when(e.occurred_on), "text": e.text} for e in pkg.entries]
     terms = Counter((x.canonical, x.hpo_id) for x in pkg.entities if not x.negated and not x.family_history and not x.past)
-    past = [{"term": x.canonical, "when": when_text(x.past, lang, around=True), "entry": x.entry_id}
+    past = [{"term": x.canonical, "when": when_text(x.past, lang, around=True), "entry": alias.get(x.entry_id, x.entry_id)}
             for x in pkg.entities if x.past and not x.negated and not x.family_history]
     pats = [{"name": p.disease_name, "signal": p.signal, "overlap": [m.label for m in p.matched]} for p in pkg.patterns]
     head = {"language": "Italian" if lang == "it" else "English", "period": [when(d) for d in pkg.period]}
@@ -415,13 +424,27 @@ def restore_days(text: str, pkg: SharePackage) -> str:
     return _DAY.sub(iso, text)
 
 
+_ALIAS = re.compile(r"\s*E\s*(\d{1,4})\s*", re.I)
+
+
+def restore_cites(cites: list[str], pkg: SharePackage) -> list[str]:
+    """Cited aliases ("E3", written from pseudonymised input) -> this package's entry ids, before the citation check.
+    Real ids pass through (a local model sees them); anything else stays as it is and the check drops it."""
+    by_alias = {a: i for i, a in entry_aliases(pkg).items()}
+    out = []
+    for c in cites:
+        m = _ALIAS.fullmatch(c)
+        out.append(by_alias.get(f"E{int(m.group(1))}", c) if m else c)
+    return list(dict.fromkeys(out))
+
+
 def check_ai_items(pkg: SharePackage, draft: DraftOut, lang: str = "en") -> list[BriefItem]:
     valid = {e.id for e in pkg.entries}
     out = []
     for d in draft.items:
         text = localize_dates(restore_days(d.text.strip(), pkg), lang, pkg.period[0][:4] != pkg.period[1][:4])
         sec = d.section if d.section in SECTIONS else "summary"
-        cites = [c for c in d.cites if c in valid]
+        cites = [c for c in restore_cites(d.cites, pkg) if c in valid]
         if not text or len(text) > 500:
             continue
         if sec != "questions" and not cites:

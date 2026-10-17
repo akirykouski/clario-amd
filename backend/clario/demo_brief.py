@@ -27,7 +27,7 @@ _TOKEN = re.compile(r"\bE(\d+)\b")
 
 
 def _ids(pkg: SharePackage) -> dict[str, str]:
-    return {e.id: f"E{n + 1}" for n, e in enumerate(pkg.entries)}
+    return briefing.entry_aliases(pkg)  # the aliases pseudonymised input already carries (E1, E2, ...)
 
 
 def portable(text: str, pkg: SharePackage) -> str:
@@ -67,9 +67,8 @@ def lookup(pkg: SharePackage, lang: str) -> dict | None:
 
 
 def draft_out(rec: dict, pkg: SharePackage) -> briefing.DraftOut:
-    """The stored model output with its cited positions mapped to this package's entry ids."""
-    by_pos = {tok: eid for eid, tok in _ids(pkg).items()}
+    """The stored model output with its cited aliases (positions) mapped to this package's entry ids."""
     raw = briefing.DraftOut.model_validate(rec["output"])
     for it in raw.items:
-        it.cites = [by_pos.get(c, c) for c in it.cites]
+        it.cites = briefing.restore_cites(it.cites, pkg)
     return raw

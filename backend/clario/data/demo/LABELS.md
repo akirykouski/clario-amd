@@ -76,15 +76,18 @@ swollen wrists (day 34), the chest pain (day 37) and the GP blood test (day 30).
 "Generate brief" on the demo persona's package opens at once: the draft was generated once, live, and is stored.
 
 - **How.** One brief call per language to Gemma-4-31B-IT on AMD Token Factory on 2026-10-17, through the clinic's own
-  path (`make_llm` with the call log, so the input was pseudonymised as in production: dates as day numbers, names,
-  contacts and ids replaced), the same system prompt and `briefing.model_input`. The package was "Load the demo
-  patient" (Giulia, English; Giulia, Italian), "Import the 3 sample referti", then Share with the defaults (12 weeks,
-  patterns on, no question for the doctor). English: 925 tokens, 17.6 tokens/s, 52.5 s; Italian: 982 tokens,
-  19.1 tokens/s, 51.5 s. The chips show these numbers with "precomputed" and the date.
+  path (`make_llm` with the call log, so the input was pseudonymised as in production: dates as day numbers, entry
+  ids as aliases `E1`, `E2`, ..., names and contacts replaced), the same system prompt and `briefing.model_input`. The
+  package was "Load the demo patient" (Giulia, English; Giulia, Italian), "Import the 3 sample referti", then Share with
+  the defaults (12 weeks, patterns on, no question for the doctor). English: 672 tokens, 10.6 tokens/s, 63.3 s;
+  Italian: 540 tokens, 13.7 tokens/s, 39.3 s. The chips show these numbers with "precomputed" and the date. Every
+  cite was a known alias: English keeps all 10 lines, Italian 9 of 10 (the pattern line came back garbled,
+  "clinicosembles", so the hedge guardrail drops it).
 - **What is stored.** The model output as parsed (`DraftOut`), not reviewed or edited: cited entries as positions
   (`E1` is the first shared entry), dates as the model wrote them from day numbers. Serving runs the same code as a
   live draft (`restore_days`, the citation check, the hedge and diagnosis guardrails), so a line the live run would drop
-  is dropped here too (the model sometimes made up entry ids; those lines have no valid citation and never show).
+  is dropped here too. (An earlier run sent the real ids, which the pseudonymiser cut to `e_demo_[RECORD_NO]`, so the
+  model cited ids that do not exist and 3 of 10 English lines were dropped; the aliases fixed that.)
 - **When it is used.** Only when the package's model input is the one the draft was made from, up to the load day and
   the entry ids (`clario/demo_brief.py`: a hash of the input with ids as positions and dates as day offsets). A second
   opinion package of the same diary has the same input, so it gets the same draft. A note of one's own, a question
