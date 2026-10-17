@@ -19,7 +19,7 @@ from difflib import SequenceMatcher
 
 from pydantic import BaseModel, Field
 
-from .i18n import hpo_it
+from .i18n import hpo_it, term_label
 from .models import Brief, BriefItem, BriefLine, BriefWarning, SharePackage
 from .past import when_text
 from .safety import hedge_problems
@@ -209,9 +209,7 @@ def _note_text(note: str) -> str:
 
 
 def _label(x, lang: str) -> str:
-    if lang == "it" and x.hpo_id and hpo_it().get(x.hpo_id):
-        return hpo_it()[x.hpo_id]
-    return x.canonical
+    return term_label(x.hpo_id, x.canonical, lang)
 
 
 # Review-of-systems names for the organ-system keys of `clinic_ddx.system_key` ("other" gets no prefix)
@@ -391,11 +389,9 @@ TITLES = {
                         "labs": "Esami", "medications": "Farmaci", "patterns": "Da discutere con il medico (non è una diagnosi)",
                         "questions": "Domande"},
 }
-FOOTER = {
-    ("clinician", "en"): "Prepared with Clario. AI-drafted items were reviewed by the clinician before this brief was final.",
-    ("clinician", "it"): "Preparato con Clario. Le voci scritte dall'IA sono state riviste dal medico prima di rendere definitivo questo riepilogo.",
-    ("patient", "en"): "Prepared with Clario. This is a plain-words copy of the brief your clinician reviewed. It is not a diagnosis.",
-    ("patient", "it"): "Preparato con Clario. È una copia in parole semplici del riepilogo rivisto dal tuo medico. Non è una diagnosi.",
+FOOTER = {  # the clinician brief.md; the patient copy's footer is in brief_pdf.WORDS
+    "en": "Prepared with Clario. AI-drafted items were reviewed by the clinician before this brief was final.",
+    "it": "Preparato con Clario. Le voci scritte dall'IA sono state riviste dal medico prima di rendere definitivo questo riepilogo.",
 }
 
 
@@ -584,35 +580,60 @@ def _id() -> str:
     return f"bi_{uuid.uuid4().hex[:8]}"
 
 
-def to_markdown(pkg: SharePackage, brief: Brief, audience: str = "clinician", lang: str | None = None, onto=None) -> str:
-    lang = lang or brief.lang
-    if onto is not None:
-        brief = render_brief(pkg, brief, audience, lang, onto)
+def _reviewed_sections(pkg: SharePackage, brief: Brief, audience: str, lang: str) -> list[tuple[str, list[str]]]:
+    """(section title, lines) of an already rendered brief: accepted and edited items only, cited dates in brackets
+    (not on the patient's own lines in the patient copy, which already say when),
+    the patient's own question with its label; AI lines tagged as reviewed on the clinician copy only."""
     it = lang == "it"
     dates = {e.id: e.occurred_on for e in pkg.entries}
-    titles = TITLES[(audience, lang)]
-    if audience == "clinician":
-        head = f"# Riepilogo clinico: {pkg.patient_alias}" if it else f"# Clinician brief: {pkg.patient_alias}"
-    else:
-        head = f"# Il tuo riepilogo: {pkg.patient_alias}" if it else f"# Your summary: {pkg.patient_alias}"
     year = pkg.period[0][:4] != pkg.period[1][:4]
-    lines = [head, f"Periodo {_span(list(pkg.period), 'it', True)}" if it else f"Period {_span(list(pkg.period), 'en', True)}", ""]
-    for sec, title in titles.items():
+    out: list[tuple[str, list[str]]] = []
+    for sec, title in TITLES[(audience, lang)].items():
         items = [i for i in brief.items if i.section == sec and i.review in ("accepted", "edited")]
         if not items:
             continue
-        lines.append(f"## {title}")
+        lines = []
         for i in items:
-            cite = ", ".join(fdate(dates.get(c, c), lang, year) for c in i.cites)
+            own = audience == "patient" and i.origin == "patient"  # the patient's lines already say when, in words
+            cite = "" if own else ", ".join(fdate(dates.get(c, c), lang, year) for c in i.cites)
             tag = "" if i.origin != "ai" or audience == "patient" else (" (bozza IA, rivista)" if it else " (AI-drafted, reviewed)")
             lead = ""
             if i.kind == "patient_note":
                 lead = ("La tua domanda per questa visita: " if it else "Your question for this visit: ") if audience == "patient" \
                     else ("Domanda del paziente per questa visita: " if it else "Patient's question for this visit: ")
-            lines.append(f"- {lead}{i.text}{f' [{cite}]' if cite else ''}{tag}")
-        lines.append("")
-    lines.append(FOOTER[(audience, lang)])
+            lines.append(f"{lead}{i.text}{f' [{cite}]' if cite else ''}{tag}")
+        out.append((title, lines))
+    return out
+
+
+def to_markdown(pkg: SharePackage, brief: Brief, lang: str | None = None, onto=None) -> str:
+    """The signed clinician brief as Markdown (the patient copy is a PDF: `to_patient_pdf`)."""
+    lang = lang or brief.lang
+    if onto is not None:
+        brief = render_brief(pkg, brief, "clinician", lang, onto)
+    it = lang == "it"
+    head = f"# Riepilogo clinico: {pkg.patient_alias}" if it else f"# Clinician brief: {pkg.patient_alias}"
+    lines = [head, f"Periodo {_span(list(pkg.period), 'it', True)}" if it else f"Period {_span(list(pkg.period), 'en', True)}", ""]
+    for title, body in _reviewed_sections(pkg, brief, "clinician", lang):
+        lines += [f"## {title}", *(f"- {b}" for b in body), ""]
+    lines.append(FOOTER[lang])
     return "\n".join(lines) + "\n"
+
+
+def to_patient_pdf(pkg: SharePackage, brief: Brief, lang: str, onto) -> bytes:
+    """The patient copy of a signed brief as a one-page PDF: the same content rules as `render_brief(..., "patient")`
+    (only AI lines the clinician kept or edited, plain words, no condition names), under "Summary from your visit"
+    with the pseudonym, the signing date and the clinician who signed."""
+    from . import brief_pdf
+
+    view = render_brief(pkg, brief, "patient", lang, onto)
+    w = brief_pdf.WORDS[lang]
+    sections = _reviewed_sections(pkg, view, "patient", lang)
+    when = fdate((brief.finalized_at or "")[:10], lang, True) if brief.finalized_at else ""
+    return brief_pdf.render(brief_pdf.PdfBrief(
+        lang=lang, kicker="Clario", title=w["p_title"], subtitle=" · ".join(x for x in (pkg.patient_alias, when) if x),
+        sections=sections, provenance=[], signed=w["p_signed"].format(name=brief.signed_by or "?"),
+        notes=[] if sections else [w["p_empty"]], footer=w["p_footer"], sizes=brief_pdf.PATIENT_SIZES))
 
 
 # ---------------------------------------------------------------- edit and sign: the brief as plain text

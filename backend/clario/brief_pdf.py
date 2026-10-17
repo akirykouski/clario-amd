@@ -2,7 +2,9 @@
 
 Two states: the AI draft (watermarked "AI draft, not reviewed") and the signed brief (clinician name, date and
 "Reviewed and signed by"). Both carry the provenance: which model drafted it, where it ran (AMD Token Factory), and
-whether the model input was sent pseudonymised. The font is DejaVu Sans (shipped in data/fonts), so Italian and any
+whether the model input was sent pseudonymised. The patient copy is the third state: "Clario" over "Summary from
+your visit", the patient's pseudonym and the date, the clinician who signed, plain-words sections and the reminder that
+Clario does not diagnose (no model provenance: the patient reads what the clinician reviewed). The font is DejaVu Sans (shipped in data/fonts), so Italian and any
 other Latin text prints as written. The body shrinks until the brief fits one A4 page.
 """
 
@@ -18,6 +20,7 @@ FONTS = Path(__file__).parent / "data" / "fonts"
 TOKEN_FACTORY = "amd-token-factory"
 OFFLINE = "offline-fixtures"
 SIZES = (10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5)
+PATIENT_SIZES = (12.0, 11.5, 11.0, 10.5) + SIZES  # the patient copy starts larger: it is read at home, not at a desk
 
 WORDS = {
     "en": {"title": "Clinician brief: {alias}", "period": "Period {a} to {b}", "focus": "Focus: {sp}",
@@ -28,7 +31,11 @@ WORDS = {
            "local": "Model input stayed on this server.",
            "offline": "Offline demo: drafted from fixtures, no model call.",
            "footer": "Prepared with Clario. Patterns are not a diagnosis.",
-           "tf": "{model} on AMD Token Factory", "demo_model": "offline demo fixtures"},
+           "tf": "{model} on AMD Token Factory", "demo_model": "offline demo fixtures",
+           "p_title": "Summary from your visit", "p_signed": "Reviewed and signed by {name}",
+           "p_footer": ["Clario organises information; it does not diagnose or give treatment advice.",
+                        "Ask your doctor about anything here."],
+           "p_empty": "Nothing to show yet."},
     "it": {"title": "Riepilogo clinico: {alias}", "period": "Periodo dal {a} al {b}", "focus": "Specialità: {sp}",
            "draft": "Bozza IA, non rivista", "draft_banner": "BOZZA IA, NON RIVISTA. Modificala e firmala prima di usarla.",
            "signed": "Rivisto e firmato da {name}, {date}", "drafted_by": "Bozza scritta da {model}.",
@@ -37,7 +44,11 @@ WORDS = {
            "local": "I dati per il modello sono rimasti su questo server.",
            "offline": "Demo offline: bozza dalle fixture, nessuna chiamata al modello.",
            "footer": "Preparato con Clario. Gli schemi non sono una diagnosi.",
-           "tf": "{model} su AMD Token Factory", "demo_model": "fixture demo offline"},
+           "tf": "{model} su AMD Token Factory", "demo_model": "fixture demo offline",
+           "p_title": "Riepilogo della tua visita", "p_signed": "Rivisto e firmato da {name}",
+           "p_footer": ["Clario organizza le informazioni; non fa diagnosi e non dà consigli sulle cure.",
+                        "Chiedi al tuo medico qualsiasi cosa trovi qui."],
+           "p_empty": "Ancora niente da mostrare."},
 }
 
 
@@ -66,6 +77,9 @@ class PdfBrief:
     provenance: list[str]
     signed: str | None = None  # "Reviewed and signed by ..." line; None = AI draft
     notes: list[str] = field(default_factory=list)
+    kicker: str | None = None  # small line over the title ("Clario" on the patient copy)
+    footer: list[str] | None = None  # replaces provenance + the clinician footer (the patient copy)
+    sizes: tuple[float, ...] = SIZES
 
 
 class _Doc(FPDF):
@@ -75,7 +89,7 @@ class _Doc(FPDF):
         self.add_font("DejaVu", "", str(FONTS / "DejaVuSans.ttf"))
         self.add_font("DejaVu", "B", str(FONTS / "DejaVuSans-Bold.ttf"))
         self.set_margins(16, 14, 16)
-        self.footer_lines = self.b.provenance + [WORDS[b.lang]["footer"]]
+        self.footer_lines = b.footer if b.footer is not None else b.provenance + [WORDS[b.lang]["footer"]]
         self.set_auto_page_break(True, margin=10 + 3.6 * len(self.footer_lines))
         self.set_title(b.title)
         self.set_creator("Clario")
@@ -105,6 +119,10 @@ def _render(b: PdfBrief, size: float) -> FPDF:
     pdf = _Doc(b)
     pdf.add_page()
     width = pdf.w - pdf.l_margin - pdf.r_margin
+    if b.kicker:
+        pdf.set_text_color(31, 92, 153)
+        pdf.set_font("DejaVu", "B", 11)
+        pdf.cell(0, 5.5, b.kicker, new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(20, 20, 20)
     pdf.set_font("DejaVu", "B", 15)
     pdf.cell(0, 7.5, b.title, new_x="LMARGIN", new_y="NEXT")
@@ -147,7 +165,7 @@ def _render(b: PdfBrief, size: float) -> FPDF:
 def render(b: PdfBrief) -> bytes:
     """The brief as PDF bytes: the largest body size that fits one page (the smallest size if nothing does)."""
     pdf = None
-    for size in SIZES:
+    for size in b.sizes:
         pdf = _render(b, size)
         if pdf.pages_count == 1:
             break

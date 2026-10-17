@@ -379,7 +379,7 @@ export const it: Record<Key, string> = {
   "brief.copyPatient": "Copia per il paziente",
   "brief.copyPatientHint": "Parole semplici, senza nomi di condizioni, solo righe dell'IA che hai tenuto o modificato prima di firmare.",
   "brief.copyPatientEmpty": "Niente da mostrare in questa lingua.",
-  "brief.openPatientMd": "Apri la copia per il paziente",
+  "brief.openPatientPdf": "Apri la copia per il paziente (PDF)",
   "brief.aiDraftBadge": "Bozza IA, non rivista",
   "brief.pdfTitle": "PDF del riepilogo",
   "brief.openPdf": "Apri il PDF",

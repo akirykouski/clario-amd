@@ -17,6 +17,12 @@ from conftest import confirm_all, settings, sign_brief, sse, wait_extracted
 from test_integration import import_demo_pdfs
 
 
+def pdf_text(data: bytes) -> str:
+    import pypdfium2 as pdfium
+
+    return " ".join(pg.get_textpage().get_text_bounded() for pg in pdfium.PdfDocument(data)).replace("\r", "").replace("\n", " ")
+
+
 def entities(client):
     return [x for e in client.get("/api/entries").json() for x in e["entities"]]
 
@@ -176,7 +182,23 @@ def test_brief_for_two_audiences_and_two_languages(unlocked, clinic_server, tmp_
         # wrong language for the AI items: they are left out of the patient copy, never shown untranslated
         pe = clinic.get(f"/api/inbox/{pid}/brief", params={"audience": "patient", "lang": "en"}).json()
         assert not any(i["origin"] == "ai" for i in pe["items"]) and "HP:" not in " ".join(i["text"] for i in pe["items"])
-        md = clinic.get(f"/api/inbox/{pid}/brief.md", params={"audience": "patient", "lang": "it"}).text
-        assert md.startswith("# Il tuo riepilogo") and "Non è una diagnosi" in md and "HP:" not in md
+        pdf = clinic.get(f"/api/inbox/{pid}/brief/patient.pdf", params={"lang": "it"})
+        assert pdf.headers["content-type"] == "application/pdf" and page_count(pdf.content) == 1
+        ptxt = pdf_text(pdf.content)
+        assert "Clario" in ptxt and "Riepilogo della tua visita" in ptxt and "Rivisto e firmato da Dott.ssa Maria Bianchi" in ptxt
+        assert "non fa diagnosi" in ptxt and "Chiedi al tuo medico" in ptxt and "Arrossamento a farfalla" in ptxt
+        assert "HP:" not in ptxt and "lupus" not in ptxt.lower() and "Gemma" not in ptxt
+        en_pdf = pdf_text(clinic.get(f"/api/inbox/{pid}/brief/patient.pdf", params={"lang": "en"}).content)
+        assert "Summary from your visit" in en_pdf and "Reviewed and signed by Dott.ssa Maria Bianchi" in en_pdf
+        assert "it does not diagnose or give treatment advice" in en_pdf and "HP:" not in en_pdf
+        assert clinic.get(f"/api/inbox/{pid}/brief.md", params={"audience": "patient"}).text.startswith("# Riepilogo clinico")
         mdc = clinic.get(f"/api/inbox/{pid}/brief.md").text
         assert mdc.startswith("# Riepilogo clinico") and "HP:0002829" in mdc and "bozza IA, rivista" in mdc
+
+
+def test_findings_without_hpo_id_get_an_italian_name():
+    from clario.i18n import term_label
+
+    assert term_label(None, "Burning sensation", "it") == "Sensazione di bruciore"
+    assert term_label(None, "Burning sensation", "en") == "Burning sensation"
+    assert term_label(None, "Something unlisted", "it") == "Something unlisted"

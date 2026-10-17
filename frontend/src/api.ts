@@ -97,7 +97,10 @@ export const api = {
   /** One-page PDF: the AI draft (watermarked, for `specialty`) until signed, then the signed brief. `v` busts the cache. */
   briefPdfUrl: (id: string, v?: { specialty?: Specialty; v?: string }) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.pdf`, v),
   clinicMetrics: () => request<ClinicMetrics>("GET", "/clinic/metrics"),
-  briefMdUrl: (id: string, v?: BriefView) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.md`, v),
+  /** The signed clinician brief as Markdown. */
+  briefMdUrl: (id: string) => buildUrl(`/inbox/${encodeURIComponent(id)}/brief.md`),
+  /** The patient copy of the signed brief: a one-page PDF rendered by the clinic server, in `lang`. */
+  briefPatientPdfUrl: (id: string, lang: "en" | "it") => buildUrl(`/inbox/${encodeURIComponent(id)}/brief/patient.pdf`, { lang }),
   privacyPreview: (entryId: string) => request<PrivacyPreview>("GET", "/privacy/preview", { params: { entry_id: entryId } }),
   privacyCalls: (limit = 50) => request<AiCall[]>("GET", "/privacy/calls", { params: { limit: String(limit) } }),
   privacyVerify: () => request<PrivacyVerify>("GET", "/privacy/verify"),

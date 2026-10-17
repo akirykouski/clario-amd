@@ -37,7 +37,7 @@ def since_previous(pkg: SharePackage, prev_date: str | None, onto: Ontology, lan
     for x in patient_mentions(pkg.entities):
         k = x.hpo_id or x.canonical.lower()
         if k not in first or x.occurred_on < first[k][0]:
-            label = term_label(x.hpo_id, onto.label(x.hpo_id) or x.canonical, lang) if x.hpo_id else x.canonical
+            label = term_label(x.hpo_id, onto.label(x.hpo_id) or x.canonical, lang) if x.hpo_id else term_label(None, x.canonical, lang)
             first[k] = (x.occurred_on, label)
     out = sorted(v for v in first.values() if v[0] > prev_date)
     out += sorted((t.date or "", f"{t.test}: {t.result}") for t in pkg.tested if t.abnormal and (t.date or "") > prev_date)

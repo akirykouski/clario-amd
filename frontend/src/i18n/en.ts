@@ -378,7 +378,7 @@ export const en = {
   "brief.copyPatient": "Patient copy",
   "brief.copyPatientHint": "Plain words, no condition names, only AI lines you kept or edited when signing.",
   "brief.copyPatientEmpty": "Nothing to show in this language.",
-  "brief.openPatientMd": "Open patient copy",
+  "brief.openPatientPdf": "Open patient copy (PDF)",
   "brief.aiDraftBadge": "AI draft, not reviewed",
   "brief.pdfTitle": "Brief PDF",
   "brief.openPdf": "Open PDF",

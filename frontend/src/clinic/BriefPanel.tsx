@@ -201,7 +201,7 @@ function PatientCopy({ pkg, view }: { pkg: SharePackage; view: Brief | null }) {
         );
       })}
       <div className="no-print flex gap-3 flex-wrap">
-        <a className="btn" href={api.briefMdUrl(pkg.package_id, { audience: "patient", lang })} target="_blank" rel="noreferrer">{t("brief.openPatientMd")}</a>
+        <a className="btn btn-primary" href={api.briefPatientPdfUrl(pkg.package_id, lang)} target="_blank" rel="noreferrer" data-testid="patient-pdf"><FileText size={16} aria-hidden /> {t("brief.openPatientPdf")}</a>
       </div>
     </div>
   );

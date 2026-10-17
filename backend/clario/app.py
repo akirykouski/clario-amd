@@ -1207,13 +1207,22 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
                               second.since_previous(dpkg, full.previous.date, onto, lang))
 
     @app.get("/api/inbox/{pid}/brief.md", response_class=PlainTextResponse)
-    def brief_md(pid: str, audience: str | None = None, lang: str | None = None):
+    def brief_md(pid: str, lang: str | None = None):
+        """The signed clinician brief as Markdown (409 before signing)."""
         open_pkg(pid)
         b = load_brief(pid)
         if not b or not b.finalized:
             raise HTTPException(409, "Sign the brief first")
-        pkg, b, aud, lg = view(pid, audience, lang)
-        return briefing.to_markdown(pkg, b, aud, lg, onto)
+        pkg, b, _aud, lg = view(pid, None, lang)
+        return briefing.to_markdown(pkg, b, lg, onto)
+
+    @app.get("/api/inbox/{pid}/brief/patient.pdf")
+    def brief_patient_pdf(pid: str, lang: str | None = None):
+        """The patient copy of the signed brief as a one-page PDF, in `lang` (default: the brief's). 409 before signing."""
+        pkg, b, _aud, lg = view(pid, "patient", lang)
+        data = briefing.to_patient_pdf(pkg, b, lg, onto)
+        return Response(data, media_type="application/pdf", headers={
+            "Content-Disposition": f'inline; filename="clario-patient-copy-{pid}-{lg}.pdf"', "Cache-Control": "no-store"})
 
 
 def main() -> None:
