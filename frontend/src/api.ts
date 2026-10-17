@@ -1,6 +1,6 @@
 import type {
   AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicMetrics, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
-  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition, Overview, Profile,
+  ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition, Overview, Profile, LabCorrection,
 } from "./types";
 
 export class ApiError extends Error {
@@ -106,6 +106,9 @@ export const api = {
   decisions: (id: string) => request<Decisions>("GET", `/inbox/${encodeURIComponent(id)}/decisions`),
   decideLab: (id: string, labId: string, decision: TermDecision) =>
     request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/labs/${encodeURIComponent(labId)}`, { body: { decision } }),
+  /** The clinician's reading of the printed row replaces the OCR reading; ranking then uses it (computed in code). */
+  correctLab: (id: string, labId: string, c: LabCorrection) =>
+    request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/labs/${encodeURIComponent(labId)}`, { body: { decision: "corrected", ...c } }),
   decideTerm: (id: string, entId: string, decision: TermDecision) =>
     request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/terms/${encodeURIComponent(entId)}`, { body: { decision } }),
   replaceTerm: (id: string, entId: string, hpoId: string) =>

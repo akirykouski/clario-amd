@@ -191,7 +191,12 @@ class SharedLab(BaseModel):
     test_key: str = Field("", description="Folded test name: groups the same test across documents into one history")
     name_en: str | None = Field(None, description="English name of a known test, for an English clinic UI; test_name is as printed")
     abnormal: bool = Field(False, description="Flag is low, high or positive (out of range)")
-    decision: Literal["confirmed", "rejected"] | None = Field(None, description="The clinic's decision on a row that needed a check; set by the clinic server, absent in the sealed package")
+    decision: Literal["confirmed", "rejected", "corrected"] | None = Field(None, description="The clinic's decision on a row that needed a check; set by the clinic server, absent in the sealed package")
+    checks: list[str] = Field(default_factory=list, description="Code checks the reading failed on the device (documents.CHECKS)")
+    crop: str | None = Field(None, description="The printed row cut from the report page, a JPEG data URL (no page header, no name); "
+                             "null when the row has no position (photo or scan) or the size budget was spent")
+    corrected_from: dict | None = Field(None, description="Set by the clinic server when the clinician corrected the reading: "
+                                        "{value_numeric, value_text, unit} as it was read")
 
 
 class SharePackage(BaseModel):
@@ -355,6 +360,9 @@ class LabResult(BaseModel):
     confidence: float | None = Field(None, ge=0, le=1, description="Self-consistency or model confidence")
     review: LabReview = "auto"
     model: str | None = None
+    checks: list[str] = Field(default_factory=list, description="Code checks the reading failed (documents.CHECKS): why it waits for a person")
+    box: list[float] | None = Field(None, description="Where the row is printed on the page: [x0, y0, x1, y1] as fractions of the page, "
+                                    "origin top left; from the PDF text layer, null for photos and scans")
 
 
 class LabValue(BaseModel):

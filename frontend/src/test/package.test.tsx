@@ -59,8 +59,8 @@ const overview = {
   asks: [{ text: "I want to ask about the joint pain.", entry_id: "e1", date: "2026-10-01" }],
 };
 
-function mount(overviewDown = false) {
-  vi.spyOn(api, "package").mockResolvedValue(pkg);
+function mount(overviewDown = false, shared: SharePackage = pkg) {
+  vi.spyOn(api, "package").mockResolvedValue(shared);
   vi.spyOn(api, "inbox").mockResolvedValue([{ package_id: "pkg_1", patient_alias: "Ash-001", period: pkg.period, received_at: "x", expires_at: "x", entities: 2, brief_state: "none" }]);
   vi.spyOn(api, "decisions").mockResolvedValue({ terms: {}, answers: [] });
   vi.spyOn(api, "termSystems").mockResolvedValue({ "HP:0002829": "joints" });
@@ -132,6 +132,37 @@ describe("clinic package page", () => {
     expect(decide).toHaveBeenCalledWith("pkg_1", "l2", "rejected");
     expect(await within(box).findByText("Rejected by you")).toBeInTheDocument();
     expect(within(screen.getByTestId("pkg-labs")).queryAllByText(/90 mg\/dL/)).toHaveLength(0);
+  });
+
+  it("shows where an OCR reading came from and lets the clinician correct it; the ranking is fetched again", async () => {
+    const crop = "data:image/jpeg;base64,AAAA";
+    const read = { ...pkg, labs: pkg.labs.map((l) => (l.id === "l2" ? { ...l, value_numeric: 9, checks: ["not_on_page", "low_confidence"], crop } : l)) };
+    mount(false, read);
+    const ddxCalls = vi.mocked(api.ddx);
+    const box = await screen.findByTestId("needs-check");
+    await within(box).findByText("Glucose: 9 mg/dL");
+    expect(within(box).getByTestId("lab-why")).toHaveTextContent("not printed like this on the page; the reader was unsure");
+    const img = within(box).getByRole("img", { name: /Printed row on the report: Glucose/ });
+    expect(img).toHaveAttribute("src", crop);
+    expect(within(box).getByTestId("lab-counts-note")).toHaveTextContent("only after you confirm or correct them");
+    const fixed = { ...read, labs: read.labs.map((l) => (l.id === "l2" ? { ...l, value_numeric: 90, decision: "corrected" as const,
+      corrected_from: { value_numeric: 9, value_text: null, unit: "mg/dL" } } : l)) };
+    const correct = vi.spyOn(api, "correctLab").mockImplementation(async () => {
+      vi.spyOn(api, "package").mockResolvedValue(fixed);
+      return { terms: {}, labs: { l2: "corrected" }, answers: [],
+               lab_fixes: { l2: { from: { value_numeric: 9, value_text: null, unit: "mg/dL" }, to: { value_numeric: 90, value_text: null, unit: "mg/dL" }, at: "x" } } };
+    });
+    const before = ddxCalls.mock.calls.length;
+    await userEvent.click(within(box).getByRole("button", { name: /correct/i }));
+    const form = within(box).getByTestId("lab-correct");
+    const value = within(form).getByLabelText("Value");
+    await userEvent.clear(value);
+    await userEvent.type(value, "90");
+    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
+    expect(correct).toHaveBeenCalledWith("pkg_1", "l2", { value: "90", unit: "mg/dL" });
+    expect(await within(box).findByText("Corrected by you, read as 9 mg/dL")).toBeInTheDocument();
+    expect(await within(box).findByText("Glucose: 90 mg/dL")).toBeInTheDocument();
+    await waitFor(() => expect(ddxCalls.mock.calls.length).toBeGreaterThan(before));  // only checked readings rank: ask again
   });
 
   it("confirms every uncertain reading in one call", async () => {

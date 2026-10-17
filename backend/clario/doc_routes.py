@@ -30,6 +30,8 @@ MAX_FILE_BYTES = 60 * 1024 * 1024
 # provenance of the demo referti rows: what produced them, never a claim of a live call (data/demo/LABELS.md)
 PRECOMPUTED_LABS = ("precomputed: MinerU2.5-Pro OCR on AMD Token Factory, table read in code, "
                     "checked against the truth file (eval/results/documents_tf-mineru-table.json)")
+PRECOMPUTED_MISREAD = ("precomputed: deliberate demo misread, not from a live read (data/demo/LABELS.md); "
+                      "the page prints a different value and the code checks send it to the clinician")
 FINISHED_TTL = 15 * 60  # seconds a finished batch stays readable for its progress stream, then dropped
 
 
@@ -73,14 +75,25 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         b["labs"] += 1
         b["needs_review"] += lab.review == "needs_review"
 
-    def store_precomputed(bid: str, pages: list[list[dict]]) -> None:
+    def store_precomputed(bid: str, pages: list[list[dict]], page_info: list[docs.Page]) -> None:
         """Demo referti: the rows a live read of these pages gives (OCR, table read in code), stored without a call.
-        Same review rule as the live table path: clean cells get docs.TABLE_CONFIDENCE, flags recomputed in code."""
+        Same review rule as the live table path: clean cells get docs.TABLE_CONFIDENCE, flags recomputed in code, and
+        the same code checks against the page's own text layer (a deliberate demo misread fails them)."""
         b = batches[bid]
         for i, rows in enumerate(pages):
+            pg = page_info[i] if i < len(page_info) else None
             for r in rows:
+                r = dict(r)
+                misread = r.pop("demo_misread", False)
+                conf = docs.TABLE_CONFIDENCE
+                checks = docs.code_checks(r, page_text=pg.text if pg else None, confidence=conf, threshold=s.review_threshold)
+                if any(k != "low_confidence" for k in checks):
+                    conf = min(conf, docs.UNGROUNDED_CAP)
                 store_row(bid, {**r, "flag": docs.compute_flag(r["value_numeric"], r["ref_low"], r["ref_high"], r["flag"], r["value_text"]),
-                                "page": i + 1, "confidence": docs.TABLE_CONFIDENCE, "review": "auto"}, PRECOMPUTED_LABS)
+                                "page": i + 1, "confidence": conf, "review": "needs_review" if checks else "auto",
+                                "checks": checks,
+                                "box": docs.locate_row(pg.lines if pg else None, r["test_name"], r["value_numeric"], r["value_text"])},
+                          PRECOMPUTED_MISREAD if misread else PRECOMPUTED_LABS)
             b["done"] += 1
         b["finished"] = time.monotonic()
 
@@ -149,7 +162,7 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
                         "started": time.monotonic(), "finished": None, "entry_id": entry.id, "occurred_on": occurred,
                         "shift_days": shift_days, "precomputed": precomputed is not None}
         if precomputed is not None:
-            store_precomputed(bid, precomputed)
+            store_precomputed(bid, precomputed, pages)
         else:
             spawn(run_batch(bid, pages))
         return {"batch_id": bid, "pages": len(pages), "entry_id": entry.id}

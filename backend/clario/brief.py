@@ -119,6 +119,16 @@ def _lab_value(r, lang: str = "en") -> str:
     return r.value_text or (_num(r.value_numeric, lang) if r.value_numeric is not None else "?")
 
 
+def _corrected_note(r, lang: str) -> str:
+    """", corrected by the clinician (read as 1,1 g/dL)" for a reading the clinician corrected, else ""."""
+    f = r.corrected_from
+    if not f:
+        return ""
+    was = f.get("value_text") or (_num(f["value_numeric"], lang) if f.get("value_numeric") is not None else "?")
+    was = f"{was} {f.get('unit') or ''}".strip()
+    return f", corretto dal medico (letto {was})" if lang == "it" else f", corrected by the clinician (read as {was})"
+
+
 def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
     """Lab lines straight from the shared rows (no model). Only tests that are out of range, positive or changed over
     time get a line; the rest are one count. A line is `pending` while any of its rows still needs a clinician check, then `accepted`."""
@@ -141,7 +151,8 @@ def lab_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         parts = []
         for r in rows:
             flag = f", {_LAB_FLAG[lang][r.flag]}" if r.flag and r.value_numeric is not None else ""  # "Positivo 1:80" says it
-            parts.append(f"{(_lab_value(r, lang) + ' ' + r.unit).strip()}{flag} ({fdate(r.date, lang, year)}, {'pagina' if it else 'page'} {r.page})")
+            parts.append(f"{(_lab_value(r, lang) + ' ' + r.unit).strip()}{flag} ({fdate(r.date, lang, year)}, {'pagina' if it else 'page'} {r.page}"
+                         f"{_corrected_note(r, lang)})")
         rng = next((r for r in rows if r.ref_low is not None or r.ref_high is not None), None)
         rtxt = f"; {_range_text(rng.ref_low, rng.ref_high, lang)}" if rng else ""
         mark = f" ({_LOW[lang]})" if pending else ""

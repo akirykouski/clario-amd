@@ -74,7 +74,13 @@ def test_demo_referti_load_without_ocr(unlocked, no_model):
     r = unlocked.post("/api/demo/documents").json()
     assert r["pages"] == 3
     labs = unlocked.get("/api/labs").json()
-    assert labs["n_results"] == 48 and labs["needs_review"] == 0  # what the live MinerU table read gave
+    # the live MinerU table read gave 48 of 48 right; two rows are stored as deliberate misreads (LABELS.md) and the
+    # code checks against the page's text layer send exactly those two to the clinician
+    assert labs["n_results"] == 48 and labs["needs_review"] == 2
+    unsure = sorted((d["test_name"], d["value_numeric"], tuple(d["checks"])) for d in unlocked.app.state.vault.all("lab")
+                    if d["review"] == "needs_review")
+    assert unsure == [("Emoglobina", 1.1, ("not_on_page", "implausible")), ("Sodio", 141.0, ("not_on_page",))]
+    assert all(d["model"].startswith(PRECOMPUTED) and d["box"] for d in unlocked.app.state.vault.all("lab"))
     assert no_model == []
     with unlocked.stream("GET", f"/api/documents/batch/{r['batch_id']}/events") as s:
         ev = next(json.loads(line[5:]) for line in s.iter_lines() if line.startswith("data:"))

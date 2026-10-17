@@ -84,11 +84,20 @@ def persona_labels(persona: str) -> dict[str, list[dict]]:
 
 
 def truth_rows(pdf: Path) -> list[list[dict]]:
-    """Per page of a shipped referto, the rows a live OCR read gives (truth sidecar written by scripts/make_referti.py)."""
+    """Per page of a shipped referto, the rows a live OCR read gives (truth sidecar written by scripts/make_referti.py).
+    A test with `demo_read` is stored as that deliberate misread instead (marked `demo_misread`, see LABELS.md), so
+    the clinician's check of an OCR error shows in the demo. The truth file itself keeps the printed value."""
     doc = json.loads(pdf.with_suffix(".truth.json").read_text())
-    return [[{"test_name": t["test_name"], "value_numeric": t["value_numeric"], "value_text": t["value_text"],
-              "unit": t["unit"], "ref_low": t["ref_low"], "ref_high": t["ref_high"], "flag": t["flag"],
-              "date": doc["date"]} for t in p["tests"]] for p in sorted(doc["pages"], key=lambda p: p["page"])]
+
+    def row(t: dict) -> dict:
+        r = {"test_name": t["test_name"], "value_numeric": t["value_numeric"], "value_text": t["value_text"],
+             "unit": t["unit"], "ref_low": t["ref_low"], "ref_high": t["ref_high"], "flag": t["flag"], "date": doc["date"]}
+        mis = t.get("demo_read")
+        if mis:
+            r.update({k: mis[k] for k in ("value_numeric", "value_text", "unit") if k in mis}, flag=None, demo_misread=True)
+        return r
+
+    return [[row(t) for t in p["tests"]] for p in sorted(doc["pages"], key=lambda p: p["page"])]
 
 
 REFERTI_LATEST = date(2026, 2, 21)  # the newest report date printed on the shipped referti (a test pins it)

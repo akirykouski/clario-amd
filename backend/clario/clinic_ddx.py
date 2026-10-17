@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .documents import test_key
+from .documents import compute_flag, is_off, test_key
 from .i18n import disease_name, term_label
 from .knowledge import Ontology
 from .models import (ClinicQuestion, Condition, ConditionFeature, Entity, Entry, SharedEntity, SharedLab, SharePackage,
@@ -123,9 +123,14 @@ def lab_reading(l: SharedLab) -> set[str]:
 
 
 def lab_counts(l: SharedLab, decision: str | None) -> bool:
-    """Same rule as terms: every row counts unless a person rejected it. A row still waiting for the clinician's check
-    counts like an unsure term does (`models.COUNTED`), and a rejected one never does."""
-    return decision != "rejected"
+    """Whether a reading feeds the ranking. A row that passed the code checks counts unless a person rejected it. A row
+    the checks sent to the clinician (a possible OCR error) counts only once the clinician confirmed it or corrected it
+    against the printed row, and then with the corrected value: an unchecked misread never moves the differential."""
+    if decision == "rejected":
+        return False
+    if l.needs_review:
+        return decision in ("confirmed", "corrected")
+    return True
 
 
 def lab_findings(labs: list[SharedLab], decisions: dict[str, str] | None = None) -> dict[str, list[SharedLab]]:
@@ -167,7 +172,7 @@ def with_labs(onto: Ontology, entries: list[Entry], labs: list[SharedLab], decis
         label = onto.label(hid) or hid
         for i, l in enumerate(rows):
             shown = l.value_text or (f"{l.value_numeric:g} {l.unit}".strip() if l.value_numeric is not None else l.flag or "")
-            confirmed = decisions.get(l.id or "") == "confirmed"
+            confirmed = decisions.get(l.id or "") in ("confirmed", "corrected")
             by_date.setdefault(l.date, []).append(Entity(
                 id=f"lab_{l.id or i}_{hid}", entry_id=f"{LAB_ENTRY}_{l.date}", type="lab", quote=f"{l.test_name}: {shown}",
                 canonical=label, hpo_id=hid, hpo_label=label, flags=["from_labs"], model="lab",
@@ -175,6 +180,24 @@ def with_labs(onto: Ontology, entries: list[Entry], labs: list[SharedLab], decis
     extra = [Entry(id=f"{LAB_ENTRY}_{d}", created_at="", occurred_on=d, text="", extraction="done", entities=ents)
              for d, ents in sorted(by_date.items())]
     return entries + extra
+
+
+def with_lab_fixes(pkg: SharePackage, fixes: dict[str, dict]) -> SharePackage:
+    """Lab readings the clinician corrected after comparing them with the printed row: `fixes[lab_id] = {"from": {value_numeric,
+    value_text, unit}, "to": {...}}`. The row carries the clinician's value and unit, its flag is recomputed in code, and
+    `corrected_from` keeps what was read, so the glance, the lab tables, the differential and the brief use the right value."""
+    if not fixes:
+        return pkg
+    labs = []
+    for l in pkg.labs:
+        f = fixes.get(l.id or "")
+        if not f:
+            labs.append(l)
+            continue
+        new = l.model_copy(update={**f["to"], "corrected_from": f["from"], "reviewed": True})
+        flag = compute_flag(new.value_numeric, new.ref_low, new.ref_high, text=new.value_text)
+        labs.append(new.model_copy(update={"flag": flag, "abnormal": is_off(flag)}))
+    return pkg.model_copy(update={"labs": labs})
 
 
 def _note_count(entry_ids: list[str]) -> int:
@@ -223,10 +246,13 @@ def _as_finding(t: str) -> str:
     return "finding" if t in ("trigger", "medication") else t
 
 
-def with_corrections(pkg: SharePackage, corrections: dict[str, dict]) -> SharePackage:
+def with_corrections(pkg: SharePackage, corrections: dict[str, dict], lab_fixes: dict[str, dict] | None = None) -> SharePackage:
     """The package with the clinician's replaced terms applied: `corrections[ent_id] = {"from", "to", "label"}`.
     The term keeps its quote and date and now carries the clinician's HPO id; it counts as reviewed. A trigger or
-    medication the clinician maps to a phenotype term becomes a finding, so the overview lists it like any other."""
+    medication the clinician maps to a phenotype term becomes a finding, so the overview lists it like any other.
+    `lab_fixes[lab_id] = {"from", "to"}` are lab readings the clinician corrected (see `with_lab_fixes`)."""
+    if lab_fixes:
+        pkg = with_lab_fixes(pkg, lab_fixes)
     if not corrections:
         return pkg
 

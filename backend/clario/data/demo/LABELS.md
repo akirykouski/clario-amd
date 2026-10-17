@@ -44,3 +44,11 @@ gives the same rows: MinerU2.5-Pro OCR on AMD Token Factory, table read in code,
 review (`eval/results/documents_tf-mineru-table.json`, 2026-10-17). Flags are recomputed in code and every row gets
 the table confidence, as on the live table path. Tests that need an unsure lab row mark some rows themselves
 (`demo_referti_with_unsure` in `tests/conftest.py`).
+
+Two rows of `ref_7_003` are stored as deliberate demo misreads, not from a live read, so the clinician's check of an
+OCR error shows: Sodio 147 stored as 141 (a 7 read as 1; it looks in range and would hide a high sodium) and
+Emoglobina 11,0 stored as 1,1 (a digit lost). The truth sidecar keeps the printed value and marks each with
+`demo_read`; the stored row's `model` says `precomputed: deliberate demo misread`. The same code checks as the live
+path compare every row with the PDF's own text layer, so exactly these two go to "Needs your check" (`not_on_page`,
+plus `implausible` for the haemoglobin), each with a crop of its printed row. Until the clinician confirms or
+corrects them they do not feed the differential.

@@ -70,8 +70,19 @@ export interface SharedLab {
   test_name: string; value_numeric: number | null; value_text: string | null; unit: string; ref_low: number | null;
   ref_high: number | null; flag: LabFlag | null; date: string; page: number; entry_id: string | null; reviewed: boolean;
   confidence?: number | null; needs_review?: boolean; id: string | null; test_key: string; name_en: string | null; abnormal: boolean;
-  decision: "confirmed" | "rejected" | null;
+  decision: "confirmed" | "rejected" | "corrected" | null;
+  /** Code checks the reading failed on the device (why it waits for the clinician). */
+  checks?: string[];
+  /** The printed row cut from the report page, a JPEG data URL; null for photos and scans. */
+  crop?: string | null;
+  /** What was read, when the clinician corrected the reading. */
+  corrected_from?: LabReading | null;
 }
+
+export interface LabReading { value_numeric: number | null; value_text: string | null; unit: string }
+export interface LabFix { from: LabReading; to: LabReading; at: string }
+/** A corrected reading: `value` as printed ("11,0", "Positivo 1:160"), optionally the unit. */
+export interface LabCorrection { value: string; unit?: string }
 
 export interface SharePackage {
   package_id: string; patient_alias: string; created_at: string; expires_at: string;
@@ -190,7 +201,7 @@ export interface Differential { conditions: Condition[]; question: ClinicQuestio
 export type TermDecision = "confirmed" | "rejected" | "corrected" | "pending";
 /** A term the clinician replaced: the id and label it had (`from`, null when it had no id) and the one picked (`to`). */
 export interface TermCorrection { from: string | null; from_label: string; to: string; label: string; at: string }
-export interface Decisions { terms: Record<string, TermDecision>; corrections?: Record<string, TermCorrection>; labs?: Record<string, TermDecision>; answers: ClinicAnswer[] }
+export interface Decisions { terms: Record<string, TermDecision>; corrections?: Record<string, TermCorrection>; labs?: Record<string, TermDecision>; lab_fixes?: Record<string, LabFix>; answers: ClinicAnswer[] }
 
 export interface OverviewTerm { label: string; count: number; recent_count: number; first: string; last: string; max_severity: number | null }
 export interface Overview {
