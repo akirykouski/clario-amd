@@ -52,3 +52,21 @@ Emoglobina 11,0 stored as 1,1 (a digit lost). The truth sidecar keeps the printe
 path compare every row with the PDF's own text layer, so exactly these two go to "Needs your check" (`not_on_page`,
 plus `implausible` for the haemoglobin), each with a crop of its printed row. Until the clinician confirms or
 corrects them they do not feed the differential.
+
+## Earlier care (`giulia_care_en.json`, `giulia_care_it.json`)
+
+Written by hand, no model involved, for the second-opinion demo (issue #20). Days count back from the day the demo is
+loaded, like the diary, and fit it: the GP visit is day 47, after "work was stressful" (day 52) and before the fever and
+swollen wrists (day 34), the chest pain (day 37) and the GP blood test (day 30).
+- **Facts** (`tried`, `tested`), shared with every clinic: ibuprofen (an NSAID) as needed for 2 weeks, no effect; more
+  rest and a regular sleep routine for 4 weeks, no effect; TSH, CRP and ESR in range and a hand X-ray without erosions
+  (in range, so they do not contradict the referti), and the day-30 urine test and blood count from the diary. A
+  treatment's `note` says what happened, never why it was given, so the facts do not hint at the earlier diagnosis.
+- **Conclusions** (`previous`), only in a second-opinion package and shown to the new doctor after they sign: the GP's
+  diagnosis (fibromyalgia, stress-related fatigue), conditions considered (fibromyalgia; rheumatoid arthritis with its
+  OMIM id, so the comparison can match it), two accepted and two set-aside lines, and the notes. Fibromyalgia is not
+  in the shipped ontology, so it has no id and is matched by name.
+- English and Italian say the same thing item by item (a test pins the dates, effects, flags and ids).
+- With the demo referti imported, the code-computed ranking puts SLE first for the second doctor, the same as for an
+  ordinary share (`tests/test_second_opinion.py`); without them the diary alone ranks it second, so import the referti.
+

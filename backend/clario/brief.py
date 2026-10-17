@@ -57,7 +57,10 @@ def model_input(pkg: SharePackage, lang: str = "en") -> str:
                        "patient_note": pkg.note, "entries": entries,
                        "confirmed_terms": [{"term": t, "hpo": h, "times": n} for (t, h), n in terms.most_common()],
                        # past history the patient mentioned: it happened long before the note, not in the period
-                       "past_history": past, "pattern_overlaps": pats}, ensure_ascii=False)
+                       "past_history": past, "pattern_overlaps": pats,
+                       # facts about earlier care (never the previous doctor's conclusions: share.facts_only)
+                       "already_tried": [t.model_dump(exclude_none=True) for t in pkg.tried],
+                       "already_tested": [t.model_dump(exclude_none=True) for t in pkg.tested]}, ensure_ascii=False)
 
 
 _MONTHS = {"en": "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(),

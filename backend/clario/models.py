@@ -149,6 +149,8 @@ class ShareRequest(BaseModel):
     note: str | None = Field(None, description="What the patient wants to ask at the visit")
     expires_hours: int = Field(72, ge=1, le=720)
     include_profile: bool = Field(True, description="Send the age and sex the patient entered, if any")
+    second_opinion: bool = Field(False, description="Send to another doctor for a second opinion: the previous doctor's "
+                                 "conclusions travel apart and the clinic shows them only after the new doctor signs")
 
 
 class SharedEntity(BaseModel):
@@ -199,6 +201,48 @@ class SharedLab(BaseModel):
                                         "{value_numeric, value_text, unit} as it was read")
 
 
+# ---------------------------------------------------------------- second opinion: facts vs conclusions
+TreatmentEffect = Literal["none", "partial", "good", "worse", "unknown"]
+
+
+class TriedTreatment(BaseModel):
+    """A fact: something the patient already tried, how long, and what it did. Shared with every doctor."""
+
+    treatment: str = Field(description="What was tried, as the patient or the letter names it")
+    started: str | None = Field(None, description="ISO date it started, when known")
+    duration: str | None = Field(None, description="How long, in words ('2 weeks')")
+    effect: TreatmentEffect = "unknown"
+    note: str | None = Field(None, description="What happened, in plain words (never why it was prescribed)")
+
+
+class PriorTest(BaseModel):
+    """A fact: a test already done and its result. Shared with every doctor."""
+
+    test: str
+    date: str | None = None
+    result: str
+    abnormal: bool | None = Field(None, description="True out of range, False in range, null when the result says neither")
+
+
+class PriorCondition(BaseModel):
+    name: str
+    disease_id: str | None = Field(None, description="ORPHA or OMIM id when the condition is in the shipped ontology")
+
+
+class PriorOpinion(BaseModel):
+    """The previous doctor's conclusions. Never shown to the patient (condition names), never used by the ranking. In a
+    second-opinion package the clinic server holds them back from every view, the brief model and the differential until
+    the new doctor has finalized the brief; then `GET /api/inbox/{id}/compare` shows them side by side."""
+
+    clinician: str = Field(description="Who gave it, e.g. 'GP'")
+    date: str | None = None
+    diagnosis: list[PriorCondition] = Field(default_factory=list)
+    conditions: list[PriorCondition] = Field(default_factory=list, description="Conditions the doctor considered")
+    accepted: list[str] = Field(default_factory=list, description="Lines the doctor accepted")
+    rejected: list[str] = Field(default_factory=list, description="Lines the doctor set aside")
+    notes: str | None = None
+
+
 class SharePackage(BaseModel):
     """Decrypted payload a clinic receives: the entries in the period, their terms and lab rows (never rejected ones).
     Low-confidence items carry `needs_review` for the clinician.
@@ -216,6 +260,11 @@ class SharePackage(BaseModel):
     entities: list[SharedEntity]
     labs: list[SharedLab] = Field(default_factory=list)
     patterns: list[Pattern] = Field(default_factory=list)
+    second_opinion: bool = Field(False, description="Sent for a second opinion")
+    tried: list[TriedTreatment] = Field(default_factory=list, description="Facts: already tried, with the effect")
+    tested: list[PriorTest] = Field(default_factory=list, description="Facts: already tested, with the result")
+    previous: PriorOpinion | None = Field(None, description="Conclusions: only in a second-opinion package, held back by "
+                                          "the clinic server until the brief is final (share.facts_only)")
 
 
 class BriefItem(BaseModel):

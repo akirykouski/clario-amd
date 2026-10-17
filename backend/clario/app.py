@@ -29,12 +29,13 @@ from . import overview as overview_mod
 from . import privacy
 from . import doc_routes
 from . import gpu as gpumetrics
+from . import second_opinion as second
 from . import share as sharing
 from . import specialty
 from .config import Settings
 from .share import lab_needs_check, now_iso
 from . import documents as docs
-from .demo import (DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_entries,
+from .demo import (DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_care, persona_entries,
                    persona_labels, truth_rows)
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
@@ -524,6 +525,15 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         after = as_ranked_patterns(onto, all_entries(), norm_lang(body.lang))
         return AnswerResult(before=before, after=after, entry_id=entry_id)
 
+    @app.get("/api/care")
+    def get_care() -> dict:
+        """Earlier care: what was already tried and tested (facts, shared with every clinic), and whether a previous
+        doctor's opinion is on file. Its conclusions name conditions, so the patient screens only learn who and when."""
+        d = vault.get("care") or {}
+        prev = d.get("previous")
+        return {"tried": d.get("tried") or [], "tested": d.get("tested") or [],
+                "previous": {"clinician": prev.get("clinician"), "date": prev.get("date")} if prev else None}
+
     def load_profile() -> dict:
         d = vault.get("profile") or {}
         return {k: d[k] for k in ("age", "sex") if d.get(k) is not None}
@@ -555,6 +565,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
             save(Entry(id=eid, created_at=now_iso(), occurred_on=day, text=text, mood=mood, extraction="done",
                        entities=ents))
             n += 1
+        vault.put("care", "care", persona_care(body.persona))  # earlier care, written by hand (LABELS.md): facts + the GP's view
         return {"ok": True, "entries": n, "persona": body.persona, "lang": PERSONA_LANG[body.persona]}
 
     @app.post("/api/demo/documents")
@@ -608,7 +619,8 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
 
         pkg = sharing.build_package(entries, body.since, body.until, sharing.alias(str(s.data_dir.resolve())),
                                     body.note, pats, body.expires_hours, labs, batch_entry,
-                                    load_profile() if body.include_profile else None, page_jpeg)
+                                    load_profile() if body.include_profile else None, page_jpeg,
+                                    care=vault.get("care"), second_opinion=body.second_opinion)
         if not pkg.entries:
             raise HTTPException(422, "No entries in that period")
         sealed = sharing.seal(pkg, key["public_key"])
@@ -623,6 +635,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         return {"package_id": pkg.package_id, "clinic_url": body.clinic_url, "expires_at": pkg.expires_at,
                 "clinic_name": key.get("clinic_name"), "fingerprint": key.get("fingerprint"),
                 "entries": len(pkg.entries), **sharing.counts(pkg), "patterns": len(pkg.patterns),
+                "second_opinion": pkg.second_opinion, "tried": len(pkg.tried), "tested": len(pkg.tested),
                 "qr_payload": qr_payload, "qr_svg": sharing.qr_svg(qr_payload)}
 
 
@@ -642,6 +655,11 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         return pid
 
     def open_pkg(pid: str) -> SharePackage:
+        """The package as every view, the brief model and the differential see it: facts only. The previous doctor's
+        conclusions of a second opinion stay out until the brief is final (`/compare`)."""
+        return second.facts_only(open_full(pid))
+
+    def open_full(pid: str) -> SharePackage:
         f = inbox_dir / f"{safe_id(pid)}.json"
         if not f.exists():
             raise HTTPException(404, "package not found")
@@ -756,7 +774,8 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             state = "none" if not b else ("final" if b.finalized else "draft")
             out.append({"package_id": pkg.package_id, "patient_alias": pkg.patient_alias, "period": pkg.period,
                         "received_at": rec["received_at"], "expires_at": pkg.expires_at,
-                        **sharing.counts(pkg), "entries": len(pkg.entries), "brief_state": state})
+                        **sharing.counts(pkg), "entries": len(pkg.entries), "brief_state": state,
+                        "second_opinion": pkg.second_opinion})
         return out
 
     @app.get("/api/inbox/{pid}")
@@ -1069,6 +1088,25 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
             totals=DecisionCounts(accepted=sum(r.accepted for r in rows), edited=sum(r.edited for r in rows),
                                   rejected=sum(r.rejected for r in rows)),
             mean_review_seconds=round(sum(timed) / len(timed), 1) if timed else None)
+
+    @app.get("/api/inbox/{pid}/compare")
+    async def compare_opinions(pid: str, lang: str = "en") -> dict:
+        """Second opinion only, after this doctor finalized the brief: the previous doctor's conclusions next to this
+        doctor's (conditions computed in code from the facts, brief lines as decided), disagreements marked."""
+        full = open_full(pid)
+        if not full.second_opinion:
+            raise HTTPException(404, "This package is not a second opinion")
+        b = load_brief(pid)
+        if not b or not b.finalized:
+            raise HTTPException(409, "The previous opinion opens after you finalize your brief")
+        lang = norm_lang(lang)
+        pkg = second.facts_only(full)
+        ddx = await asyncio.to_thread(differential, pkg, load_decisions(pid), lang)
+        if full.previous is None:
+            return {"previous": None, "current": None, "rows": [], "disagreements": 0, "since_previous": []}
+        dpkg = decided(pkg, drop_rejected=True)
+        return second.compare(full.previous, ddx.conditions, b,
+                              second.since_previous(dpkg, full.previous.date, onto, lang))
 
     @app.get("/api/inbox/{pid}/brief.md", response_class=PlainTextResponse)
     def brief_md(pid: str, audience: str | None = None, lang: str | None = None):

@@ -9,6 +9,7 @@ import { useAsync } from "../components/useAsync";
 import { HeatStrip, type HeatPick } from "../components/HeatStrip";
 import { BriefPanel, jumpTo } from "./BriefPanel";
 import { Differential } from "./Differential";
+import { CareFacts, ComparePanel, SecondOpinionBanner } from "./SecondOpinion";
 import { termLabel, tn, useT, type Key } from "../i18n";
 
 // the patient's current terms: past history ("knee surgery 5 years ago") is listed apart and never lights up a week
@@ -86,7 +87,10 @@ export default function PackagePage() {
       </div>
       <div className="grid xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-6 items-start">
         <div className={`no-print min-w-0 space-y-5 ${pane === "brief" ? "hidden xl:block" : ""}`}>
+          <SecondOpinionBanner pkg={data} />
           <Header pkg={data} brief={brief} version={version} />
+          <ComparePanel pkg={data} finalized={!!brief?.finalized} />
+          <CareFacts pkg={data} />
           <Differential pid={id} version={version} />
           <NeedsCheck pkg={data} decisions={decisions} onDecide={decide} onReplace={replace} onDecideLab={decideLab} onCorrectLab={correctLab} onDecideLabs={decideLabs} />
           <Heat pkg={data} />

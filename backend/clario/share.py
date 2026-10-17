@@ -22,7 +22,8 @@ from nacl.public import PrivateKey, PublicKey, SealedBox
 from typing import Callable
 
 from .documents import crop_row, is_off, lab_flag
-from .models import COUNTED, REVIEWED, Entity, Entry, LabResult, Pattern, SharedEntity, SharedLab, SharePackage
+from .models import (COUNTED, REVIEWED, Entity, Entry, LabResult, Pattern, PriorOpinion, PriorTest, SharedEntity, SharedLab,
+                     SharePackage, TriedTreatment)
 
 
 def now_iso() -> str:
@@ -140,7 +141,14 @@ def row_crops(rows: list[LabResult], page_jpeg: Callable[[str, int], bytes | Non
 def build_package(entries: list[Entry], since: str, until: str, patient_alias: str, note: str | None,
                   patterns: list[Pattern], expires_hours: int, labs: list[LabResult] | None = None,
                   batch_entry: dict[str, str] | None = None, profile: dict | None = None,
-                  page_jpeg: Callable[[str, int], bytes | None] | None = None) -> SharePackage:
+                  page_jpeg: Callable[[str, int], bytes | None] | None = None, care: dict | None = None,
+                  second_opinion: bool = False) -> SharePackage:
+    """`care` is what the vault keeps about earlier care (`{tried, tested, previous}`): the facts (`tried`, `tested`, up
+    to the end date) go with every share; the previous doctor's conclusions (`previous`) only with a second opinion."""
+    care = care or {}
+    tried = [TriedTreatment.model_validate(t) for t in care.get("tried") or [] if (t.get("started") or "") <= until]
+    tested = [PriorTest.model_validate(t) for t in care.get("tested") or [] if (t.get("date") or "") <= until]
+    previous = PriorOpinion.model_validate(care["previous"]) if second_opinion and care.get("previous") else None
     chosen = sorted((e for e in entries if since <= e.occurred_on <= until), key=lambda e: e.occurred_on)
     shared_entities, slim = [], []
     for e in chosen:
@@ -157,7 +165,8 @@ def build_package(entries: list[Entry], since: str, until: str, patient_alias: s
                         created_at=created.isoformat(timespec="seconds"),
                         expires_at=(created + timedelta(hours=expires_hours)).isoformat(timespec="seconds"),
                         period=(since, until), note=note, profile=profile or None, entries=slim, entities=shared_entities,
-                        labs=shared_labs(labs or [], since, until, batch_entry, page_jpeg), patterns=patterns)
+                        labs=shared_labs(labs or [], since, until, batch_entry, page_jpeg), patterns=patterns,
+                        second_opinion=second_opinion, tried=tried, tested=tested, previous=previous)
 
 
 def seal(package: SharePackage, clinic_public_key_b64: str) -> str:

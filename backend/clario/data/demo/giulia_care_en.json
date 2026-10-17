@@ -1,0 +1,27 @@
+{
+  "about": "Giulia's care before Clario: what she already tried and tested (facts) and her previous GP's conclusions. Written by hand, see LABELS.md. Days are counted back from the day the demo is loaded, like the diary.",
+  "tried": [
+    {"treatment": "Ibuprofen (an NSAID), as needed", "days_ago": 47, "duration": "2 weeks", "effect": "none",
+     "note": "Joint pain and tiredness the same; a fever and swollen wrists came while taking it."},
+    {"treatment": "More rest and a regular sleep routine", "days_ago": 47, "duration": "4 weeks", "effect": "none",
+     "note": "Slept longer, still exhausted."}
+  ],
+  "tested": [
+    {"test": "Thyroid function (TSH)", "days_ago": 47, "result": "In range", "abnormal": false},
+    {"test": "Inflammation markers (CRP, ESR)", "days_ago": 47, "result": "In range", "abnormal": false},
+    {"test": "Hand X-ray", "days_ago": 44, "result": "No erosions, no joint damage", "abnormal": false},
+    {"test": "Urine test", "days_ago": 30, "result": "Protein present", "abnormal": true},
+    {"test": "Full blood count", "days_ago": 30, "result": "White cells slightly low", "abnormal": true}
+  ],
+  "previous": {
+    "clinician": "GP",
+    "days_ago": 47,
+    "diagnosis": [{"name": "Fibromyalgia", "disease_id": null}, {"name": "Stress-related fatigue", "disease_id": null}],
+    "conditions": [{"name": "Fibromyalgia", "disease_id": null}, {"name": "Rheumatoid arthritis", "disease_id": "OMIM:180300"}],
+    "accepted": ["Widespread aches and tiredness during a stressful period at work.",
+                 "No fever and no swollen joints at the visit."],
+    "rejected": ["Red cheeks after time in the sun may be worth checking for an autoimmune cause.",
+                 "Recurring mouth sores may be worth asking about."],
+    "notes": "Most likely stress and poor sleep. Ibuprofen as needed for 2 weeks, review if not better. Autoimmune tests not needed for now."
+  }
+}

@@ -56,6 +56,8 @@ export interface PatientPattern {
 export interface ShareRequest {
   clinic_url: string; since: string; until: string; include_patterns: boolean;
   note?: string | null; expires_hours: number; include_profile?: boolean;
+  /** Send for a second opinion: the previous doctor's conclusions are shown to the new doctor only after they sign. */
+  second_opinion?: boolean;
 }
 export interface Profile { age?: number | null; sex?: "female" | "male" | "other" | null }
 
@@ -87,6 +89,26 @@ export interface LabCorrection { value: string; unit?: string }
 export interface SharePackage {
   package_id: string; patient_alias: string; created_at: string; expires_at: string;
   period: [string, string]; note: string | null; profile?: Profile | null; entries: Entry[]; entities: SharedEntity[]; labs: SharedLab[]; patterns: Pattern[];
+  /** Second opinion: facts (`tried`, `tested`) are shown; `previous` (conclusions) is always null here until `/compare`. */
+  second_opinion?: boolean; tried?: TriedTreatment[]; tested?: PriorTest[]; previous?: PriorOpinion | null;
+}
+
+// ---- second opinion: facts (shared) vs conclusions (held back until the new doctor signs)
+export type TreatmentEffect = "none" | "partial" | "good" | "worse" | "unknown";
+export interface TriedTreatment { treatment: string; started?: string | null; duration?: string | null; effect: TreatmentEffect; note?: string | null }
+export interface PriorTest { test: string; date?: string | null; result: string; abnormal?: boolean | null }
+export interface PriorCondition { name: string; disease_id?: string | null }
+export interface PriorOpinion {
+  clinician: string; date?: string | null; diagnosis: PriorCondition[]; conditions: PriorCondition[];
+  accepted: string[]; rejected: string[]; notes?: string | null;
+}
+/** Patient side: facts, and only who gave the previous opinion and when (its conclusions name conditions). */
+export interface Care { tried: TriedTreatment[]; tested: PriorTest[]; previous: { clinician: string; date?: string | null } | null }
+export interface CompareRow { name: string; disease_id: string | null; previous: "diagnosis" | "considered" | null; current_rank: number | null; agree: boolean }
+export interface Comparison {
+  previous: PriorOpinion | null;
+  current: { conditions: { disease_id: string; name: string; rank: number; signal: string | null }[]; accepted: string[]; rejected: string[]; finalized_at: string | null } | null;
+  rows: CompareRow[]; disagreements: number; since_previous: string[];
 }
 
 export type BriefSection = "summary" | "timeline" | "symptoms" | "labs" | "medications" | "patterns" | "questions";
@@ -137,11 +159,12 @@ export interface PatternsResponse { patterns: PatientPattern[]; confirmed_terms:
 export interface ShareResult {
   package_id: string; clinic_url: string; expires_at: string; qr_payload: string; entities: number; entries: number;
   mentions?: number; terms?: number; labs?: number;  // entities = mentions: patient terms only, no negated, no family history
+  second_opinion?: boolean; tried?: number; tested?: number;
 }
 export interface ClinicKey { public_key: string; fingerprint: string; clinic_name: string }
 export interface InboxRow {
   package_id: string; patient_alias: string; period: [string, string]; received_at: string;
-  expires_at: string; entities: number; terms?: number; mentions?: number; labs?: number; brief_state: string;
+  expires_at: string; entities: number; terms?: number; mentions?: number; labs?: number; brief_state: string; second_opinion?: boolean;
 }
 
 export interface RunEvent {

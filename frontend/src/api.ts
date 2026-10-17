@@ -1,6 +1,7 @@
 import type {
   AiCall, Answer, AnswerResult, BatchStarted, PrivacyPreview, PrivacyVerify, Brief, BriefItem, ClinicMetrics, BriefView, Persona, ClinicKey, Entity, Entry, Health, InboxRow, LabPatch, LabResult, LabsResponse, NextQuestion, PatternsResponse, ReviewAction, ReviewQueue, SafetyNotice,
   ShareRequest, ShareResult, SharePackage, Term, Timeline, VaultState, Differential, Decisions, TermDecision, Condition, Overview, Profile, LabCorrection,
+  Care, Comparison,
 } from "./types";
 
 export class ApiError extends Error {
@@ -96,6 +97,9 @@ export const api = {
   runEventsUrl: (runId: string) => buildUrl(`/runs/${encodeURIComponent(runId)}/events`),
   overview: (id: string, lang?: string) => request<Overview>("GET", `/inbox/${encodeURIComponent(id)}/overview`, { params: { lang } }),
   profile: () => request<Profile>("GET", "/profile"),
+  care: () => request<Care>("GET", "/care"),
+  /** Second opinion, after the brief is final: the previous doctor's conclusions next to this one's (409 before). */
+  compare: (id: string, lang?: string) => request<Comparison>("GET", `/inbox/${encodeURIComponent(id)}/compare`, { params: { lang } }),
   saveProfile: (p: Profile) => request<Profile>("PUT", "/profile", { body: p }),
   privacyCounts: () => request<Record<string, number>>("GET", "/privacy/counts"),
   termSystems: (ids: string[]) => request<Record<string, string>>("GET", "/terms/systems", { params: { ids: ids.join(",") } }),
