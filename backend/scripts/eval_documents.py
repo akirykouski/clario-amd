@@ -2,6 +2,8 @@
 
     CLARIO_OFFLINE=1 uv run python scripts/eval_documents.py --dir /tmp/referti --offline
     LLM_BASE_URL=... LLM_MODEL=... uv run python scripts/eval_documents.py --dir /tmp/scans
+    LLM_BASE_URL=https://developer.amd.com.cn/radeon/api/v1 LLM_API_KEY=... uv run python scripts/eval_documents.py \
+        --dir clario/data/demo   # Token Factory: MinerU2.5-Pro OCR, then Gemma-4-31B-IT (LLM_OCR_MODEL=off: vision)
 
 Writes eval/results/documents.json (live) or documents.offline-fixture.json (--offline). The offline
 fixture replays the truth sidecar, so its numbers prove the plumbing only, never model accuracy.
@@ -71,13 +73,18 @@ async def run(folder: Path, s: Settings, limit: int | None) -> dict:
     async def one(i: int, pg: docs.Page):
         async with sem:
             return await docs.extract_page(llm, pg, i + 1, vision_model=s.llm_vision_model,
-                                           threshold=s.review_threshold, n_samples=s.doc_samples)
+                                           ocr_model=s.llm_ocr_model, structure=s.doc_structure,
+                                           threshold=s.review_threshold,
+                                           n_samples=s.doc_samples)
 
     t0 = time.perf_counter()
     results = await asyncio.gather(*(one(i, pg) for i, (pg, _t) in enumerate(work)), return_exceptions=True)
     wall = time.perf_counter() - t0
     hits = {f: 0 for f in FIELDS}
     n_rows = n_found = n_failed = 0
+    readers = sorted({r.reader for r in results if not isinstance(r, Exception)})
+    models = sorted({r.model for r in results if not isinstance(r, Exception)})
+    n_review = sum(x["review"] == "needs_review" for r in results if not isinstance(r, Exception) for x in r.rows)
     for (pg, truth_rows), res in zip(work, results):
         if isinstance(res, Exception):
             n_failed += 1
@@ -100,9 +107,13 @@ async def run(folder: Path, s: Settings, limit: int | None) -> dict:
         "pages_per_sec": round(len(work) / wall, 2) if wall else None, "wall_s": round(wall, 2),
         "concurrency": s.doc_workers,
         "dataset": f"synthetic-referti/{folder.name}",
-        "model": s.llm_vision_model or llm.model, "backend": llm.backend,
+        "rows_needs_review": n_review, "reader": readers,
+        "model": " | ".join(models) or s.llm_vision_model or llm.model, "backend": llm.backend,
+        "samples_per_page": s.doc_samples, "structure": s.doc_structure if s.llm_ocr_model else None,
         "date": date.today().isoformat(),
         "offline_fixture": s.offline,
+        **({"hardware": {"gpu_name": "AMD Token Factory (hosted, GPU not reported)", "gpu_count": None,
+                         "vram_total_gb": None, "source": "token-factory"}} if s.token_factory else {}),
         **({"note": note} if note else {}),
     }
 

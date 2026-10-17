@@ -39,6 +39,18 @@ def wait_extracted(client, timeout=10):
     raise AssertionError("extraction did not finish")
 
 
+def demo_referti_with_unsure(client, every: int = 6) -> str:
+    """Import the demo referti (precomputed rows, all confident, as the live read gave) and mark every `every`-th row as
+    a low-confidence reading, the way an unsure OCR row arrives, so tests can exercise the clinician's lab check."""
+    bid = client.post("/api/demo/documents").json()["batch_id"]
+    vault = client.app.state.vault
+    rows = sorted((d for d in vault.all("lab") if d["batch_id"] == bid), key=lambda d: (d["page"], d["test_name"]))
+    for i, d in enumerate(rows):
+        if i % every == every - 1:
+            vault.put("lab", d["id"], {**d, "confidence": 0.55, "review": "needs_review"})
+    return bid
+
+
 def confirm_all(client):
     for e in client.get("/api/entries").json():
         for x in e["entities"]:

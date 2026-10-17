@@ -214,6 +214,7 @@ docs = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "fpdf2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -240,6 +241,7 @@ provides-extras = ["docs"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "fpdf2", specifier = ">=2.8" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
 ]

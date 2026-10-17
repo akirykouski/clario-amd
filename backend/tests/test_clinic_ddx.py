@@ -2,7 +2,7 @@ import time
 
 from fastapi.testclient import TestClient
 
-from conftest import settings, wait_extracted
+from conftest import demo_referti_with_unsure, settings, wait_extracted
 from test_share_clinic import share_body
 from clario.app import create_app
 from clario.clinic_ddx import disease_url, system_key
@@ -85,7 +85,7 @@ def test_system_keys_group_terms_by_organ_system(unlocked):
 def test_clinician_checks_low_confidence_lab_values(unlocked, clinic_server, tmp_path):
     unlocked.post("/api/demo", json={"persona": "giulia"})
     wait_extracted(unlocked)
-    bid = unlocked.post("/api/demo/documents").json()["batch_id"]
+    bid = demo_referti_with_unsure(unlocked)
     deadline = time.time() + 10
     while time.time() < deadline and not unlocked.get("/api/labs").json()["n_results"]:
         time.sleep(0.2)

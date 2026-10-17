@@ -64,17 +64,19 @@ function EntityRow({ e, onPatch }: { e: Entity; onPatch: (b: Parameters<typeof a
   const unsure = e.review === "needs_review";
   const removed = e.review === "rejected";
   const line = patientTermLine(e.hpo_id, e.hpo_label ?? "", entityName(e));
+  // an unsure term shows only the plain "not sure" line and the actions; technical reasons are for the clinic
+  const notes = e.flags.map(flagNote).filter((n): n is string => n !== null);
   return (
     <li className="card" style={removed ? { opacity: 0.6 } : unsure ? { borderStyle: "dashed", borderColor: "var(--moderate)" } : undefined}>
       <p className="text-sm text-muted">{t("entryPage.youWrote")} <mark className="quote text-ink">{e.quote}</mark></p>
       <p className={`mt-1 font-bold ${removed ? "line-through" : ""}`}>{e.negated && t("term.absent")}{e.family_history && t("term.relative")}{e.type === "trigger" && t("term.contextChip")}{entityName(e)}</p>
-      {(line || !e.hpo_id) && <p className="text-sm text-muted">{line ?? t("entryPage.noCode")}</p>}
+      {line && <p className="text-sm text-muted">{line}</p>}
       {(e.onset_hint || e.severity !== null) && (
         <p className="text-sm text-muted">
           {e.onset_hint && t("entryPage.onset", { hint: e.onset_hint })}{e.onset_hint && e.severity !== null && " · "}{e.severity !== null && t("entryPage.severity", { n: e.severity })}
         </p>
       )}
-      {e.flags.map((f) => <p key={f} className="text-sm mt-1" style={{ color: "var(--moderate)" }}>{flagNote(f)}</p>)}
+      {!unsure && notes.map((n) => <p key={n} className="text-sm mt-1" style={{ color: "var(--moderate)" }}>{n}</p>)}
       {unsure && <p className="text-sm mt-2" style={{ color: "var(--moderate)" }}>{t("entryPage.unsure")}</p>}
       {removed ? (
         <div className="mt-3 flex flex-wrap items-center gap-3">

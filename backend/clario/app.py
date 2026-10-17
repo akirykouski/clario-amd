@@ -31,7 +31,8 @@ from . import share as sharing
 from .config import Settings
 from .share import lab_needs_check, now_iso
 from . import documents as docs
-from .demo import DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_entries
+from .demo import (DEMO_REFERTI_AGE, PERSONA_LANG, PERSONAS, REFERTI_LATEST, demo_referti, persona_entries,
+                   persona_labels, truth_rows)
 from .i18n import ANSWER_ENTRY, PATTERNS_NOTE, hpo_it, norm_lang, term_label
 from .extract import ExtractOpts, extract
 from .knowledge import Ontology, fold
@@ -117,7 +118,8 @@ class FinalizeIn(BaseModel):
 
 
 class TermDecisionIn(BaseModel):
-    decision: str  # confirmed | rejected | pending
+    decision: str  # confirmed | rejected | corrected | pending
+    hpo_id: str | None = None  # corrected: the term the clinician picked instead
 
 
 class ClinicAnswerIn(BaseModel):
@@ -212,6 +214,42 @@ def create_app(settings: Settings | None = None, gpu_reader=None) -> FastAPI:
     def term_systems(ids: str = "") -> dict[str, str]:
         """Organ-system key per HPO id ("skin", "joints", ...), for grouping heat map rows. Ontology only, no patient data."""
         return {h: clinic_ddx.system_key(onto, h) for h in ids.split(",")[:200] if h.strip()}
+
+    @app.get("/api/terms/search")
+    def term_search(q: str = "", lang: str = "en"):
+        """Ontology lookup, in both modes (no patient data): the patient fixes a term, the clinician replaces one.
+        In Italian the plain Italian names we ship come first (best match first, at most 3); English ontology hits
+        only fill the list when they are a close match, so an Italian phrase never returns unrelated English terms."""
+        if not q.strip():
+            return []
+        if norm_lang(lang) != "it":
+            return onto.search(q, 10)
+        low = fold(q.strip())
+        words = [w for w in re.split(r"\W+", low) if w]
+        mine: list[tuple[float, int, Term]] = []
+        for h, lab in hpo_it().items():
+            fl = fold(lab)
+            if not onto.exists(h):
+                continue
+            if fl == low:
+                sc = 1.0
+            elif fl.startswith(low):
+                sc = 0.9
+            elif low in fl:
+                sc = 0.8
+            elif words and all(any(lw.startswith(w) for lw in re.split(r"\W+", fl)) for w in words):
+                sc = 0.7
+            else:
+                continue
+            mine.append((sc, len(lab), Term(hpo_id=h, label=lab)))
+        mine.sort(key=lambda r: (-r[0], r[1], r[2].hpo_id))
+        out = [m[2] for m in mine][:3]
+        if len(out) < 3:
+            have = {x.hpo_id for x in out}
+            for x, sc in onto.search_scored(q, 6):
+                if sc >= 0.8 and x.hpo_id not in have and len(out) < 3:
+                    out.append(Term(hpo_id=x.hpo_id, label=term_label(x.hpo_id, x.label, "it")))
+        return out
 
     @app.exception_handler(Locked)
     async def locked_handler(_r: Request, _e: Locked):
@@ -408,42 +446,6 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
                 out[e.id] = n
         return out
 
-    @app.get("/api/terms/search")
-    def term_search(q: str = "", lang: str = "en"):
-        """Ontology lookup. In Italian the plain Italian names we ship come first (best match first, at most 3);
-        English ontology hits only fill the list when they are a close match, so an Italian phrase never returns
-        unrelated English terms."""
-        if not q.strip():
-            return []
-        if norm_lang(lang) != "it":
-            return onto.search(q, 10)
-        low = fold(q.strip())
-        words = [w for w in re.split(r"\W+", low) if w]
-        mine: list[tuple[float, int, Term]] = []
-        for h, lab in hpo_it().items():
-            fl = fold(lab)
-            if not onto.exists(h):
-                continue
-            if fl == low:
-                sc = 1.0
-            elif fl.startswith(low):
-                sc = 0.9
-            elif low in fl:
-                sc = 0.8
-            elif words and all(any(lw.startswith(w) for lw in re.split(r"\W+", fl)) for w in words):
-                sc = 0.7
-            else:
-                continue
-            mine.append((sc, len(lab), Term(hpo_id=h, label=lab)))
-        mine.sort(key=lambda r: (-r[0], r[1], r[2].hpo_id))
-        out = [m[2] for m in mine][:3]
-        if len(out) < 3:
-            have = {x.hpo_id for x in out}
-            for x, sc in onto.search_scored(q, 6):
-                if sc >= 0.8 and x.hpo_id not in have and len(out) < 3:
-                    out.append(Term(hpo_id=x.hpo_id, label=term_label(x.hpo_id, x.label, "it")))
-        return out
-
     @app.get("/api/timeline")
     def timeline(lang: str = "en") -> Timeline:
         """Days with their notes, and the patient's terms in everyday words (clinical name kept in `clinical`)."""
@@ -535,10 +537,13 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         if body.persona not in PERSONAS:
             raise HTTPException(404, "unknown persona")
         vault.put("profile", "profile", {"age": 29, "sex": "female"})  # Giulia, 29 (synthetic)
+        labels = persona_labels(body.persona)  # reviewed, precomputed (data/demo/LABELS.md): no model call, no call log
         n = 0
         for day, text, mood in persona_entries(body.persona):
-            e = save(Entry(id=f"e_{uuid.uuid4().hex[:10]}", created_at=now_iso(), occurred_on=day, text=text, mood=mood))
-            spawn(run_extraction(e.id))
+            eid = f"e_{uuid.uuid4().hex[:10]}"
+            ents = [Entity(id=f"ent_{uuid.uuid4().hex[:10]}", entry_id=eid, **x) for x in labels[text]]
+            save(Entry(id=eid, created_at=now_iso(), occurred_on=day, text=text, mood=mood, extraction="done",
+                       entities=ents))
             n += 1
         return {"ok": True, "entries": n, "persona": body.persona, "lang": PERSONA_LANG[body.persona]}
 
@@ -548,9 +553,17 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         if vault.locked:
             raise Locked()
         pages: list = []
+        rows: list = []
         for f in demo_referti():
-            pages += await asyncio.to_thread(docs.file_pages, f.name, f.read_bytes())
-        return app.state.start_batch(pages, (date.today() - timedelta(days=DEMO_REFERTI_AGE) - REFERTI_LATEST).days)
+            got = await asyncio.to_thread(docs.file_pages, f.name, f.read_bytes())
+            truth = truth_rows(f)
+            if len(truth) != len(got):
+                raise HTTPException(500, f"{f.name}: truth file and PDF disagree on the page count")
+            pages += got
+            rows += truth
+        # the rows a live read gives (eval/results/documents_tf-mineru-table.json), stored at once: no OCR call
+        return app.state.start_batch(pages, (date.today() - timedelta(days=DEMO_REFERTI_AGE) - REFERTI_LATEST).days,
+                                     precomputed=rows)
 
     async def clinic_key(url: str) -> dict:
         u = urlparse(url)
@@ -607,6 +620,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     briefs_dir.mkdir(parents=True, exist_ok=True)
     decisions_file = s.data_dir / "decisions.jsonl"  # counts and timing only, no diary text
     labdec_log = s.data_dir / "lab_decisions.jsonl"  # one row per lab decision: ids and timing only
+    termdec_log = s.data_dir / "term_decisions.jsonl"  # one row per term decision: ids, HPO ids and timing only
 
     def safe_id(pid: str) -> str:
         if not pid.startswith("pkg_") or not pid[4:].isalnum():
@@ -631,18 +645,21 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         """The clinician's decisions on one package: term checks and answers. Encrypted at rest like the briefs."""
         f = decisions_dir / f"{safe_id(pid)}.json"
         if not f.exists():
-            return {"terms": {}, "labs": {}, "answers": []}
-        return {"labs": {}} | json.loads(keys.open_data(f.read_bytes()))
+            return {"terms": {}, "labs": {}, "corrections": {}, "answers": []}
+        return {"labs": {}, "corrections": {}} | json.loads(keys.open_data(f.read_bytes()))
 
     def save_decisions(pid: str, d: dict) -> None:
         (decisions_dir / f"{safe_id(pid)}.json").write_bytes(keys.seal_data(json.dumps(d).encode()))
 
     def differential(pkg: SharePackage, d: dict, lang: str) -> Differential:
+        pkg = clinic_ddx.with_corrections(pkg, d["corrections"])
         rejected = {k for k, v in d["terms"].items() if v == "rejected"}
         entries = clinic_ddx.with_answers(pkg.entries, d["answers"], rejected)
+        entries = clinic_ddx.with_labs(onto, entries, pkg.labs, d["labs"])  # abnormal labs as features, rejected rows left out
+        normal = clinic_ddx.lab_normal(pkg.labs, d["labs"])  # measured and within range: never asked, never "missing"
         answered = {a["feature_id"] for a in d["answers"]}
-        conds = clinic_ddx.conditions(onto, entries, lang)
-        q = clinic_ddx.question(onto, entries, answered, lang) if conds else None
+        conds = clinic_ddx.conditions(onto, entries, lang, measured_normal=normal)
+        q = clinic_ddx.question(onto, entries, answered, lang, measured_normal=normal) if conds else None
         n_terms = len(evidence_from(entries, onto))
         note = "" if conds else ("Not enough specific findings yet to suggest conditions." if lang != "it"
                                  else "Non ci sono ancora abbastanza elementi specifici per suggerire condizioni.")
@@ -671,6 +688,7 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
         """The package with the clinic's decisions applied. A row or term the clinician confirmed no longer asks for a check;
         a rejected one is dropped (`drop_rejected`) or kept marked, so the page can offer undo."""
         d = load_decisions(pkg.package_id)
+        pkg = clinic_ddx.with_corrections(pkg, d["corrections"])
         labs = []
         for l in pkg.labs:
             v = d["labs"].get(l.id) if l.id else None
@@ -774,7 +792,11 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
     @app.get("/api/inbox/{pid}/overview")
     def get_overview(pid: str, lang: str = "en") -> dict:
         """Plain-words summary of the package for the first look: no model call, no codes."""
-        return overview_mod.overview(open_pkg(pid), onto, norm_lang(lang))
+        d = load_decisions(pid)
+        pkg = clinic_ddx.with_corrections(open_pkg(pid), d["corrections"])
+        rejected = {k for k, v in (d.get("labs") or {}).items() if v == "rejected"}  # as the lab table leaves them out
+        pkg = pkg.model_copy(update={"labs": [l for l in pkg.labs if l.id not in rejected]})
+        return overview_mod.overview(pkg, onto, norm_lang(lang))
 
     @app.get("/api/inbox/{pid}/decisions")
     def get_decisions(pid: str) -> dict:
@@ -783,19 +805,64 @@ def _clinic_routes(app: FastAPI, s: Settings, keys: sharing.ClinicKeys, llm, run
 
     @app.patch("/api/inbox/{pid}/terms/{ent_id}")
     def decide_term(pid: str, ent_id: str, body: TermDecisionIn) -> dict:
-        """The clinician confirms or rejects a term the extractor was unsure about. Rejected terms leave the differential."""
+        """The clinician confirms, rejects or replaces a term the extractor was unsure about. Rejected terms leave the
+        differential; a replaced term (`corrected` with `hpo_id`, alias `replaced`) counts as the clinician's term in the
+        overview, the differential and the brief. `pending` undoes any of them."""
         pkg = open_pkg(pid)
-        if body.decision not in ("confirmed", "rejected", "pending"):
-            raise HTTPException(422, "decision must be confirmed, rejected or pending")
-        if not any(x.id == ent_id for x in pkg.entities):
+        decision = {"replaced": "corrected"}.get(body.decision, body.decision)
+        if decision not in ("confirmed", "rejected", "corrected", "pending"):
+            raise HTTPException(422, "decision must be confirmed, rejected, corrected or pending")
+        ent = next((x for x in pkg.entities if x.id == ent_id), None)
+        if ent is None:
             raise HTTPException(404, "term not found")
+        if decision == "corrected" and ent.family_history:
+            raise HTTPException(422, "a relative's condition stays family history and cannot be replaced")
         d = load_decisions(pid)
-        if body.decision == "pending":
+        had = ent_id in d["corrections"]
+        new_id = None
+        if decision == "corrected":
+            b = load_brief(pid)
+            if b and b.finalized:
+                raise HTTPException(409, "Brief is final")
+            new_id = (body.hpo_id or "").strip().upper()
+            if not re.fullmatch(r"HP:\d{7}", new_id) or not onto.exists(new_id):
+                raise HTTPException(422, "corrected needs the id of a term from the term list")
+            if new_id == ent.hpo_id:
+                raise HTTPException(422, "pick a different term, or confirm this one")
+            d["corrections"][ent_id] = {"from": ent.hpo_id, "from_label": ent.canonical, "to": new_id,
+                                        "label": onto.label(new_id), "at": now_iso()}
+        else:
+            d["corrections"].pop(ent_id, None)
+        if decision == "pending":
             d["terms"].pop(ent_id, None)
         else:
-            d["terms"][ent_id] = body.decision
+            d["terms"][ent_id] = decision
         save_decisions(pid, d)
+        with termdec_log.open("a") as fh:  # ids and HPO ids only: no quote, no diary text
+            fh.write(json.dumps({"package_id": pid, "term_id": ent_id, "decision": decision, "from": ent.hpo_id,
+                                 "to": new_id, "at": now_iso()}) + "\n")
+        if had or decision == "corrected":
+            refresh_brief_terms(pid)
         return d
+
+    def refresh_brief_terms(pid: str) -> None:
+        """A draft brief lists the patient's terms as they were when it was drafted: rebuild those lines after a term was
+        replaced (or a replacement undone). AI lines stay as they are, with their review state."""
+        b = load_brief(pid)
+        if not b or b.finalized:
+            return
+        pkg = decided(open_pkg(pid), drop_rejected=True)
+        kept = [i for i in b.items if i.origin == "ai" or (i.origin == "document" and i.section != "labs")]
+        save_brief(b.model_copy(update={"items": briefing.patient_items(pkg, b.lang) + kept}))
+
+    @app.get("/api/inbox/{pid}/terms/{ent_id}/candidates")
+    def term_candidates(pid: str, ent_id: str, lang: str = "en") -> list[Term]:
+        """Other ontology terms for the patient's words, for the clinician to pick a replacement. No model call."""
+        pkg = open_pkg(pid)
+        ent = next((x for x in pkg.entities if x.id == ent_id), None)
+        if ent is None:
+            raise HTTPException(404, "term not found")
+        return clinic_ddx.replacement_candidates(onto, ent.quote, ent.canonical, ent.hpo_id, norm_lang(lang))
 
     @app.get("/api/inbox/{pid}/ddx")
     async def get_ddx(pid: str, lang: str = "en") -> Differential:

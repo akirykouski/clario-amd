@@ -5,6 +5,7 @@ import { api } from "../api";
 import { ErrorBox } from "../components/ui";
 import { useEventStream } from "../components/useEventStream";
 import { isOfflineBackend, useHealth } from "../components/useHealth";
+import { readerName, TOKEN_FACTORY } from "../components/compute";
 import { useT } from "../i18n";
 import { fmtNum, notifyReview } from "../lib";
 import type { BatchEvent, BatchStarted } from "../types";
@@ -34,11 +35,13 @@ export default function ImportPage() {
   const [busy, setBusy] = useState(false);
   const [ev, setEv] = useState<BatchEvent | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const offline = isOfflineBackend(useHealth());
 
   useEventStream<BatchEvent>(
     stream,
     (e) => e.done,
-    (e) => { setEv(e); if (e.done) { notifyReview(); setTimeout(() => nav("/labs"), 1200); } },
+    // a live run stays on screen a little longer, so the speed and the reader can be read
+    (e) => { setEv(e); if (e.done) { notifyReview(); setTimeout(() => nav("/labs"), offline || e.precomputed ? 1200 : 4000); } },
     () => { setErr(t("import.lost")); setBusy(false); },
   );
 
@@ -65,9 +68,9 @@ export default function ImportPage() {
 
   const pct = ev && ev.pages_total ? Math.round((ev.pages_done / ev.pages_total) * 100) : 0;
   const load = ev ? gpuLoad(ev.gpu) : null;
-  // Pages per second means nothing on the offline fixtures or before enough pages have been read.
-  const offline = isOfflineBackend(useHealth());
-  const showSpeed = !!ev && !offline && ev.pages_done >= 10;
+  // Pages per second means nothing on the offline fixtures, or mid-batch before enough pages have been read.
+  const showSpeed = !!ev && !offline && !ev.precomputed && (ev.pages_done >= 10 || (ev.done && ev.pages_done > 0));
+  const reader = ev && !offline && ev.model ? readerName(ev.model) + (ev.backend === TOKEN_FACTORY ? " · AMD Token Factory" : "") : null;
   const realGpu = !!ev?.gpu && !offline && (load !== null || (typeof ev.gpu.gpu_name === "string" && !!ev.gpu.gpu_name) || (typeof ev.gpu.name === "string" && !!ev.gpu.name));
   return (
     <div className="space-y-5">
@@ -101,9 +104,14 @@ export default function ImportPage() {
           )}
           {showSpeed ? (
             <>
-              <p className="font-display leading-none text-7xl tabular-nums" data-testid="pps">{fmtNum(ev.pages_per_sec, 1)}</p>
+              <p className="font-display leading-none text-7xl tabular-nums" data-testid="pps">{fmtNum(ev.pages_per_sec, ev.pages_per_sec < 1 ? 2 : 1)}</p>
               <p className="text-muted font-bold">{t("import.pps")}</p>
+              {ev.elapsed_s !== undefined && (
+                <p className="text-sm text-muted" data-testid="took">{t("import.took", { n: ev.pages_done, s: fmtNum(ev.elapsed_s, 0) })}</p>
+              )}
             </>
+          ) : ev.precomputed ? (
+            <p className="font-display text-2xl" data-testid="precomputed">{t("import.precomputed")}</p>
           ) : (
             <p className="font-display text-2xl" data-testid="pps-wait">{t(offline ? "import.demoModel" : "import.reading")}</p>
           )}
@@ -113,6 +121,7 @@ export default function ImportPage() {
           <p className="text-sm text-muted">
             {t("import.progress", { done: ev.pages_done, total: ev.pages_total, labs: ev.labs })}{ev.needs_review ? t("import.toCheck", { n: ev.needs_review }) : ""}{ev.errors ? t("import.failed", { n: ev.errors }) : ""}
           </p>
+          {reader && <p className="text-sm text-muted" data-testid="reader">{t("import.readBy", { reader })}</p>}
           {ev.done && <p className="font-bold">{t("import.done")}</p>}
         </section>
       )}

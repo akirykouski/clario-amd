@@ -6,6 +6,7 @@ hair loss, a lab result), with everyday noise. Entirely fictional.
 
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -67,6 +68,27 @@ DEMO_DIR = Path(__file__).parent / "data" / "demo"
 def persona_entries(persona: str, today: date | None = None) -> list[tuple[str, str, int]]:
     today = today or date.today()
     return [((today - timedelta(days=d)).isoformat(), text, mood) for d, text, mood in PERSONAS[persona]]
+
+
+# Reviewed, precomputed extraction results for the personas (how they were made: data/demo/LABELS.md). Loading a
+# persona stores these directly, so the demo opens at once and shows the same terms every time. Notes the user types
+# or dictates still go through the live model.
+ENTITY_FIELDS = ("type", "quote", "canonical", "hpo_id", "hpo_label", "negated", "severity", "family_history",
+                 "onset_hint", "confidence", "review", "flags", "model")
+
+
+def persona_labels(persona: str) -> dict[str, list[dict]]:
+    """Entry text -> its reviewed entities (Entity fields without ids). Every persona entry has a key."""
+    data = json.loads((DEMO_DIR / f"giulia_labels_{PERSONA_LANG[persona]}.json").read_text())
+    return {e["text"]: [{k: x[k] for k in ENTITY_FIELDS if k in x} for x in e["entities"]] for e in data["entries"]}
+
+
+def truth_rows(pdf: Path) -> list[list[dict]]:
+    """Per page of a shipped referto, the rows a live OCR read gives (truth sidecar written by scripts/make_referti.py)."""
+    doc = json.loads(pdf.with_suffix(".truth.json").read_text())
+    return [[{"test_name": t["test_name"], "value_numeric": t["value_numeric"], "value_text": t["value_text"],
+              "unit": t["unit"], "ref_low": t["ref_low"], "ref_high": t["ref_high"], "flag": t["flag"],
+              "date": doc["date"]} for t in p["tests"]] for p in sorted(doc["pages"], key=lambda p: p["page"])]
 
 
 REFERTI_LATEST = date(2026, 2, 21)  # the newest report date printed on the shipped referti (a test pins it)

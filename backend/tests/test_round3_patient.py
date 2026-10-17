@@ -36,7 +36,9 @@ def test_demo_terms_count_without_any_review(unlocked, persona, lang):
     assert unlocked.get("/api/review").json()["count"] >= 1
     assert any(x.negated for x in ents)
     assert any(x.family_history for x in ents)
-    assert body["patterns"][0]["signal"] == "strong"
+    # reviewed Gemma 4 31B labels (data/demo/LABELS.md): lead 0.035 over the runner-up, a moderate card. The old offline
+    # fixtures gave a leaner term list and a strong card.
+    assert body["patterns"][0]["signal"] == "moderate"
 
 
 def test_shared_card_signal_equals_the_patient_signal(unlocked, clinic_server, tmp_path):

@@ -133,7 +133,11 @@ _remote: dict[str, Any] = {"t": -1e9, "v": None, "url": None, "loop": None, "cli
 
 async def read_gpu(s, ttl: float = 2.0) -> dict | None:
     """GPU summary for the app: the sidecar at `s.gpu_metrics_url` when set, else amd-smi on this machine.
-    None when there is no telemetry. Never raises. Cached for `ttl` seconds so several viewers cost one read."""
+    None when there is no telemetry. Never raises. Cached for `ttl` seconds so several viewers cost one read.
+    On AMD Token Factory the model runs on AMD's hosted GPUs and we get no telemetry for them: a GPU on this machine
+    is not the one doing the work, so it is not reported (an explicit sidecar URL still is)."""
+    if not s.gpu_metrics_url and getattr(s, "token_factory", False):
+        return None
     if not s.gpu_metrics_url:
         return await asyncio.to_thread(read_cached, ttl)
     now = time.monotonic()

@@ -147,10 +147,18 @@ export function daysAgo(n: number): string {
   const d = new Date(); d.setDate(d.getDate() - n);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
-/** Plain-words note for a flag the extractor set on an entity; unknown flags are shown as words. */
-export function flagNote(flag: string): string {
-  const key = `flag.${flag}` as Key;
-  return ["hpo_dropped", "negation_from_text", "family_history_from_text", "quote_not_found"].includes(flag) ? t(key) : flag.replace(/_/g, " ");
+/** Flags a patient may read about, in plain words. Technical ones (hpo_dropped, no_hpo, onset_dropped, fixed_by_*)
+ *  stay on the clinic side (`clinicFlagNote`). */
+const PATIENT_FLAGS = ["negation_from_text", "family_history_from_text", "quote_not_found"];
+/** Plain-words note for a flag the extractor set on an entity, or null when the patient should not see it. */
+export function flagNote(flag: string): string | null {
+  return PATIENT_FLAGS.includes(flag) ? t(`flag.${flag}` as Key) : null;
+}
+/** Why a term is in the clinician's check list (the guardrail's technical reason), or null. */
+export function clinicFlagNote(flags: string[]): string | null {
+  if (flags.includes("hpo_dropped")) return t("check.why.hpo_dropped");
+  if (flags.includes("no_hpo")) return t("check.why.no_hpo");
+  return null;
 }
 
 /** Confidence as a whole-number percent for the bar; null when it was not measured. */

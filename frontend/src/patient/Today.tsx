@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Entry, SafetyNotice } from "../types";
 import { today } from "../lib";
@@ -8,6 +8,7 @@ import { Empty, ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { EntryCard } from "./EntryCard";
 import { SafetyBanner } from "./SafetyBanner";
+import { DictationButton } from "./dictation/Dictation";
 
 export default function Today() {
   const { t, lang } = useT();
@@ -36,16 +37,28 @@ export default function Today() {
     finally { setBusy(false); }
   };
 
-  useEffect(() => { document.title = `${t("today.title")} · Clario`; }, [t, lang]);
+  // Dictated text is appended so a typed start is kept; the user edits it before saving.
+  const addSpoken = useCallback((spoken: string) => {
+    setText((prev) => (prev.trim() ? `${prev.trimEnd()} ${spoken}` : spoken));
+  }, []);
+
+  useEffect(() => { document.title = `${t("today.title")} · ${t("app.tabTitle", { role: t("app.role.patient") })}`; }, [t, lang]);
   const entries: Entry[] = data ?? [];
+  // The onboarding tour points at a note with an unsure (dashed) term, else one with terms, else the newest.
+  const unsure = entries.findIndex((e) => e.entities?.some((x) => x.review === "needs_review"));
+  const withTerms = entries.findIndex((e) => (e.entities?.length ?? 0) > 0);
+  const tourIdx = unsure >= 0 ? unsure : Math.max(withTerms, 0);
 
   return (
     <div className="space-y-6">
       {safety && <SafetyBanner notice={safety} onDismiss={() => setSafety(null)} />}
       <form onSubmit={save} className="space-y-3">
         <label htmlFor="today" className="block font-display text-3xl">{t("today.question")}</label>
-        <textarea id="today" className="input min-h-[140px] text-[17px]" value={text} onChange={(e) => setText(e.target.value)}
-          placeholder={t("today.placeholder")} />
+        <div className="space-y-3" data-tour="today-write">
+          <textarea id="today" className="input min-h-[140px] text-[17px]" value={text} onChange={(e) => setText(e.target.value)}
+            placeholder={t("today.placeholder")} />
+          <DictationButton onText={addSpoken} />
+        </div>
         <div className="grid grid-cols-2 gap-3 items-end">
           <div>
             <label htmlFor="d" className="label">{t("today.date")}</label>
@@ -77,7 +90,7 @@ export default function Today() {
             <p>{t("today.emptyText")}</p>
           </Empty>
         )}
-        {entries.map((e) => <EntryCard key={e.id} initial={e} pii={pii[e.id] ?? 0} />)}
+        {entries.map((e, i) => <EntryCard key={e.id} initial={e} pii={pii[e.id] ?? 0} tour={i === tourIdx} />)}
       </section>
       <DemoMenu onLoaded={reload} open={!loading && entries.length === 0} />
     </div>

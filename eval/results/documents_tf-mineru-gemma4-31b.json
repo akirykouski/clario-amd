@@ -1,0 +1,103 @@
+{
+ "task": "document_extraction_app_smoke",
+ "field_exact_match": {
+  "value": 1.0,
+  "unit": 1.0,
+  "ref_low": 1.0,
+  "ref_high": 1.0
+ },
+ "row_recall": 1.0,
+ "n": 3,
+ "n_pages": 3,
+ "n_rows": 48,
+ "n_results": 48,
+ "needs_review": 0,
+ "pages_failed": 0,
+ "pages_per_sec": 0.01,
+ "elapsed_s": 258.4,
+ "wall_s": 259.5,
+ "per_doc": [
+  {
+   "doc": "ref_7_001",
+   "date_found": true,
+   "rows": 24,
+   "rows_all_fields_exact": 24
+  },
+  {
+   "doc": "ref_7_002",
+   "date_found": true,
+   "rows": 13,
+   "rows_all_fields_exact": 13
+  },
+  {
+   "doc": "ref_7_003",
+   "date_found": true,
+   "rows": 11,
+   "rows_all_fields_exact": 11
+  }
+ ],
+ "concurrency": 4,
+ "samples_per_page": 1,
+ "dataset": "synthetic-referti/demo (backend/clario/data/demo)",
+ "model": "MinerU2.5-Pro + Gemma-4-31B-IT",
+ "backend": "amd-token-factory",
+ "path": "patient app POST /api/documents/batch, pseudonymiser on",
+ "remote_calls": [
+  {
+   "model": "Gemma-4-31B-IT",
+   "purpose": "document",
+   "images": 0,
+   "redacted": true,
+   "replacements": 4
+  },
+  {
+   "model": "Gemma-4-31B-IT",
+   "purpose": "document",
+   "images": 0,
+   "redacted": true,
+   "replacements": 4
+  },
+  {
+   "model": "Gemma-4-31B-IT",
+   "purpose": "document",
+   "images": 0,
+   "redacted": true,
+   "replacements": 4
+  },
+  {
+   "model": "MinerU2.5-Pro",
+   "purpose": "document",
+   "images": 1,
+   "redacted": false,
+   "replacements": 0
+  },
+  {
+   "model": "MinerU2.5-Pro",
+   "purpose": "document",
+   "images": 1,
+   "redacted": false,
+   "replacements": 0
+  },
+  {
+   "model": "MinerU2.5-Pro",
+   "purpose": "document",
+   "images": 1,
+   "redacted": false,
+   "replacements": 0
+  }
+ ],
+ "call_log_verify": {
+  "ok": true,
+  "broken_at": null,
+  "count": 6
+ },
+ "hardware": {
+  "gpu_name": "AMD Token Factory (hosted, GPU not reported)",
+  "gpu_count": null,
+  "vram_total_gb": null,
+  "source": "token-factory"
+ },
+ "date": "2026-10-17",
+ "structure": "model",
+ "note": "Live: three demo referti imported through the patient app on AMD Token Factory (MinerU2.5-Pro OCR, then Gemma-4-31B-IT structures the pseudonymised text). Shared rate-limited key; latency includes gateway load."
+}

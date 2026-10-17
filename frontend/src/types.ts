@@ -128,7 +128,7 @@ export interface RunEvent {
 }
 
 export type LabReview = "auto" | "needs_review" | "confirmed" | "corrected" | "rejected";
-export type LabFlag = "low" | "high" | "normal";
+export type LabFlag = "low" | "high" | "normal" | "positive"; // positive: a qualitative result such as ANA "Positivo 1:80"
 export interface LabValue {
   id: string; date: string; value_numeric: number | null; value_text: string | null; flag: LabFlag | null;
   review: LabReview; confidence: number | null; page: number; batch_id: string;
@@ -147,6 +147,10 @@ export interface BatchStarted { batch_id: string; pages: number; entry_id: strin
 export interface BatchEvent {
   batch_id: string; pages_done: number; pages_total: number; pages_per_sec: number;
   gpu: Record<string, unknown> | null; errors: number; labs: number; needs_review: number; done: boolean;
+  /** Seconds since the batch started; backend and model(s) that read the pages ("MinerU2.5-Pro + Gemma-4-31B-IT"). */
+  elapsed_s?: number; backend?: string; model?: string | null;
+  /** The demo referti: rows stored from the reviewed sample results, no page was read now (no speed, no reader). */
+  precomputed?: boolean;
 }
 export interface LabResult {
   id: string; batch_id: string; test_name: string; test_key: string; value_numeric: number | null;
@@ -167,7 +171,8 @@ export interface ClinicMetrics {
 }
 
 // Clinic differential (clinician only)
-export interface ConditionFeature { hpo_id: string; label: string; count: number; freq: number | null }
+/** `count`: notes that record the feature; `labs`: lab dates with an out-of-range result that maps to it (0 or absent: notes only). */
+export interface ConditionFeature { hpo_id: string; label: string; count: number; labs?: number; freq: number | null }
 export interface Condition {
   disease_id: string; name: string; full_name: string; signal: Signal | null; score: number; rank: number; url: string | null;
   matched: ConditionFeature[]; missing: ConditionFeature[];
@@ -175,13 +180,19 @@ export interface Condition {
 export interface ClinicQuestion { feature_id: string; label: string; question: string; ig: number; freq_by: { name: string; freq: number | null }[] }
 export interface ClinicAnswer { feature_id: string; label: string; answer: Answer; at: string }
 export interface Differential { conditions: Condition[]; question: ClinicQuestion | null; answers: ClinicAnswer[]; n_terms: number; note: string }
-export type TermDecision = "confirmed" | "rejected" | "pending";
-export interface Decisions { terms: Record<string, TermDecision>; labs?: Record<string, TermDecision>; answers: ClinicAnswer[] }
+export type TermDecision = "confirmed" | "rejected" | "corrected" | "pending";
+/** A term the clinician replaced: the id and label it had (`from`, null when it had no id) and the one picked (`to`). */
+export interface TermCorrection { from: string | null; from_label: string; to: string; label: string; at: string }
+export interface Decisions { terms: Record<string, TermDecision>; corrections?: Record<string, TermCorrection>; labs?: Record<string, TermDecision>; answers: ClinicAnswer[] }
 
 export interface OverviewTerm { label: string; count: number; recent_count: number; first: string; last: string; max_severity: number | null }
 export interface Overview {
   profile: Profile | null; notes: number; weeks: number; frequent: OverviewTerm[]; recent: OverviewTerm[]; new: string[];
-  first: OverviewTerm | null; severe: OverviewTerm[]; labs_off: { name: string; value: string; unit: string; flag: "low" | "high"; date: string }[];
+  first: OverviewTerm | null; severe: OverviewTerm[]; labs_off: OverviewLab[];
   family: string[]; denied: string[]; mood: { avg: number; trend: "down" | "up" | "flat" } | null;
   asks: { text: string; entry_id: string; date: string }[];
+}
+/** One test with an out-of-range result: its latest out-of-range reading; `latest_in_range` when a later one is back in range. */
+export interface OverviewLab {
+  name: string; test_key: string; value: string; unit: string; flag: "low" | "high" | "positive"; date: string; latest_in_range: boolean;
 }

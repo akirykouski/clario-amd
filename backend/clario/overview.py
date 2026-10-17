@@ -11,9 +11,11 @@ import re
 from datetime import date, timedelta
 
 from .knowledge import Ontology
-from .models import SharePackage
+from .brief import _num
+from .documents import is_off, lab_flag
+from .models import SharedLab, SharePackage
 from .patterns import patient_label
-from .share import patient_mentions
+from .share import LAB_NAMES_EN, patient_mentions
 
 RECENT_DAYS = 14
 ANSWER_LEADS = ("Answer to a question:", "Risposta a una domanda:")
@@ -51,6 +53,36 @@ def asks_from_notes(pkg: SharePackage, limit: int = 3) -> list[dict]:
     return out
 
 
+def lab_name(l: SharedLab, lang: str) -> str:
+    """English clinic UI: the English name of a known test; Italian: the name as printed."""
+    return (l.name_en or LAB_NAMES_EN.get(l.test_key) or l.test_name) if lang == "en" else l.test_name
+
+
+def labs_out_of_range(labs: list[SharedLab], lang: str = "en") -> list[dict]:
+    """Every test with an out-of-range result in the package (the same set the lab table's out-of-range block and the
+    header count show), one line per test: its latest out-of-range reading, and whether a later reading is back in
+    range. Still out of range first, then newest first."""
+    groups: dict[str, list[SharedLab]] = {}
+    for l in labs:
+        if l.decision != "rejected":
+            groups.setdefault(l.test_key or l.test_name.lower(), []).append(l)
+    out = []
+    for key, rows in groups.items():
+        rows.sort(key=lambda l: (l.date, l.page))
+        off = [l for l in rows if is_off(lab_flag(l))]
+        if not off:
+            continue
+        last_off, last = off[-1], rows[-1]
+        value = last_off.value_text or (_num(last_off.value_numeric, lang) if last_off.value_numeric is not None else "")
+        out.append({"name": lab_name(last_off, lang), "test_key": key, "value": value, "unit": last_off.unit,
+                    "flag": lab_flag(last_off), "date": last_off.date,
+                    "latest_in_range": last is not last_off and lab_flag(last) == "normal"})
+    out.sort(key=lambda r: r["name"].lower())
+    out.sort(key=lambda r: r["date"], reverse=True)
+    out.sort(key=lambda r: r["latest_in_range"])
+    return out
+
+
 def overview(pkg: SharePackage, onto: Ontology, lang: str = "en") -> dict:
     entries = sorted(pkg.entries, key=lambda e: e.occurred_on)
     end = date.fromisoformat(entries[-1].occurred_on) if entries else date.today()
@@ -77,12 +109,7 @@ def overview(pkg: SharePackage, onto: Ontology, lang: str = "en") -> dict:
     first = min(rows, key=lambda r: r["first"]) if rows else None
     severe = sorted((r for r in rows if (r["max_severity"] or 0) >= 6), key=lambda r: -(r["max_severity"] or 0))[:3]
 
-    latest: dict[str, object] = {}
-    for l in sorted(pkg.labs, key=lambda l: l.date):
-        latest[l.test_name.lower()] = l
-    labs_off = [{"name": l.test_name, "value": l.value_text or (f"{l.value_numeric:g}" if l.value_numeric is not None else ""),
-                 "unit": l.unit, "flag": l.flag, "date": l.date}
-                for l in latest.values() if l.flag in ("low", "high")]  # type: ignore[union-attr]
+    labs_off = labs_out_of_range(pkg.labs, lang)
 
     family = sorted({x.canonical for x in pkg.entities if x.family_history and not x.negated})
     denied = sorted({_label(onto, x.hpo_id, x.canonical, lang) for x in pkg.entities

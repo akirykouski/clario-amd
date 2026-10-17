@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ExternalLink, HelpCircle, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, FlaskConical, HelpCircle, RotateCcw, Sparkles } from "lucide-react";
 import { api } from "../api";
 import type { Answer, Condition, Differential as Ddx } from "../types";
 import { ErrorBox, SignalPill, Spinner } from "../components/ui";
@@ -43,7 +43,7 @@ export function Differential({ pid, version }: { pid: string; version: number })
   };
 
   return (
-    <section aria-labelledby="ddx-title" className="card space-y-4" style={{ borderLeft: "5px solid var(--accent)" }} data-testid="ddx">
+    <section aria-labelledby="ddx-title" className="card space-y-4" style={{ borderLeft: "5px solid var(--accent)" }} data-testid="ddx" data-tour="ddx">
       <div>
         <h2 id="ddx-title" className="text-2xl flex items-center gap-2"><Sparkles size={22} aria-hidden className="text-accent" />{t("ddx.title")}</h2>
         <p className="text-sm text-muted mt-1">{t("ddx.sub")}</p>
@@ -125,6 +125,11 @@ function ConditionCard({ c, move }: { c: Condition; move?: number | "new" }) {
         {c.matched.map((m) => (
           <span key={m.hpo_id} className="chip text-sm" style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 10%, transparent)" }}>
             {m.label}{m.count > 1 && <span className="text-muted text-xs">×{m.count}</span>}
+            {(m.labs ?? 0) > 0 && (
+              <span className="text-xs text-muted inline-flex items-center gap-0.5" data-testid="ddx-from-labs" title={t("ddx.fromLabsTitle", { n: m.labs ?? 0 })}>
+                <FlaskConical size={11} aria-hidden />{t("ddx.fromLabs")}
+              </span>
+            )}
           </span>
         ))}
       </div>

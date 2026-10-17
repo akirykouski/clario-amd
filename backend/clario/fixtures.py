@@ -117,6 +117,24 @@ class OfflineLLM(LLM):
                          "severity": int(sev.group(1)) if sev and canonical == "Arthralgia" else None})
         return {"entities": ents}
 
+    async def ocr(self, task, image_url, *, model, payload=None, purpose=None):
+        """Offline OCR: the truth sidecar of a generated PDF as the markdown table MinerU returns (Italian decimals)."""
+        off = (payload or {}).get("offline")
+        if not off:
+            return "", _stats(0)
+
+        def it(v) -> str:
+            return "" if v is None else f"{v:g}".replace(".", ",")
+
+        cells = ["<tr><td>Esame</td><td>Risultato</td><td>Unita</td><td>Valori di riferimento</td></tr>"]
+        for t in off["rows"]:
+            shown = t["value_text"] if t["value_numeric"] is None else it(t["value_numeric"])
+            ref = t.get("ref_text") or (f"{it(t['ref_low'])} - {it(t['ref_high'])}" if t["ref_low"] is not None
+                                        else f"&lt; {it(t['ref_high'])}" if t["ref_high"] is not None else "")
+            cells.append(f"<tr><td>{t['test_name']}</td><td>{shown}</td><td>{t['unit']}</td><td>{ref}</td></tr>")
+        y, m, d = (off.get("date") or "2025-01-01").split("-")
+        return f"Data del prelievo: {d}/{m}/{y}\n\n<table>{''.join(cells)}</table>", _stats(0)
+
     @staticmethod
     def _document(payload: dict) -> dict:
         """Offline "reading" of a page: replays the truth sidecar embedded in generated PDFs (no OCR, no model).

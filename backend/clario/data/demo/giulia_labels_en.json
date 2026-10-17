@@ -1,0 +1,714 @@
+{
+ "persona": "giulia",
+ "lang": "en",
+ "made": "Draft: one extraction call per entry to Gemma-4-31B-IT on AMD Token Factory on 2026-10-17 (app prompt in its confidence variant, extraction_v3 schema, app grounding and ontology check, no HPO pick call). See LABELS.md.",
+ "reviewed": "Every entity checked by hand against the shipped HPO ontology and the entry text on 2026-10-17; changes in review_note.",
+ "entries": [
+  {
+   "day": 70,
+   "text": "Really tired all week, even after 9 hours of sleep. Climbing the stairs to the office felt like a mountain.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Really tired",
+     "canonical": "Fatigue",
+     "hpo_id": "HP:0012378",
+     "hpo_label": "Fatigue",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": "all week",
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 66,
+   "text": "My knees and the small joints in my fingers ache in the morning, stiff for about an hour before they loosen up.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "knees",
+     "canonical": "Knee pain",
+     "hpo_id": "HP:0030839",
+     "hpo_label": "Knee pain",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model: 'Polyarthralgia' for the whole span, no valid HPO id; split into knee and finger pain"
+    },
+    {
+     "type": "symptom",
+     "quote": "small joints in my fingers ache",
+     "canonical": "Arthralgia",
+     "hpo_id": "HP:0002829",
+     "hpo_label": "Arthralgia",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "split from the same span; the words name the finger joints, so Arthralgia"
+    },
+    {
+     "type": "symptom",
+     "quote": "stiff",
+     "canonical": "Joint stiffness",
+     "hpo_id": "HP:0001387",
+     "hpo_label": "Joint stiffness",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'in the morning' removed (time of day)"
+    }
+   ]
+  },
+  {
+   "day": 63,
+   "text": "Long lunch outside at the lake on Sunday. By evening my cheeks and nose went red, like a butterfly shape. It burned a bit.",
+   "entities": [
+    {
+     "type": "finding",
+     "quote": "cheeks and nose went red, like a butterfly shape",
+     "canonical": "Malar rash",
+     "hpo_id": "HP:0025300",
+     "hpo_label": "Malar rash",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'By evening' removed (time of day)"
+    },
+    {
+     "type": "symptom",
+     "quote": "burned",
+     "canonical": "Burning sensation",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.8,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model term mapped to 'Burning eye sensation' (wrong body part); no HPO id"
+    }
+   ]
+  },
+  {
+   "day": 59,
+   "text": "Sore in my mouth again, on the roof of the mouth. It doesn't hurt much but it's the third one this month.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Sore in my mouth",
+     "canonical": "Oral ulcer",
+     "hpo_id": "HP:0000155",
+     "hpo_label": "Oral ulcer",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "body site 'roof of the mouth' dropped (mapped to 'Abnormal hard palate morphology', not what she said)"
+    }
+   ]
+  },
+  {
+   "day": 55,
+   "text": "Fingers turned white and then blue in the cold this morning waiting for the tram. Took ages to warm up.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Fingers turned white and then blue",
+     "canonical": "Raynaud phenomenon",
+     "hpo_id": "HP:0030880",
+     "hpo_label": "Raynaud phenomenon",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'this morning' removed (time of day)"
+    },
+    {
+     "type": "trigger",
+     "quote": "cold",
+     "canonical": "Cold exposure",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.8,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 52,
+   "text": "Knees ache 6/10 today. No fever. Work was stressful but I don't think that's it.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Knees ache",
+     "canonical": "Knee pain",
+     "hpo_id": "HP:0030839",
+     "hpo_label": "Knee pain",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": 6,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model 'Arthralgia' -> Knee pain (one site named); onset 'today' removed"
+    },
+    {
+     "type": "symptom",
+     "quote": "fever",
+     "canonical": "Fever",
+     "hpo_id": "HP:0001945",
+     "hpo_label": "Fever",
+     "negated": true,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.99,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 48,
+   "text": "Noticed more hair than usual in the shower drain. Brushing it, it comes out in small clumps.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "more hair than usual in the shower drain",
+     "canonical": "Hair loss",
+     "hpo_id": "HP:0001596",
+     "hpo_label": "Alopecia",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "quote widened to the whole phrase; duplicate Alopecia from 'comes out in small clumps' merged"
+    }
+   ]
+  },
+  {
+   "day": 45,
+   "text": "Feeling a bit better this week, more energy. Went for a short walk. My mother has lupus, she only told me now, and I keep thinking about it.",
+   "entities": [
+    {
+     "type": "finding",
+     "quote": "lupus",
+     "canonical": "Systemic lupus erythematosus",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": true,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 1.0,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "HPO id HP:0002725 removed: a relative's diagnosis is not the patient's phenotype, and patient screens never show a condition name (the relative's condition shows as her own words)"
+    }
+   ]
+  },
+  {
+   "day": 41,
+   "text": "Maybe the redness on my cheeks is back after a sunny afternoon at the market.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "redness on my cheeks",
+     "canonical": "Malar rash",
+     "hpo_id": "HP:0025300",
+     "hpo_label": "Malar rash",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.5,
+     "review": "needs_review",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, unsure on purpose",
+     "confidence_source": "set in review (hedged sentence); the model said 0.9",
+     "review_note": "hedged ('Maybe'): unsure on purpose"
+    },
+    {
+     "type": "trigger",
+     "quote": "sunny afternoon",
+     "canonical": "Sun exposure",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.5,
+     "review": "needs_review",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, unsure on purpose",
+     "confidence_source": "set in review (hedged sentence); the model said 0.8",
+     "review_note": "no HPO id; unsure on purpose so the clinician can replace it with Cutaneous photosensitivity"
+    }
+   ]
+  },
+  {
+   "day": 37,
+   "text": "Chest hurts when I take a deep breath, sharp, on the left side. Better when I sit forward. Lasted two days.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Chest hurts when I take a deep breath",
+     "canonical": "Pleuritic chest pain",
+     "hpo_id": "HP:0033771",
+     "hpo_label": "Pleuritic chest pain",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": "Lasted two days",
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "dropped: 'sharp' (a descriptor, no HPO id) and 'left side' (body site mapped to Chest pain)"
+    }
+   ]
+  },
+  {
+   "day": 34,
+   "text": "Low fever in the evening, 37.9. Joints in my wrists swollen.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Low fever",
+     "canonical": "Fever",
+     "hpo_id": "HP:0001945",
+     "hpo_label": "Fever",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'in the evening' removed (time of day)"
+    },
+    {
+     "type": "finding",
+     "quote": "Joints in my wrists swollen",
+     "canonical": "Joint swelling",
+     "hpo_id": "HP:0001386",
+     "hpo_label": "Joint swelling",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model 'Swollen wrist' had no valid HPO id -> Joint swelling (the words name the joints; same term as day 21)"
+    }
+   ]
+  },
+  {
+   "day": 30,
+   "text": "GP blood test: she said there is protein in my urine and my white cells are a bit low. Another test in a month.",
+   "entities": [
+    {
+     "type": "finding",
+     "quote": "protein in my urine",
+     "canonical": "Proteinuria",
+     "hpo_id": "HP:0000093",
+     "hpo_label": "Proteinuria",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 1.0,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "finding",
+     "quote": "white cells are a bit low",
+     "canonical": "Leukopenia",
+     "hpo_id": "HP:0001882",
+     "hpo_label": "Decreased total leukocyte count",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 1.0,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 26,
+   "text": "I think there is a sore in my mouth again. Tired. Ankles a little puffy at the end of the day.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "sore in my mouth",
+     "canonical": "Oral ulcer",
+     "hpo_id": "HP:0000155",
+     "hpo_label": "Oral ulcer",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.5,
+     "review": "needs_review",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, unsure on purpose",
+     "confidence_source": "set in review (hedged sentence); the model said 0.95",
+     "review_note": "hedged ('I think'): unsure on purpose"
+    },
+    {
+     "type": "symptom",
+     "quote": "Tired",
+     "canonical": "Fatigue",
+     "hpo_id": "HP:0012378",
+     "hpo_label": "Fatigue",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "finding",
+     "quote": "Ankles a little puffy",
+     "canonical": "Ankle swelling",
+     "hpo_id": "HP:0001785",
+     "hpo_label": "Ankle swelling",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "model 'Edema of ankles' had no valid HPO id -> Ankle swelling; onset 'at the end of the day' removed"
+    }
+   ]
+  },
+  {
+   "day": 21,
+   "text": "Wrists and fingers stiff and swollen in the morning, could not open a jar.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Wrists and fingers stiff",
+     "canonical": "Joint stiffness",
+     "hpo_id": "HP:0001387",
+     "hpo_label": "Joint stiffness",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'in the morning' removed"
+    },
+    {
+     "type": "symptom",
+     "quote": "swollen",
+     "canonical": "Joint swelling",
+     "hpo_id": "HP:0001386",
+     "hpo_label": "Joint swelling",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'in the morning' removed"
+    }
+   ]
+  },
+  {
+   "day": 17,
+   "text": "Good weekend, slept well, no pain on Saturday.",
+   "entities": []
+  },
+  {
+   "day": 13,
+   "text": "Rash on my cheeks after 20 minutes in the sun. Headache in the afternoon.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Rash on my cheeks",
+     "canonical": "Malar rash",
+     "hpo_id": "HP:0025300",
+     "hpo_label": "Malar rash",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "trigger",
+     "quote": "sun",
+     "canonical": "Sun exposure",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.8,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "symptom",
+     "quote": "Headache",
+     "canonical": "Headache",
+     "hpo_id": "HP:0002315",
+     "hpo_label": "Headache",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model, fixed in review",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": "onset 'in the afternoon' removed (time of day)"
+    }
+   ]
+  },
+  {
+   "day": 9,
+   "text": "Fingers went white again in the supermarket freezer aisle.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Fingers went white",
+     "canonical": "Raynaud phenomenon",
+     "hpo_id": "HP:0030880",
+     "hpo_label": "Raynaud phenomenon",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "trigger",
+     "quote": "freezer aisle",
+     "canonical": "Cold exposure",
+     "hpo_id": null,
+     "hpo_label": null,
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": null,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: added by hand in review (HPO ontology lookup), no model",
+     "source": "hand",
+     "confidence_source": null,
+     "review_note": "added for parity with the Italian draft"
+    }
+   ]
+  },
+  {
+   "day": 5,
+   "text": "Exhausted. Hair still falling out. Knees and wrists ache, 5/10.",
+   "entities": [
+    {
+     "type": "symptom",
+     "quote": "Exhausted",
+     "canonical": "Fatigue",
+     "hpo_id": "HP:0012378",
+     "hpo_label": "Fatigue",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "symptom",
+     "quote": "Hair still falling out",
+     "canonical": "Alopecia",
+     "hpo_id": "HP:0001596",
+     "hpo_label": "Alopecia",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": null,
+     "confidence": 0.95,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    },
+    {
+     "type": "symptom",
+     "quote": "Knees and wrists ache",
+     "canonical": "Arthralgia",
+     "hpo_id": "HP:0002829",
+     "hpo_label": "Arthralgia",
+     "negated": false,
+     "family_history": false,
+     "onset_hint": null,
+     "severity": 5,
+     "confidence": 0.9,
+     "review": "auto",
+     "flags": [],
+     "model": "precomputed: Gemma-4-31B-IT on AMD Token Factory, reviewed by hand",
+     "source": "model",
+     "confidence_source": "model (verbalized, same call)",
+     "review_note": null
+    }
+   ]
+  },
+  {
+   "day": 2,
+   "text": "Writing down questions for the rheumatology appointment on Thursday. I want to ask about the joint pain and the rash.",
+   "entities": []
+  }
+ ]
+}

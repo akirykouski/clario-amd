@@ -108,4 +108,8 @@ export const api = {
     request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/labs/${encodeURIComponent(labId)}`, { body: { decision } }),
   decideTerm: (id: string, entId: string, decision: TermDecision) =>
     request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/terms/${encodeURIComponent(entId)}`, { body: { decision } }),
+  replaceTerm: (id: string, entId: string, hpoId: string) =>
+    request<Decisions>("PATCH", `/inbox/${encodeURIComponent(id)}/terms/${encodeURIComponent(entId)}`, { body: { decision: "corrected", hpo_id: hpoId } }),
+  termCandidates: (id: string, entId: string, lang?: string) =>
+    request<Term[]>("GET", `/inbox/${encodeURIComponent(id)}/terms/${encodeURIComponent(entId)}/candidates`, { params: { lang } }),
 };

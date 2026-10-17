@@ -10,7 +10,7 @@ EntityType = Literal["symptom", "finding", "lab", "medication", "trigger", "body
 Signal = Literal["weak", "moderate", "strong"]
 Review = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
 LabReview = Literal["auto", "needs_review", "confirmed", "corrected", "rejected"]
-LabFlag = Literal["low", "high", "normal"]
+LabFlag = Literal["low", "high", "normal", "positive"]  # positive: a qualitative result (ANA "Positivo 1:80")
 COUNTED = ("auto", "needs_review", "confirmed", "corrected")  # everything except rejected counts toward patterns and sharing
 REVIEWED = ("confirmed", "corrected")  # a person looked at it and kept it
 
@@ -48,7 +48,7 @@ class Entity(BaseModel):
     review: Review = Field("auto", description="auto: counted, nobody looked at it; needs_review: counted, confidence below "
                                                "threshold, flagged for the clinician; confirmed, corrected, rejected: decided "
                                                "by a person (rejected never counts)")
-    flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, quote_not_found")
+    flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, no_hpo, onset_dropped, quote_not_found")
     model: str | None = None
 
 
@@ -176,7 +176,7 @@ class SharedLab(BaseModel):
     needs_review: bool = Field(False, description="Read with low confidence: the clinician is asked to check it")
     test_key: str = Field("", description="Folded test name: groups the same test across documents into one history")
     name_en: str | None = Field(None, description="English name of a known test, for an English clinic UI; test_name is as printed")
-    abnormal: bool = Field(False, description="Flag is low or high, or a text result reads positive")
+    abnormal: bool = Field(False, description="Flag is low, high or positive (out of range)")
     decision: Literal["confirmed", "rejected"] | None = Field(None, description="The clinic's decision on a row that needed a check; set by the clinic server, absent in the sealed package")
 
 
@@ -335,7 +335,7 @@ class LabResult(BaseModel):
     unit: str = ""
     ref_low: float | None = None
     ref_high: float | None = None
-    flag: LabFlag | None = Field(None, description="Recomputed in code from value and range when both exist")
+    flag: LabFlag | None = Field(None, description="Recomputed in code: value against range, or positive/normal for a qualitative result")
     date: str = Field(description="ISO collection date; falls back to the import date")
     page: int = Field(description="Page number within the batch")
     confidence: float | None = Field(None, ge=0, le=1, description="Self-consistency or model confidence")
@@ -362,7 +362,7 @@ class LabTest(BaseModel):
     ref_low: float | None
     ref_high: float | None
     latest: LabValue
-    out_of_range: bool = Field(description="Latest value is flagged low or high")
+    out_of_range: bool = Field(description="Latest value is flagged low, high or positive")
     values: list[LabValue] = Field(description="Oldest first")
 
 
@@ -401,7 +401,8 @@ class AnswerResult(BaseModel):
 class ConditionFeature(BaseModel):
     hpo_id: str
     label: str
-    count: int = 0
+    count: int = Field(0, description="Notes that record the feature")
+    labs: int = Field(0, description="Lab dates with an abnormal result that maps to the feature (clinic_ddx.LAB_RULES)")
     freq: float | None = Field(None, description="Share of described cases with the feature (HPO annotation), when known")
 
 
