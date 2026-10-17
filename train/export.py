@@ -44,11 +44,13 @@ def modelfile_text(gguf, temperature=0.0, num_ctx=4096):
             f'SYSTEM """{sysprompt}"""\n')
 
 
-def merge(base, adapter, out, attn="sdpa"):
+def merge(base, adapter, out, attn="auto"):
     import torch
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    kw = dict(torch_dtype=torch.bfloat16, attn_implementation=attn)
+    kw = dict(torch_dtype=torch.bfloat16)
+    if attn != "auto":  # newer transformers has no sdpa for Gemma 4's audio encoder: let it choose per module
+        kw["attn_implementation"] = attn
     try:
         model = AutoModelForCausalLM.from_pretrained(base, **kw)
     except Exception as e:  # Gemma 4 card loads with AutoModelForMultimodalLM
@@ -72,7 +74,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("merge", help="LoRA adapter -> merged bf16 weights for vLLM")
     m.add_argument("--base", required=True); m.add_argument("--adapter", required=True); m.add_argument("--out", required=True)
-    m.add_argument("--attn", default="sdpa")
+    m.add_argument("--attn", default="auto")
     f = sub.add_parser("modelfile", help="write an Ollama Modelfile for a converted GGUF")
     f.add_argument("--gguf", required=True); f.add_argument("--out", default="Modelfile")
     c = sub.add_parser("check", help="check a merged directory is complete")

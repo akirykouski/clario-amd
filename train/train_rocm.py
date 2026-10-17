@@ -46,7 +46,7 @@ def main():
     ap.add_argument("--bf16", action="store_true", default=True, help=argparse.SUPPRESS)  # kept for old commands
     ap.add_argument("--precision", default="auto", choices=["auto", "bf16", "fp16"])
     ap.add_argument("--load-in-4bit", action="store_true", help="QLoRA: 4-bit NF4 base (bitsandbytes, CUDA) for 16 GB GPUs")
-    ap.add_argument("--attn", default="sdpa", help="sdpa (default, safe on ROCm) | eager | flash_attention_2 if installed")
+    ap.add_argument("--attn", default="auto", help="auto (transformers picks per module; Gemma 4's audio encoder has no sdpa in newer versions) | sdpa | eager")
     ap.add_argument("--merge", action="store_true", help="also save merged bf16 weights for vLLM")
     ap.add_argument("--seed", type=int, default=13)
     ap.add_argument("--results-dir", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "eval", "results"),
@@ -72,7 +72,9 @@ def main():
     use_bf16 = a.precision == "bf16" or (a.precision == "auto" and bf16_ok)
     dtype = torch.bfloat16 if use_bf16 else torch.float16
     print(f"GPU {torch.cuda.get_device_name(0)}  precision {'bf16' if use_bf16 else 'fp16'}  4-bit {a.load_in_4bit}")
-    kw = dict(torch_dtype=dtype, attn_implementation=a.attn)
+    kw = dict(torch_dtype=dtype)
+    if a.attn != "auto":
+        kw["attn_implementation"] = a.attn
     if a.load_in_4bit:
         from transformers import BitsAndBytesConfig
         kw["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
@@ -124,8 +126,9 @@ def main():
     cb = Metrics()
     steps_per_epoch = max(1, math.ceil(len(ds) / (a.bsz * a.grad_accum)))
     every = max(1, round(steps_per_epoch * a.eval_every))
+    warmup = max(1, math.ceil(0.05 * steps_per_epoch * a.epochs))  # 5% warmup; warmup_ratio is gone in newer transformers
     cfg = SFTConfig(output_dir=a.out, num_train_epochs=a.epochs, learning_rate=a.lr, lr_scheduler_type="cosine",
-                    warmup_ratio=0.05, per_device_train_batch_size=a.bsz, gradient_accumulation_steps=a.grad_accum,
+                    warmup_steps=warmup, per_device_train_batch_size=a.bsz, gradient_accumulation_steps=a.grad_accum,
                     bf16=use_bf16, fp16=not use_bf16, max_length=a.max_len, logging_steps=5, save_strategy="steps", save_steps=every,
                     save_total_limit=None, eval_strategy="steps" if ev is not None else "no", eval_steps=every, per_device_eval_batch_size=a.bsz,
                     gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False},

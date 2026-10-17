@@ -24,7 +24,7 @@ import subprocess
 
 import modal
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parent.parent if modal.is_local() else pathlib.Path("/")
 HOURS = 60 * 60
 
 image = (
@@ -81,13 +81,14 @@ def base_val(tag: str, model: str, val_limit: int, smoke: bool = False):
 def _train(cfg):
     tag, model, rank, lr, epochs, bsz, ga, val_limit, smoke = (cfg[k] for k in
         ("tag", "model", "rank", "lr", "epochs", "bsz", "ga", "val_limit", "smoke"))
+    every, sel_tokens = cfg.get("eval_every", 1.0), cfg.get("sel_max_tokens", 768)
     _layout(smoke)
     run = f"{tag}-r{rank}-lr{lr}"
     if not os.path.exists(f"/work/train/out/{run}/adapter/adapter_config.json"):
         _sh(f"python train_rocm.py --model {model} --out out/{run} --rank {rank} --alpha {rank} --lr {lr} "
-            f"--epochs {epochs} --bsz {bsz} --grad-accum {ga}")
+            f"--epochs {epochs} --bsz {bsz} --grad-accum {ga} --eval-every {every}")
         runs.commit()
-    _sh(f"python select_ckpt.py --run out/{run} --hf-model {model} --limit {val_limit}")
+    _sh(f"python select_ckpt.py --run out/{run} --hf-model {model} --limit {val_limit} --max-tokens {sel_tokens}")
     runs.commit()
     return run
 
@@ -118,11 +119,13 @@ def finish(tag: str, model: str, test_limit: int = 0, smoke: bool = False):
 
 @app.local_entrypoint()
 def main(tag: str = "e4b", model: str = "google/gemma-4-E4B-it", configs: str = "16:1e-4,16:2e-4,32:1e-4,32:2e-4",
-         gpu: str = "L40S", epochs: float = 3, bsz: int = 8, ga: int = 2, val_limit: int = 200, smoke: bool = False):
+         gpu: str = "L40S", epochs: float = 3, bsz: int = 8, ga: int = 2, val_limit: int = 100, smoke: bool = False,
+         eval_every: float = 1.0, sel_max_tokens: int = 768):
     if smoke:
         tag, configs, epochs, val_limit = f"smoke-{tag}", "16:1e-4", 0.05, 8
     cfgs = [dict(tag=tag, model=model, rank=int(c.split(":")[0]), lr=c.split(":")[1], epochs=epochs, bsz=bsz, ga=ga,
-                 val_limit=val_limit, smoke=smoke) for c in configs.split(",")]
+                 val_limit=val_limit, smoke=smoke, eval_every=eval_every, sel_max_tokens=sel_max_tokens)
+            for c in configs.split(",")]
     fetch.remote(model)
     trainer = train_pro6000 if gpu == "RTX-PRO-6000" else train_l40s
     base = base_val.spawn(tag, model, val_limit, smoke)
