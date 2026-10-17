@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { driver, type Driver, type DriveStep, type PopoverDOM, type Side, type State } from "driver.js";
+import { driver, type Driver, type DriveStep, type PopoverDOM, type State } from "driver.js";
 import "driver.js/dist/driver.css";
 import "./tour.css";
 import { api } from "../api";
@@ -16,7 +16,6 @@ export interface TourStep {
   target?: string;
   /** Extra selector for content that loads after the target (the spotlight waits for it, then sizes once). */
   ready?: string;
-  side?: Side;
 }
 
 /** A tour is a fixed list or one built when "?" is pressed (the clinic needs its inbox first). */
@@ -66,15 +65,30 @@ function insets() {
   return { top, bottom };
 }
 
-/** Scroll so the element sits in the middle of the free area (with the card under it on narrow screens),
- *  or at the top when that does not fit, before driver.js looks. */
-function bringIntoView(el: HTMLElement) {
-  const r = el.getBoundingClientRect();
+/** The card is docked: bottom right on wide screens, a full-width bottom sheet on phones (see tour.css). */
+const DOCK_W = 380;
+const DOCK_GAP = 24;
+const PHONE = 640;
+const isPhone = () => window.innerWidth < PHONE;
+const estimateCard = () => (isPhone() ? 300 : 250);
+
+/** The part of the screen a target can use: below the sticky header, above the tab bar and clear of the card. */
+function freeArea(r: DOMRect, cardH: number) {
   const { top, bottom } = insets();
-  const free = window.innerHeight - top - bottom;
+  const floor = window.innerHeight - bottom;
+  if (isPhone()) return { top, end: Math.min(floor, window.innerHeight - cardH - 12) };
+  const cardLeft = window.innerWidth - DOCK_GAP - Math.min(DOCK_W, window.innerWidth - DOCK_GAP * 2);
+  const besideCard = r.right + PAD + 16 <= cardLeft;
+  return { top, end: besideCard ? floor : Math.min(floor, window.innerHeight - DOCK_GAP - cardH - 16) };
+}
+
+/** Scroll so the element sits in the middle of its free area, or at its top when taller, before driver.js looks. */
+function bringIntoView(el: HTMLElement, cardH: number) {
+  const r = el.getBoundingClientRect();
+  const { top, end } = freeArea(r, cardH);
+  const free = end - top;
   const h = r.height + PAD * 2;
-  const block = hasSideRoom(r) ? h : h + 14 + CARD_H;
-  const want = block <= free - 24 ? top + (free - block) / 2 + PAD : top + 16 + PAD;
+  const want = h <= free - 16 ? top + (free - h) / 2 + PAD : top + 12 + PAD;
   if (Math.abs(r.top - want) > 2) window.scrollTo({ top: Math.max(0, window.scrollY + r.top - want), behavior: "instant" as ScrollBehavior });
 }
 
@@ -84,20 +98,14 @@ function roundedRect(x: number, y: number, w: number, h: number, r: number) {
     + `H${x + k}A${k} ${k} 0 0 1 ${x} ${y + h - k}V${y + k}A${k} ${k} 0 0 1 ${x + k} ${y}Z`;
 }
 
-/** Room the card needs beside a target (width + gap) and, on narrow screens, below or above it. */
-const SIDE_ROOM = 400;
-const CARD_H = 320;
-const hasSideRoom = (r: DOMRect) => window.innerWidth - r.right >= SIDE_ROOM || r.left >= SIDE_ROOM;
-
 /**
- * The element driver.js should spotlight. A target taller than the free screen gets a stand-in box over its top
- * part, so the window shows the start of it crisp and the card still fits beside or under it.
+ * The element driver.js should spotlight. A target taller than its free area gets a stand-in box over its top
+ * part, so the window shows the start of it crisp and the docked card never covers it.
  */
-function spotlightFor(el: HTMLElement, proxy: HTMLElement): HTMLElement {
+function spotlightFor(el: HTMLElement, proxy: HTMLElement, cardH: number): HTMLElement {
   const r = el.getBoundingClientRect();
-  const { top, bottom } = insets();
-  const free = window.innerHeight - top - bottom - 32 - PAD * 2;
-  const max = Math.max(140, hasSideRoom(r) ? free : free - CARD_H);
+  const { top, end } = freeArea(r, cardH);
+  const max = Math.max(120, end - top - 24 - PAD * 2);
   if (r.height <= max) { proxy.remove(); return el; }
   Object.assign(proxy.style, {
     position: "absolute", pointerEvents: "none", visibility: "hidden",
@@ -135,22 +143,43 @@ export function startTour(steps: TourStep[], opts: { navigate: (to: string) => v
   proxy.setAttribute("aria-hidden", "true");
   const shown: (HTMLElement | null)[] = steps.map(() => null);
 
+  let cardH = 0;      // tallest card over all steps, measured once: the docked card keeps one size
+  let shownIndex = -1; // step the dots move from
+  const dotClass = (n: number, i: number) => `clario-tour-dot${n < i ? " is-done" : n === i ? " is-active" : ""}`;
+
+  /** Height of the card with each step's text in it; the largest becomes the card's fixed height. */
+  const measure = (p: PopoverDOM) => {
+    const keep = [p.title.innerHTML, p.description.innerHTML];
+    let max = 0;
+    for (const s of steps) {
+      p.title.innerHTML = t(s.title);
+      p.description.innerHTML = t(s.body);
+      max = Math.max(max, p.wrapper.getBoundingClientRect().height);
+    }
+    [p.title.innerHTML, p.description.innerHTML] = keep;
+    return Math.ceil(max);
+  };
+
   const decorate = (p: PopoverDOM, { state }: { state: State }) => {
     const i = state.activeIndex ?? 0;
+    const from = shownIndex < 0 ? i : shownIndex;
     p.wrapper.dataset.testid = "tour";
     p.wrapper.setAttribute("aria-modal", "true");
+    if (shownIndex < 0) p.wrapper.classList.add("is-first");
     const top = document.createElement("div");
     top.className = "clario-tour-top";
+    const dots: HTMLElement[] = [];
     if (total > 1) {
-      const dots = document.createElement("div");
-      dots.className = "clario-tour-dots";
-      dots.setAttribute("aria-hidden", "true");
+      const row = document.createElement("div");
+      row.className = "clario-tour-dots";
+      row.setAttribute("aria-hidden", "true");
       for (let n = 0; n < total; n++) {
-        const d = document.createElement("span");
-        d.className = `clario-tour-dot${n < i ? " is-done" : n === i ? " is-active" : ""}`;
-        dots.append(d);
+        const dot = document.createElement("span");
+        dot.className = dotClass(n, from);
+        dots.push(dot);
+        row.append(dot);
       }
-      top.append(dots);
+      top.append(row);
     }
     const count = document.createElement("span");
     count.className = "clario-tour-count";
@@ -162,13 +191,17 @@ export function startTour(steps: TourStep[], opts: { navigate: (to: string) => v
     p.closeButton.setAttribute("aria-label", t("common.close"));
     p.closeButton.title = t("common.close");
     p.wrapper.append(p.closeButton); // after the buttons in tab order; it is placed top right by CSS
+    if (!cardH) cardH = measure(p);
+    if (cardH) p.wrapper.style.minHeight = `${cardH}px`;
+    if (from !== i) requestAnimationFrame(() => dots.forEach((dot, n) => { dot.className = dotClass(n, i); }));
+    shownIndex = i;
   };
 
   const d: Driver = driver({
     steps: steps.map((s, i): DriveStep => ({
       element: (() => shown[i] ?? findTarget(s.target)) as () => Element,
       popover: {
-        title: t(s.title), description: t(s.body), side: s.side ?? "bottom", align: "center",
+        title: t(s.title), description: t(s.body),
         showButtons: i === 0 ? ["next", "close"] : ["next", "previous", "close"],
       },
     })),
@@ -179,7 +212,6 @@ export function startTour(steps: TourStep[], opts: { navigate: (to: string) => v
     overlayClickBehavior: "close",
     stagePadding: PAD,
     stageRadius: RADIUS,
-    popoverOffset: 14,
     disableActiveInteraction: true,
     showProgress: false,
     popoverClass: "clario-tour",
@@ -232,7 +264,7 @@ export function startTour(steps: TourStep[], opts: { navigate: (to: string) => v
     const my = ++seq;
     const s = steps[i];
     const pop = d.getState("popover") as PopoverDOM | undefined;
-    if (pop) { pop.nextButton.disabled = true; pop.previousButton.disabled = true; }
+    if (pop) { pop.nextButton.disabled = true; pop.previousButton.disabled = true; pop.wrapper.classList.add("is-leaving"); }
     const moved = !!s.route && s.route !== opts.where();
     if (moved) opts.navigate(s.route!);
     await frame();
@@ -240,9 +272,10 @@ export function startTour(steps: TourStep[], opts: { navigate: (to: string) => v
     await frame(); // let the screen lay out once more (fonts, async rows) before measuring
     if (ended || my !== seq) return;
     const found = findTarget(s.target);
-    const el = found ? spotlightFor(found, proxy) : null;
+    const room = cardH || estimateCard();
+    const el = found ? spotlightFor(found, proxy, room) : null;
     shown[i] = el;
-    if (el) bringIntoView(el);
+    if (el) bringIntoView(el, room);
     else if (moved) window.scrollTo({ top: 0 });
     await frame(); // driver.js re-measures on the scroll event; start the move after that
     await frame();
@@ -303,11 +336,11 @@ export function TourButton({ steps }: { steps: TourPlan }) {
 }
 
 export const PATIENT_TOUR: TourStep[] = [
-  { title: "tour.p1.title", body: "tour.p1.body", route: "/", target: "today-write", side: "right" },
-  { title: "tour.p2.title", body: "tour.p2.body", route: "/", target: "today-recent", side: "right" },
-  { title: "tour.p3.title", body: "tour.p3.body", route: "/timeline", target: "timeline-heat", ready: '[data-testid="heat-cell"]', side: "bottom" },
-  { title: "tour.p4.title", body: "tour.p4.body", route: "/share", target: "share-period", side: "right" },
-  { title: "tour.p5.title", body: "tour.p5.body", route: "/privacy", target: "privacy-log", side: "right" },
+  { title: "tour.p1.title", body: "tour.p1.body", route: "/", target: "today-write" },
+  { title: "tour.p2.title", body: "tour.p2.body", route: "/", target: "today-recent" },
+  { title: "tour.p3.title", body: "tour.p3.body", route: "/timeline", target: "timeline-heat", ready: '[data-testid="heat-cell"]' },
+  { title: "tour.p4.title", body: "tour.p4.body", route: "/share", target: "share-period" },
+  { title: "tour.p5.title", body: "tour.p5.body", route: "/privacy", target: "privacy-log" },
 ];
 
 /** Clinic steps open the first package in the inbox. With an empty inbox the card says how to get one. */
@@ -315,11 +348,11 @@ export function clinicTour(packageId: string | null): TourStep[] {
   if (!packageId) return [{ title: "tour.c0.title", body: "tour.c0.body", route: "/", target: "inbox-empty" }];
   const p = `/p/${packageId}`;
   return [
-    { title: "tour.c1.title", body: "tour.c1.body", route: "/", target: "inbox", side: "bottom" },
-    { title: "tour.c2.title", body: "tour.c2.body", route: p, target: "pkg-glance", ready: '[data-testid="pkg-overview"]', side: "right" },
-    { title: "tour.c3.title", body: "tour.c3.body", route: p, target: "needs-check", side: "right" },
-    { title: "tour.c4.title", body: "tour.c4.body", route: p, target: "ddx", ready: '[data-testid="ddx-question"]', side: "right" },
-    { title: "tour.c5.title", body: "tour.c5.body", route: `${p}?pane=brief`, target: "brief", side: "left" },
+    { title: "tour.c1.title", body: "tour.c1.body", route: "/", target: "inbox" },
+    { title: "tour.c2.title", body: "tour.c2.body", route: p, target: "pkg-glance", ready: '[data-testid="pkg-overview"]' },
+    { title: "tour.c3.title", body: "tour.c3.body", route: p, target: "needs-check" },
+    { title: "tour.c4.title", body: "tour.c4.body", route: p, target: "ddx", ready: '[data-testid="ddx-question"]' },
+    { title: "tour.c5.title", body: "tour.c5.body", route: `${p}?pane=brief`, target: "brief" },
   ];
 }
 

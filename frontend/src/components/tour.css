@@ -40,16 +40,36 @@
 }
 @keyframes clario-tour-fade { from { opacity: 0; } to { opacity: 1; } }
 
-/* Popover card */
+/* Popover card, docked in one place for every step: bottom right on wide screens, a bottom sheet on phones.
+   driver.js still places it next to the target with inline styles; these rules win over them. The card keeps
+   one height (Tour.tsx sets min-height to the tallest step) and only its contents change between steps. */
 .driver-popover.clario-tour {
   font-family: "Atkinson Hyperlegible", system-ui, sans-serif;
   background: var(--panel); color: var(--ink);
   border: 1px solid var(--line); border-radius: 16px;
-  padding: 16px 20px 16px; min-width: 280px; width: 360px; max-width: calc(100vw - 32px);
+  padding: 16px 20px 16px; min-width: 0; width: 380px; max-width: calc(100vw - 48px);
   box-shadow: var(--tour-shadow);
+  position: fixed !important; top: auto !important; left: auto !important; right: 24px !important; bottom: 24px !important;
+  display: flex !important; flex-direction: column; box-sizing: border-box;
 }
-.driver-fade .driver-popover.clario-tour { animation: clario-tour-pop 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-@keyframes clario-tour-pop { from { opacity: 0; transform: translateY(4px) scale(0.985); } to { opacity: 1; transform: none; } }
+.driver-fade .driver-popover.clario-tour { animation: none; }
+.driver-fade .driver-popover.clario-tour.is-first { animation: clario-tour-pop 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes clario-tour-pop { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+/* Contents crossfade: the old step's text fades out on Next/Back, the new one fades in. */
+.driver-fade .driver-popover.clario-tour .clario-tour-top .clario-tour-count,
+.driver-fade .driver-popover.clario-tour .driver-popover-title,
+.driver-fade .driver-popover.clario-tour .driver-popover-description { animation: clario-tour-content 260ms ease-out both; }
+.driver-popover.clario-tour.is-leaving .clario-tour-count,
+.driver-popover.clario-tour.is-leaving .driver-popover-title,
+.driver-popover.clario-tour.is-leaving .driver-popover-description { opacity: 0; transition: opacity 140ms ease; }
+@keyframes clario-tour-content { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 639px) {
+  .driver-popover.clario-tour {
+    right: 0 !important; left: 0 !important; bottom: 0 !important; width: auto; max-width: none;
+    border-width: 1px 0 0; border-radius: 20px 20px 0 0;
+    padding: 18px 20px calc(16px + env(safe-area-inset-bottom));
+  }
+}
 
 .clario-tour .clario-tour-top { display: flex; align-items: center; gap: 10px; min-height: 24px; padding-right: 32px; }
 .clario-tour .clario-tour-dots { display: flex; align-items: center; gap: 5px; }
@@ -72,7 +92,7 @@
 .driver-popover.clario-tour .driver-popover-close-btn:hover { color: var(--ink); background: var(--paper); }
 .driver-popover.clario-tour .driver-popover-close-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; color: var(--ink); }
 
-.driver-popover.clario-tour .driver-popover-footer { margin-top: 16px; }
+.driver-popover.clario-tour .driver-popover-footer { margin-top: auto; padding-top: 16px; }
 .driver-popover.clario-tour .driver-popover-progress-text { display: none !important; }
 .driver-popover.clario-tour .driver-popover-navigation-btns { gap: 8px; }
 .driver-popover.clario-tour .driver-popover-navigation-btns button + button { margin-left: 0; }
@@ -90,19 +110,11 @@
 .driver-popover.clario-tour .driver-popover-next-btn:hover { background: var(--accent); opacity: 0.92; }
 .driver-popover.clario-tour .driver-popover-footer-btn:disabled { opacity: 0.55; cursor: progress; }
 
-/* Arrow: a rotated square in the card colour with the card's border on its two outer edges. */
-.driver-popover.clario-tour .driver-popover-arrow {
-  border: 0; width: 14px; height: 14px; background: var(--panel); transform: rotate(45deg); border-radius: 2px;
-}
-.driver-popover.clario-tour .driver-popover-arrow-side-left { left: calc(100% - 7px); border-top: 1px solid var(--line); border-right: 1px solid var(--line); }
-.driver-popover.clario-tour .driver-popover-arrow-side-right { right: calc(100% - 7px); border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); }
-.driver-popover.clario-tour .driver-popover-arrow-side-top { top: calc(100% - 7px); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.driver-popover.clario-tour .driver-popover-arrow-side-bottom { bottom: calc(100% - 7px); border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
-.driver-popover.clario-tour .driver-popover-arrow-none,
-.driver-popover.clario-tour .driver-popover-arrow-side-over { display: none; }
+/* Docked card: no arrow, the glowing window says what it is about. */
+.driver-popover.clario-tour .driver-popover-arrow { display: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  .clario-tour-blur, .driver-fade .driver-popover.clario-tour { animation: none; }
+  .clario-tour-blur, .driver-fade .driver-popover.clario-tour, .driver-fade .driver-popover.clario-tour * { animation: none !important; }
   .clario-tour-ring, .clario-tour .clario-tour-dot { transition: none; }
 }
 @media print { .clario-tour-blur, .clario-tour-ring { display: none; } }
