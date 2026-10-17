@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeftRight, Check, MessageSquareQuote, X } from "lucide-react";
 import { api } from "../api";
 import type { Brief, Decisions, Entry, Overview, OverviewLab, OverviewTerm, SharedLab, SharePackage, Term, TermCorrection, TermDecision } from "../types";
-import { buildHeat, clinicFlagNote, fmtDate, fmtNum, splitQuotes, weeklyMood } from "../lib";
+import { buildHeat, clinicFlagNote, fmtDate, fmtNum, pastWhen, splitQuotes, weeklyMood } from "../lib";
 import { ErrorBox, Loading } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { HeatStrip, type HeatPick } from "../components/HeatStrip";
@@ -11,7 +11,9 @@ import { BriefPanel, jumpTo } from "./BriefPanel";
 import { Differential } from "./Differential";
 import { termLabel, tn, useT, type Key } from "../i18n";
 
-const own = (pkg: SharePackage) => pkg.entities.filter((e) => !e.negated && !e.family_history);
+// the patient's current terms: past history ("knee surgery 5 years ago") is listed apart and never lights up a week
+const own = (pkg: SharePackage) => pkg.entities.filter((e) => !e.negated && !e.family_history && !e.past);
+const pastOf = (pkg: SharePackage) => pkg.entities.filter((e) => e.past && !e.negated && !e.family_history);
 
 export default function PackagePage() {
   const { t, lang } = useT();
@@ -129,6 +131,8 @@ function Header({ pkg, brief, version = 0 }: { pkg: SharePackage; brief: Brief |
             {ov.first && <><dt className="text-muted">{t("ov.first")}</dt><dd>{ov.first.label}, {fmtDate(ov.first.first)}</dd></>}
             {ov.labs_off.length > 0 && <><dt className="text-muted">{t("ov.labs")}</dt>
               <dd data-testid="ov-labs">{ov.labs_off.map((l) => glanceLab(l, t)).join(", ")}</dd></>}
+            {(ov.past?.length ?? 0) > 0 && <><dt className="text-muted">{t("ov.past")}</dt>
+              <dd data-testid="ov-past">{ov.past!.map((p) => `${p.label}, ${p.when}`).join("; ")}</dd></>}
             {ov.family.length > 0 && <><dt className="text-muted">{t("ov.family")}</dt><dd>{t("ov.familyRelative", { list: ov.family.join(", ") })}</dd></>}
             {ov.denied.length > 0 && <><dt className="text-muted">{t("ov.denied")}</dt><dd>{ov.denied.join(", ")}</dd></>}
             {ov.mood && <><dt className="text-muted">{t("ov.mood")}</dt><dd>{t("ov.moodLine", { avg: fmtNum(ov.mood.avg), trend: t(`ov.trend.${ov.mood.trend}` as Key) })}</dd></>}
@@ -182,7 +186,7 @@ function NeedsCheck({ pkg, decisions, onDecide, onReplace, onDecideLab, onDecide
           const why = fix ? null : clinicFlagNote(flagsById.get(e.id as string) ?? []);
           return (
             <CheckRow key={e.id} decision={decisions.terms[e.id as string]} onDecide={(d) => onDecide(e.id as string, d)}
-              title={`${e.negated ? "No " : ""}${fix ? termLabel(fix.to, fix.label) : termLabel(e.hpo_id, e.canonical)}`} confidence={fix ? null : e.confidence}
+              title={`${e.past ? t("term.pastChip") : ""}${e.negated ? "No " : ""}${fix ? termLabel(fix.to, fix.label) : termLabel(e.hpo_id, e.canonical)}`} confidence={fix ? null : e.confidence}
               replacedFrom={fix ? termLabel(fix.from, fix.from_label) : undefined}
               replace={e.family_history ? undefined : { pid: pkg.package_id, entId: e.id as string, current: e.hpo_id, onPick: (h) => onReplace(e.id as string, h) }}
               sub={<>{t("check.wrote")}: <span className="clinic-quote">{e.quote}</span> · {fmtDate(e.occurred_on)}{why && <> · <span data-testid="check-why">{why}</span></>}</>} />
@@ -377,6 +381,7 @@ function Details({ pkg }: { pkg: SharePackage }) {
     else { x.count++; x.unsure ||= !!e.needs_review; if (e.occurred_on < x.first) x.first = e.occurred_on; if (e.occurred_on > x.last) x.last = e.occurred_on; }
   });
   const family = pkg.entities.filter((e) => e.family_history && !e.negated);
+  const past = pastOf(pkg);
   const entries = [...pkg.entries].sort((a, b) => a.occurred_on.localeCompare(b.occurred_on));
   return (
     <details className="card" data-testid="pkg-details">
@@ -394,6 +399,15 @@ function Details({ pkg }: { pkg: SharePackage }) {
           <section aria-labelledby="pf"><h2 id="pf" className="text-lg mb-1">{t("pkg.family")}</h2>
             <p className="text-sm text-muted mb-2">{t("pkg.familyHint")}</p>
             <ul className="space-y-1 text-sm">{family.map((f, i) => <li key={i}>{f.canonical} <span className="text-muted">({fmtDate(f.occurred_on)})</span></li>)}</ul>
+          </section>
+        )}
+        {past.length > 0 && (
+          <section aria-labelledby="pp" data-testid="pkg-past"><h2 id="pp" className="text-lg mb-1">{t("pkg.past")}</h2>
+            <p className="text-sm text-muted mb-2">{t("pkg.pastHint")}</p>
+            <ul className="space-y-1 text-sm">{past.map((p, i) => (
+              <li key={p.id ?? i}><span className="font-bold">{termLabel(p.hpo_id, p.canonical)}</span>{p.hpo_id && <span className="font-mono text-muted"> {p.hpo_id}</span>}
+                {" "}{pastWhen(p.past!, true)} <span className="text-muted">(<span className="clinic-quote">{p.quote}</span>, {t("pkg.pastNoted", { date: fmtDate(p.occurred_on) })})</span></li>
+            ))}</ul>
           </section>
         )}
         <section aria-labelledby="et"><h2 id="et" className="text-lg mb-2">{t("pkg.entries")}</h2>

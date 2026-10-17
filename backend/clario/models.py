@@ -30,6 +30,18 @@ class Term(BaseModel):
     label: str
 
 
+class PastRef(BaseModel):
+    """The term is past history: the note mentions it as something that happened long before ("knee surgery 5 years
+    ago", "as a child I had asthma"). Read in code from the clause around the quote (clario/past.py), never by the model."""
+
+    kind: Literal["ago", "year", "childhood", "past"] = Field(
+        description="ago: N years or months before the note; year: an explicit year; childhood: as a child; past: no time given")
+    n: int | None = Field(None, description="ago: the amount (null for 'a few'); year: the year")
+    unit: Literal["year", "month"] | None = Field(None, description="ago: years or months")
+    approx_date: str | None = Field(None, description="ISO date, approximate (first of the month or year); null when unknown")
+    cue: str = Field("", description="The time words as the patient wrote them ('5 years ago', 'da bambina')")
+
+
 class Entity(BaseModel):
     """One thing extracted from a diary entry, grounded in a verbatim quote."""
 
@@ -48,7 +60,8 @@ class Entity(BaseModel):
     review: Review = Field("auto", description="auto: counted, nobody looked at it; needs_review: counted, confidence below "
                                                "threshold, flagged for the clinician; confirmed, corrected, rejected: decided "
                                                "by a person (rejected never counts)")
-    flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, no_hpo, onset_dropped, quote_not_found")
+    flags: list[str] = Field(default_factory=list, description="e.g. hpo_dropped, no_hpo, onset_dropped, quote_not_found, past_from_text")
+    past: PastRef | None = Field(None, description="Past history, not a current finding: kept, never counted as this note's term")
     model: str | None = None
 
 
@@ -154,6 +167,7 @@ class SharedEntity(BaseModel):
     from_question: bool = Field(False, description="The patient answered a question the app asked; `quote` is the app's question, not the patient's words")
     confidence: float | None = Field(None, ge=0, le=1, description="Extraction confidence, null when not measured")
     needs_review: bool = Field(False, description="Confidence below the threshold: the clinician is asked to check it")
+    past: PastRef | None = Field(None, description="Past history (clario/past.py): listed apart, not a current finding")
 
 
 class SharedLab(BaseModel):

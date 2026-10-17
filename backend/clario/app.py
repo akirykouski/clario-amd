@@ -308,7 +308,7 @@ def _patient_routes(app: FastAPI, s: Settings, vault: Vault, onto: Ontology, llm
         except Locked:
             return None
         try:
-            ents, _st = await extract(llm, e.id, e.text, onto, opts)
+            ents, _st = await extract(llm, e.id, e.text, onto, opts, note_date=e.occurred_on)
         except Exception as err:  # noqa: BLE001 - recorded as failed, retried on demand
             log.warning("extraction failed for %s: %s", eid, err)
             ents, status = [], "failed"

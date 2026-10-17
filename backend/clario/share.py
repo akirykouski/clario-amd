@@ -40,8 +40,14 @@ def alias(seed: str) -> str:
 
 
 def patient_mentions(entities: list[SharedEntity]) -> list[SharedEntity]:
-    """What counts as the patient's own terms: not negated, not about a relative. Every count uses this."""
-    return [x for x in entities if not x.negated and not x.family_history]
+    """What counts as the patient's own current terms: not negated, not about a relative, not past history. Every count
+    uses this."""
+    return [x for x in entities if not x.negated and not x.family_history and not x.past]
+
+
+def past_mentions(entities: list[SharedEntity]) -> list[SharedEntity]:
+    """The patient's past history ("knee surgery 5 years ago", clario/past.py): listed apart, never counted as current."""
+    return [x for x in entities if x.past and not x.negated and not x.family_history]
 
 
 def term_count(entities: list[SharedEntity]) -> int:
@@ -110,7 +116,7 @@ def build_package(entries: list[Entry], since: str, until: str, patient_alias: s
                                          family_history=x.family_history, severity=x.severity, onset_hint=x.onset_hint,
                                          reviewed=x.review in REVIEWED, confidence=x.confidence,
                                          needs_review=x.review == "needs_review",
-                                         from_question="from_question" in x.flags) for x in kept]
+                                         from_question="from_question" in x.flags, past=x.past) for x in kept]
         slim.append(e.model_copy(update={"entities": kept}))
     created = datetime.now(timezone.utc)
     return SharePackage(package_id=f"pkg_{uuid.uuid4().hex[:12]}", patient_alias=patient_alias,

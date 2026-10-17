@@ -9,6 +9,8 @@ fine-tuned model sees in the app exactly what it saw in training. The model prop
   * negations ("no fever", "non ho febbre") and relatives ("my mother has lupus", "mia madre ha il lupus")
     are also detected in code from the quote's left context, so a model miss cannot leak them into patterns
   * onset_hint keeps only phrases that say when it started; a time of day or a trigger is dropped (clario/onset.py)
+  * a mention of the past ("knee surgery 5 years ago", "da bambina avevo l'asma") is marked `past` from the clause
+    around the quote (clario/past.py): kept as past history, never a current term of the note
   * confidence is the share of n sampled answers that contain the same (term, negated) pair
     (self-consistency), or the model's own field when CLARIO_TRUST_MODEL_CONFIDENCE=1
 """
@@ -28,6 +30,7 @@ from .knowledge import Ontology, fold
 from .llm import LLM, LLMError, Stats, extract_json, merge_stats
 from .models import Entity
 from .onset import normalise_onset
+from .past import past_reference
 from .prompt import build_messages
 from .review import route_review
 
@@ -154,9 +157,10 @@ def self_consistency(primary: list[RawEntity], samples: list[RawOut], text: str)
 # ---------------------------------------------------------------- grounding
 def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | None, *,
            picks: dict[int, str | None] | None = None, confidences: list[float | None] | None = None,
-           opts: ExtractOpts = ExtractOpts()) -> list[Entity]:
+           opts: ExtractOpts = ExtractOpts(), note_date: str | None = None) -> list[Entity]:
     """`picks[i]`: id the model chose from the ontology candidates for raw entity i (None = NONE).
-    Entities with a pick skip the free-form HPO proposal entirely."""
+    Entities with a pick skip the free-form HPO proposal entirely. `note_date` (the entry's ISO date) dates a past
+    reference ("5 years ago" -> about 2021)."""
     out: list[Entity] = []
     seen: set[tuple[str, str]] = set()
     for i, r in enumerate(raw.entities):
@@ -180,6 +184,10 @@ def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | N
         onset = normalise_onset(r.onset_hint)
         if r.onset_hint and onset is None:
             flags.append("onset_dropped")  # a time of day or a trigger, not when it started (clario/onset.py)
+        past = None if negated or family else past_reference(text, span, note_date)
+        if past:
+            flags.append("past_from_text")
+            onset = None  # "5 years ago" is when it happened, not when an ongoing symptom started
         sev = r.severity
         sev = int(round(sev)) if isinstance(sev, (int, float)) and 0 <= sev <= 10 else None
         conf = r.confidence if opts.trust_model_confidence and r.confidence is not None else (
@@ -192,7 +200,7 @@ def ground(entry_id: str, text: str, raw: RawOut, onto: Ontology, model: str | N
                           canonical=r.canonical.strip()[:120], hpo_id=hpo_id, hpo_label=hpo_label,
                           negated=negated, family_history=family, onset_hint=onset, severity=sev,
                           confidence=conf, review=route_review(conf, opts.review_threshold),
-                          flags=flags, model=model))
+                          flags=flags, past=past, model=model))
     return out
 
 
@@ -267,7 +275,7 @@ async def _primary(llm: LLM, msgs: list[dict], text: str) -> tuple[RawOut, Stats
 
 
 async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
-                  opts: ExtractOpts | None = None) -> tuple[list[Entity], Stats]:
+                  opts: ExtractOpts | None = None, note_date: str | None = None) -> tuple[list[Entity], Stats]:
     opts = opts or ExtractOpts()
     msgs = messages_for(text, opts.trust_model_confidence)
 
@@ -315,5 +323,5 @@ async def extract(llm: LLM, entry_id: str, text: str, onto: Ontology,
         for _hid, st3 in done.values():
             st = merge_stats(st, st3)
     ents = ground(entry_id, text, raw, onto, st.model, picks=picks, confidences=confidences,
-                  opts=opts)
+                  opts=opts, note_date=note_date)
     return ents, st

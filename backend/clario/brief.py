@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from .i18n import hpo_it
 from .models import Brief, BriefItem, SharePackage
+from .past import when_text
 from .safety import hedge_problems
 from .share import lab_needs_check
 
@@ -48,12 +49,15 @@ SECTIONS = {"summary", "timeline", "symptoms", "labs", "medications", "patterns"
 
 def model_input(pkg: SharePackage, lang: str = "en") -> str:
     entries = [{"id": e.id, "date": e.occurred_on, "text": e.text} for e in pkg.entries]
-    terms = Counter((x.canonical, x.hpo_id) for x in pkg.entities if not x.negated and not x.family_history)
+    terms = Counter((x.canonical, x.hpo_id) for x in pkg.entities if not x.negated and not x.family_history and not x.past)
+    past = [{"term": x.canonical, "when": when_text(x.past, lang, around=True), "entry": x.entry_id}
+            for x in pkg.entities if x.past and not x.negated and not x.family_history]
     pats = [{"name": p.disease_name, "signal": p.signal, "overlap": [m.label for m in p.matched]} for p in pkg.patterns]
     return json.dumps({"language": "Italian" if lang == "it" else "English", "period": pkg.period,
                        "patient_note": pkg.note, "entries": entries,
                        "confirmed_terms": [{"term": t, "hpo": h, "times": n} for (t, h), n in terms.most_common()],
-                       "pattern_overlaps": pats}, ensure_ascii=False)
+                       # past history the patient mentioned: it happened long before the note, not in the period
+                       "past_history": past, "pattern_overlaps": pats}, ensure_ascii=False)
 
 
 _MONTHS = {"en": "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(),
@@ -185,6 +189,8 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
             continue
         sec = {"lab": "labs", "medication": "medications"}.get(x.type, "symptoms")
         fam = ("Storia familiare: " if it else "Family history: ") if x.family_history else ""
+        if x.past and not x.family_history:  # history, dated by the patient's words, not by the note
+            fam = ("Anamnesi remota: " if it else "Past history: ")
         label = fam + _label(x, lang) + (f" ({x.hpo_id})" if x.hpo_id else "")
         groups.setdefault((sec, label), []).append(x)
     dates = {e.id: e.occurred_on for e in pkg.entries}
@@ -198,10 +204,14 @@ def patient_items(pkg: SharePackage, lang: str = "en") -> list[BriefItem]:
         onset = next((x.onset_hint for x in xs if x.onset_hint), None)
         if onset:
             extra += f"; {'esordio' if it else 'onset'}: {onset}"
+        past = next((x.past for x in xs if x.past and not x.family_history), None)
+        if past:
+            extra += f"; {when_text(past, lang, around=True)}"
         mark = ""
         if any(x.needs_review for x in xs):
             mark = f" ({_LOW[lang]})"
-        rec = f"registrato {_times(len(cites), lang)}" if it else f"recorded {_times(len(cites), lang)}"
+        rec = (f"registrato {_times(len(cites), lang)}" if it else f"recorded {_times(len(cites), lang)}") if not past else (
+            "menzionato" if it else "mentioned")
         items.append(BriefItem(id=_id(), section=sec, text=f"{label}: {rec}, {_span(ds, lang, year)}{extra}{mark}",
                                cites=sorted(set(cites)), origin="patient", review="accepted",
                                from_question=all(x.from_question for x in xs)))
@@ -252,11 +262,15 @@ def patient_view_items(pkg: SharePackage, lang: str, onto) -> list[BriefItem]:
     dates = {e.id: e.occurred_on for e in pkg.entries}
     groups: dict[str, list] = {}
     family = False
+    past: list = []
     for x in pkg.entities:
         if x.negated or x.type in ("lab", "medication", "trigger"):
             continue
         if x.family_history:
             family = True
+            continue
+        if x.past:
+            past.append(x)
             continue
         groups.setdefault(x.hpo_id or x.canonical, []).append(x)
     n = 0
@@ -279,6 +293,16 @@ def patient_view_items(pkg: SharePackage, lang: str, onto) -> list[BriefItem]:
         items.append(BriefItem(id=f"bi_p{n}", section="symptoms", text=text, cites=cites, origin="patient", review="accepted",
                                from_question=asked))
         n += 1
+    seen: set[str] = set()
+    for x in past:  # "Past: knee surgery (about 5 years ago, 12 Oct)"
+        key = x.hpo_id or x.canonical.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        # the patient's own words (never an English clinical label in Italian, never a condition name from the software)
+        text = f"{'In passato' if it else 'Past'}: {x.quote} ({when_text(x.past, lang)}, {fdate(x.occurred_on, lang, year)})"
+        items.append(BriefItem(id=f"bi_p_past{len(seen)}", section="symptoms", origin="patient", review="accepted",
+                               cites=[x.entry_id], text=text))
     items += lab_items(pkg, lang)
     if family:
         items.append(BriefItem(id="bi_p_family", section="summary", origin="patient", review="accepted",

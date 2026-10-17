@@ -6,11 +6,17 @@ export type Extraction = "pending" | "done" | "failed";
 
 export interface Term { hpo_id: string; label: string }
 
+/** Past history read from the note's words ("5 years ago", "as a child"): not a current finding. */
+export interface PastRef {
+  kind: "ago" | "year" | "childhood" | "past"; n: number | null; unit: "year" | "month" | null;
+  approx_date: string | null; cue: string;
+}
+
 export interface Entity {
   id: string; entry_id: string; type: EntityType; quote: string; canonical: string;
   hpo_id: string | null; hpo_label: string | null; negated: boolean; severity: number | null;
   family_history: boolean; onset_hint: string | null; confidence: number | null; review: EntityReview;
-  flags: string[]; model: string | null;
+  flags: string[]; model: string | null; past?: PastRef | null;
 }
 
 export interface ReviewItem {
@@ -57,6 +63,7 @@ export interface SharedEntity {
   id?: string | null; confidence?: number | null; needs_review?: boolean;
   entry_id: string; occurred_on: string; type: EntityType; quote: string; canonical: string;
   hpo_id: string | null; negated: boolean; family_history: boolean; severity: number | null; onset_hint?: string | null; reviewed: boolean; from_question?: boolean;
+  past?: PastRef | null;
 }
 
 export interface SharedLab {
@@ -189,9 +196,11 @@ export interface OverviewTerm { label: string; count: number; recent_count: numb
 export interface Overview {
   profile: Profile | null; notes: number; weeks: number; frequent: OverviewTerm[]; recent: OverviewTerm[]; new: string[];
   first: OverviewTerm | null; severe: OverviewTerm[]; labs_off: OverviewLab[];
-  family: string[]; denied: string[]; mood: { avg: number; trend: "down" | "up" | "flat" } | null;
+  past?: OverviewPast[]; family: string[]; denied: string[]; mood: { avg: number; trend: "down" | "up" | "flat" } | null;
   asks: { text: string; entry_id: string; date: string }[];
 }
+/** Past history line of the glance; `when` is worded by the server ("about 5 years ago (around 2021)"). */
+export interface OverviewPast { label: string; past: PastRef; when: string; entry_id: string; date: string; quote: string }
 /** One test with an out-of-range result: its latest out-of-range reading; `latest_in_range` when a later one is back in range. */
 export interface OverviewLab {
   name: string; test_key: string; value: string; unit: string; flag: "low" | "high" | "positive"; date: string; latest_in_range: boolean;
