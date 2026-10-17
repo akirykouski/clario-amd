@@ -1,0 +1,2605 @@
+{
+  "label": "jev-oracle-test100",
+  "dataset": "v3/test.jsonl",
+  "model": "typesafe jev-1.13.0",
+  "backend": "typesafe-api",
+  "date": "2026-10-17",
+  "n": 100,
+  "entity_precision": 0.7035294117647058,
+  "entity_recall": 0.7346437346437347,
+  "entity_f1": 0.7187500000000001,
+  "fuzzy_precision": 0.7552941176470588,
+  "fuzzy_recall": 0.7886977886977887,
+  "fuzzy_f1": 0.7716346153846153,
+  "hpo_id_accuracy": 0.0,
+  "n_gold_with_hpo_id": 393,
+  "negated_recall": 0.896551724137931,
+  "n_negated_gold": 29,
+  "family_history_recall": 0.8636363636363636,
+  "n_family_history_gold": 22,
+  "negation_accuracy": 1.0,
+  "family_history_accuracy": 1.0,
+  "onset_accuracy": 0.0,
+  "severity_accuracy": 0.0,
+  "json_validity_rate": 1.0,
+  "schema_valid_rate": 1.0,
+  "quote_grounding_rate": 0.0,
+  "n_predicted_entities": 425,
+  "ece": 0.11148235294117642,
+  "brier": 0.209184,
+  "n_confidence_entities": 425,
+  "confidence_coverage": 1.0,
+  "tp": 299,
+  "fp": 126,
+  "fn": 108,
+  "n_gold_entities": 407,
+  "n_matched_pairs": 299,
+  "gold_complete": true,
+  "per_item": [
+    {
+      "id": "b17c51d1f253",
+      "n_gold": 5,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.67,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.67,
+          "correct": 0
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.55,
+          "correct": 1
+        },
+        {
+          "confidence": 0.99,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "220427d273ae",
+      "n_gold": 5,
+      "n_pred": 13,
+      "entities": [
+        {
+          "confidence": 0.81,
+          "correct": 1
+        },
+        {
+          "confidence": 0.78,
+          "correct": 0
+        },
+        {
+          "confidence": 0.98,
+          "correct": 0
+        },
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.73,
+          "correct": 0
+        },
+        {
+          "confidence": 0.72,
+          "correct": 1
+        },
+        {
+          "confidence": 0.66,
+          "correct": 0
+        },
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.85,
+          "correct": 0
+        },
+        {
+          "confidence": 0.93,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "ea01a236f067",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.76,
+          "correct": 1
+        },
+        {
+          "confidence": 0.54,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "c91198359563",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "e1ab37eb049c",
+      "n_gold": 6,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.83,
+          "correct": 1
+        },
+        {
+          "confidence": 0.86,
+          "correct": 1
+        },
+        {
+          "confidence": 0.6,
+          "correct": 1
+        },
+        {
+          "confidence": 0.76,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "38c50eb08e3f",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "2bd7ae4590d5",
+      "n_gold": 3,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.97,
+          "correct": 0
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.5,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.54,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "76175bf14c83",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.61,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "90e329ad74d1",
+      "n_gold": 6,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.58,
+          "correct": 1
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        },
+        {
+          "confidence": 0.79,
+          "correct": 1
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.54,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "57093c61db15",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "58276817ca14",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.99,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "46df39a74951",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "df9a1c92972d",
+      "n_gold": 5,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.68,
+          "correct": 0
+        },
+        {
+          "confidence": 0.65,
+          "correct": 0
+        },
+        {
+          "confidence": 0.64,
+          "correct": 0
+        },
+        {
+          "confidence": 0.72,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "45c3cf470a02",
+      "n_gold": 7,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.84,
+          "correct": 0
+        },
+        {
+          "confidence": 0.88,
+          "correct": 0
+        },
+        {
+          "confidence": 0.53,
+          "correct": 0
+        },
+        {
+          "confidence": 0.53,
+          "correct": 1
+        },
+        {
+          "confidence": 0.84,
+          "correct": 0
+        },
+        {
+          "confidence": 0.86,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "18915133fd76",
+      "n_gold": 7,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.78,
+          "correct": 1
+        },
+        {
+          "confidence": 0.75,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.63,
+          "correct": 1
+        },
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.77,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "fd4866b2c953",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "a918f23328a9",
+      "n_gold": 6,
+      "n_pred": 8,
+      "entities": [
+        {
+          "confidence": 0.67,
+          "correct": 1
+        },
+        {
+          "confidence": 0.63,
+          "correct": 0
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        },
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.79,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 0
+        },
+        {
+          "confidence": 0.86,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "41cf079c4421",
+      "n_gold": 6,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        },
+        {
+          "confidence": 0.88,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.81,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "d42e4ab86169",
+      "n_gold": 6,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.79,
+          "correct": 0
+        },
+        {
+          "confidence": 0.57,
+          "correct": 1
+        },
+        {
+          "confidence": 0.82,
+          "correct": 0
+        },
+        {
+          "confidence": 0.96,
+          "correct": 0
+        },
+        {
+          "confidence": 0.92,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "1103d3659ed1",
+      "n_gold": 3,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.88,
+          "correct": 1
+        },
+        {
+          "confidence": 0.84,
+          "correct": 0
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "a748c52aa2ff",
+      "n_gold": 3,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.96,
+          "correct": 0
+        },
+        {
+          "confidence": 0.65,
+          "correct": 1
+        },
+        {
+          "confidence": 0.63,
+          "correct": 1
+        },
+        {
+          "confidence": 0.84,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "98353100424b",
+      "n_gold": 7,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.84,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "4fe1d50fb695",
+      "n_gold": 5,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.89,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.71,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "ec43dadf9e64",
+      "n_gold": 4,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.63,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 0
+        },
+        {
+          "confidence": 0.71,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "1b051c094806",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "2e5a5dd0a09a",
+      "n_gold": 7,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.86,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "f4bcdcfe4cd7",
+      "n_gold": 3,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.99,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "8180e40ccb3a",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "880206bbeafb",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.88,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "346e20ec2168",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.68,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "a2800a19794a",
+      "n_gold": 3,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.83,
+          "correct": 1
+        },
+        {
+          "confidence": 0.81,
+          "correct": 1
+        },
+        {
+          "confidence": 0.86,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "0d1800069488",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.84,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "5b81470912ca",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "a0bcf38861c8",
+      "n_gold": 6,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.78,
+          "correct": 1
+        },
+        {
+          "confidence": 0.85,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "1d7984604855",
+      "n_gold": 4,
+      "n_pred": 2,
+      "entities": [
+        {
+          "confidence": 0.85,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "5172b98503db",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.83,
+          "correct": 1
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.92,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "dda0f72d2e5e",
+      "n_gold": 6,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.86,
+          "correct": 0
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "ca78098039a2",
+      "n_gold": 5,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.53,
+          "correct": 1
+        },
+        {
+          "confidence": 0.64,
+          "correct": 1
+        },
+        {
+          "confidence": 0.61,
+          "correct": 0
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.67,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "fd8ee4a13436",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.53,
+          "correct": 0
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.52,
+          "correct": 1
+        },
+        {
+          "confidence": 0.71,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "80882592d704",
+      "n_gold": 3,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.62,
+          "correct": 0
+        },
+        {
+          "confidence": 0.6,
+          "correct": 0
+        },
+        {
+          "confidence": 0.97,
+          "correct": 0
+        },
+        {
+          "confidence": 0.94,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "5270840b7c9e",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.73,
+          "correct": 1
+        },
+        {
+          "confidence": 0.61,
+          "correct": 1
+        },
+        {
+          "confidence": 0.82,
+          "correct": 1
+        },
+        {
+          "confidence": 0.84,
+          "correct": 1
+        },
+        {
+          "confidence": 0.64,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "380a02a1105e",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.68,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "84d256b6e1fc",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.63,
+          "correct": 1
+        },
+        {
+          "confidence": 0.82,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.86,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "259ac4c9b1a8",
+      "n_gold": 7,
+      "n_pred": 8,
+      "entities": [
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.56,
+          "correct": 1
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.55,
+          "correct": 0
+        },
+        {
+          "confidence": 0.66,
+          "correct": 0
+        },
+        {
+          "confidence": 0.54,
+          "correct": 1
+        },
+        {
+          "confidence": 0.84,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "c50f2c583224",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.79,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.73,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "bd048fb984b4",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.79,
+          "correct": 1
+        },
+        {
+          "confidence": 0.75,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "8cb24f33eeee",
+      "n_gold": 3,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.86,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "ebaba6c11137",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.82,
+          "correct": 1
+        },
+        {
+          "confidence": 0.83,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "37bdbab0802b",
+      "n_gold": 6,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.59,
+          "correct": 0
+        },
+        {
+          "confidence": 0.73,
+          "correct": 1
+        },
+        {
+          "confidence": 0.75,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "e353abc5d823",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.75,
+          "correct": 1
+        },
+        {
+          "confidence": 0.62,
+          "correct": 1
+        },
+        {
+          "confidence": 0.64,
+          "correct": 0
+        },
+        {
+          "confidence": 0.84,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "bcf560587fce",
+      "n_gold": 5,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.56,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 0
+        },
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.71,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "cfa1fd4b33b6",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "f458d76d5146",
+      "n_gold": 6,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.88,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.85,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.76,
+          "correct": 0
+        },
+        {
+          "confidence": 0.73,
+          "correct": 1
+        },
+        {
+          "confidence": 0.84,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "acf4ee277293",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.82,
+          "correct": 1
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "33d401ae382a",
+      "n_gold": 5,
+      "n_pred": 9,
+      "entities": [
+        {
+          "confidence": 0.83,
+          "correct": 1
+        },
+        {
+          "confidence": 0.57,
+          "correct": 0
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.5,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.61,
+          "correct": 0
+        },
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.59,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "25fe2d5d7de9",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "c231f5eef110",
+      "n_gold": 3,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.86,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "5e2fcbc54006",
+      "n_gold": 5,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.64,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 0
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.88,
+          "correct": 0
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.66,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "984eade72e12",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.67,
+          "correct": 1
+        },
+        {
+          "confidence": 0.51,
+          "correct": 1
+        },
+        {
+          "confidence": 0.56,
+          "correct": 1
+        },
+        {
+          "confidence": 0.65,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "9b127d02c3eb",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.67,
+          "correct": 0
+        },
+        {
+          "confidence": 0.77,
+          "correct": 0
+        },
+        {
+          "confidence": 0.52,
+          "correct": 0
+        },
+        {
+          "confidence": 0.61,
+          "correct": 0
+        },
+        {
+          "confidence": 0.75,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "972bf559541b",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.72,
+          "correct": 1
+        },
+        {
+          "confidence": 0.72,
+          "correct": 1
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "676511f342cf",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "c33090722cd5",
+      "n_gold": 5,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.59,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 0
+        },
+        {
+          "confidence": 0.6,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "9063825a8040",
+      "n_gold": 5,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.66,
+          "correct": 1
+        },
+        {
+          "confidence": 0.62,
+          "correct": 1
+        },
+        {
+          "confidence": 0.81,
+          "correct": 0
+        },
+        {
+          "confidence": 0.58,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "22ca84a38883",
+      "n_gold": 3,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.87,
+          "correct": 0
+        },
+        {
+          "confidence": 0.88,
+          "correct": 0
+        },
+        {
+          "confidence": 0.73,
+          "correct": 0
+        },
+        {
+          "confidence": 0.96,
+          "correct": 0
+        },
+        {
+          "confidence": 0.79,
+          "correct": 1
+        },
+        {
+          "confidence": 0.72,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "1a7c87ae00f0",
+      "n_gold": 5,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.85,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "2b56e22bdad2",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "b176dd7c3e16",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.72,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "ecab9279b9e3",
+      "n_gold": 3,
+      "n_pred": 8,
+      "entities": [
+        {
+          "confidence": 0.52,
+          "correct": 0
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        },
+        {
+          "confidence": 0.66,
+          "correct": 0
+        },
+        {
+          "confidence": 0.67,
+          "correct": 0
+        },
+        {
+          "confidence": 0.85,
+          "correct": 1
+        },
+        {
+          "confidence": 0.89,
+          "correct": 0
+        },
+        {
+          "confidence": 0.53,
+          "correct": 0
+        },
+        {
+          "confidence": 0.85,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "517e0141504c",
+      "n_gold": 6,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.51,
+          "correct": 1
+        },
+        {
+          "confidence": 0.68,
+          "correct": 1
+        },
+        {
+          "confidence": 0.78,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "0228022e58ec",
+      "n_gold": 7,
+      "n_pred": 10,
+      "entities": [
+        {
+          "confidence": 0.85,
+          "correct": 0
+        },
+        {
+          "confidence": 0.76,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.88,
+          "correct": 0
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.67,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.77,
+          "correct": 0
+        },
+        {
+          "confidence": 0.83,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "3a8b82adb843",
+      "n_gold": 4,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.75,
+          "correct": 1
+        },
+        {
+          "confidence": 0.8,
+          "correct": 0
+        },
+        {
+          "confidence": 0.58,
+          "correct": 0
+        },
+        {
+          "confidence": 0.76,
+          "correct": 0
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "3047489cb42c",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "a6cbefa6dde6",
+      "n_gold": 8,
+      "n_pred": 8,
+      "entities": [
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.88,
+          "correct": 1
+        },
+        {
+          "confidence": 0.63,
+          "correct": 1
+        },
+        {
+          "confidence": 0.61,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.77,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "84d14936a7a2",
+      "n_gold": 7,
+      "n_pred": 9,
+      "entities": [
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.58,
+          "correct": 0
+        },
+        {
+          "confidence": 0.5,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.5,
+          "correct": 0
+        },
+        {
+          "confidence": 0.94,
+          "correct": 1
+        },
+        {
+          "confidence": 0.67,
+          "correct": 1
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.89,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "41777d723268",
+      "n_gold": 3,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.89,
+          "correct": 1
+        },
+        {
+          "confidence": 0.57,
+          "correct": 0
+        },
+        {
+          "confidence": 0.56,
+          "correct": 1
+        },
+        {
+          "confidence": 0.73,
+          "correct": 0
+        },
+        {
+          "confidence": 0.63,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "475af06dac45",
+      "n_gold": 4,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.65,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 0
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.81,
+          "correct": 0
+        },
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.74,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "01b1efa1e78d",
+      "n_gold": 6,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.79,
+          "correct": 1
+        },
+        {
+          "confidence": 0.82,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.52,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "dddefaada50a",
+      "n_gold": 7,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.65,
+          "correct": 1
+        },
+        {
+          "confidence": 0.6,
+          "correct": 1
+        },
+        {
+          "confidence": 0.64,
+          "correct": 1
+        },
+        {
+          "confidence": 0.69,
+          "correct": 0
+        },
+        {
+          "confidence": 0.95,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "1c19c81b6460",
+      "n_gold": 4,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.76,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 0
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        },
+        {
+          "confidence": 0.83,
+          "correct": 1
+        },
+        {
+          "confidence": 0.95,
+          "correct": 0
+        },
+        {
+          "confidence": 0.98,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "adb2af19506d",
+      "n_gold": 4,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.89,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.6,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "cad6c27976eb",
+      "n_gold": 5,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "40ac57b9dc9a",
+      "n_gold": 3,
+      "n_pred": 3,
+      "entities": [
+        {
+          "confidence": 0.85,
+          "correct": 1
+        },
+        {
+          "confidence": 0.52,
+          "correct": 1
+        },
+        {
+          "confidence": 0.53,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "64518dbf7b99",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "8f5aa36182f2",
+      "n_gold": 4,
+      "n_pred": 2,
+      "entities": [
+        {
+          "confidence": 0.84,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "b6b8b0ec736e",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "827af385b794",
+      "n_gold": 5,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.9,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "4d2cbc729e32",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.8,
+          "correct": 1
+        },
+        {
+          "confidence": 0.55,
+          "correct": 1
+        },
+        {
+          "confidence": 0.86,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "9888179ddb83",
+      "n_gold": 5,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.89,
+          "correct": 1
+        },
+        {
+          "confidence": 0.92,
+          "correct": 0
+        },
+        {
+          "confidence": 0.82,
+          "correct": 0
+        },
+        {
+          "confidence": 0.7,
+          "correct": 0
+        },
+        {
+          "confidence": 0.83,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "1c76d63179d3",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.83,
+          "correct": 1
+        },
+        {
+          "confidence": 0.85,
+          "correct": 1
+        },
+        {
+          "confidence": 0.88,
+          "correct": 1
+        },
+        {
+          "confidence": 0.51,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "9a2a54e4e9b1",
+      "n_gold": 4,
+      "n_pred": 4,
+      "entities": [
+        {
+          "confidence": 0.69,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 0
+        },
+        {
+          "confidence": 0.82,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "1ba1338aeaa0",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "494439d7a2de",
+      "n_gold": 0,
+      "n_pred": 0,
+      "entities": []
+    },
+    {
+      "id": "741f8580c4e4",
+      "n_gold": 6,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.81,
+          "correct": 1
+        },
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.66,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        },
+        {
+          "confidence": 0.9,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "38e479fd9ac5",
+      "n_gold": 3,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.77,
+          "correct": 0
+        },
+        {
+          "confidence": 0.73,
+          "correct": 0
+        },
+        {
+          "confidence": 0.71,
+          "correct": 0
+        },
+        {
+          "confidence": 0.98,
+          "correct": 0
+        },
+        {
+          "confidence": 0.93,
+          "correct": 1
+        },
+        {
+          "confidence": 0.94,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "29d6b894586a",
+      "n_gold": 4,
+      "n_pred": 7,
+      "entities": [
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.76,
+          "correct": 0
+        },
+        {
+          "confidence": 0.77,
+          "correct": 0
+        },
+        {
+          "confidence": 0.74,
+          "correct": 0
+        },
+        {
+          "confidence": 0.74,
+          "correct": 1
+        },
+        {
+          "confidence": 0.85,
+          "correct": 0
+        },
+        {
+          "confidence": 0.76,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "c47f329ca4d3",
+      "n_gold": 7,
+      "n_pred": 8,
+      "entities": [
+        {
+          "confidence": 0.67,
+          "correct": 1
+        },
+        {
+          "confidence": 0.53,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 0
+        },
+        {
+          "confidence": 0.68,
+          "correct": 1
+        },
+        {
+          "confidence": 0.58,
+          "correct": 0
+        },
+        {
+          "confidence": 0.94,
+          "correct": 0
+        },
+        {
+          "confidence": 0.92,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "004133cda426",
+      "n_gold": 9,
+      "n_pred": 8,
+      "entities": [
+        {
+          "confidence": 0.95,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        },
+        {
+          "confidence": 0.87,
+          "correct": 1
+        },
+        {
+          "confidence": 0.76,
+          "correct": 1
+        },
+        {
+          "confidence": 0.96,
+          "correct": 1
+        },
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.91,
+          "correct": 1
+        }
+      ]
+    },
+    {
+      "id": "0e3822439a07",
+      "n_gold": 6,
+      "n_pred": 5,
+      "entities": [
+        {
+          "confidence": 0.57,
+          "correct": 0
+        },
+        {
+          "confidence": 0.58,
+          "correct": 0
+        },
+        {
+          "confidence": 0.65,
+          "correct": 0
+        },
+        {
+          "confidence": 0.62,
+          "correct": 0
+        },
+        {
+          "confidence": 0.71,
+          "correct": 0
+        }
+      ]
+    },
+    {
+      "id": "34cb27a5d428",
+      "n_gold": 6,
+      "n_pred": 6,
+      "entities": [
+        {
+          "confidence": 0.97,
+          "correct": 1
+        },
+        {
+          "confidence": 0.62,
+          "correct": 0
+        },
+        {
+          "confidence": 0.67,
+          "correct": 1
+        },
+        {
+          "confidence": 0.69,
+          "correct": 1
+        },
+        {
+          "confidence": 0.98,
+          "correct": 1
+        },
+        {
+          "confidence": 0.71,
+          "correct": 0
+        }
+      ]
+    }
+  ],
+  "wall_s": 33.36257219314575,
+  "errors": 0,
+  "latency_p50_s": 0.0,
+  "latency_p95_s": 0.0,
+  "tokens_per_s": 0.0,
+  "candidate_recall": 1.0,
+  "total_tokens": 451862,
+  "dry_run": false,
+  "oracle_candidates": true,
+  "lexicon": true,
+  "pipeline": "ORACLE candidates: gold terms + retrieved distractors (30), Jev noul own/denied/relative per candidate, threshold 0.5; no quotes, onset or severity",
+  "note": "Jev is a decision model; candidate_recall is the ceiling the retrieval step allows",
+  "samples": [
+    {
+      "diary": "Mar 12 Mar. Mi sono svegliata con un forte mal di testa che non mi passa. Sento ancora i dolori alle articolazioni dallo scorso fine settimana e ho questa strana rigidit\u00e0 alle mani da circa due settimane che mi rende difficile fare colazione. Il dottore dice che \u00e8 per l'usura delle cartilagini. Sper",
+      "pred": [
+        {
+          "quote": "",
+          "canonical": "Arthropathy",
+          "hpo_id": "HP:0003040",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.67
+        },
+        {
+          "quote": "",
+          "canonical": "Limitation of joint mobility",
+          "hpo_id": "HP:0001376",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.94
+        },
+        {
+          "quote": "",
+          "canonical": "Poor fine motor coordination",
+          "hpo_id": "HP:0007010",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.67
+        },
+        {
+          "quote": "",
+          "canonical": "Arthralgia",
+          "hpo_id": "HP:0002829",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.96
+        },
+        {
+          "quote": "",
+          "canonical": "Cartilage destruction",
+          "hpo_id": "HP:0100773",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.55
+        }
+      ],
+      "err": null
+    },
+    {
+      "diary": "Tue 10 Oct: My head hurts so bad today and I can't focus on these emails. The car is at the garage again, such a pain. Wed 11 Oct: Woke up and my fingers are just stiff, it's hard to move my joints. No breathing difficulty though. Thu 12 Oct: Still dealing with this joint disease for three days now.",
+      "pred": [
+        {
+          "quote": "",
+          "canonical": "Arthropathy",
+          "hpo_id": "HP:0003040",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.81
+        },
+        {
+          "quote": "",
+          "canonical": "Short attention span",
+          "hpo_id": "HP:0000736",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.78
+        },
+        {
+          "quote": "",
+          "canonical": "Pain",
+          "hpo_id": "HP:0012531",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.98
+        },
+        {
+          "quote": "",
+          "canonical": "Limitation of joint mobility",
+          "hpo_id": "HP:0001376",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.93
+        },
+        {
+          "quote": "",
+          "canonical": "Joint stiffness",
+          "hpo_id": "HP:0001387",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.98
+        }
+      ],
+      "err": null
+    },
+    {
+      "diary": "Lun 4 Mar: Mi sono svegliata e ho notato ancora pi\u00f9 capelli sul cuscino, dir\u00f2 7/10 come intensit\u00e0 della perdita. Le articolazioni per\u00f2 stanno bene, niente infiammazioni. Mar 5 Mar: Ho provato a pettinarmi ma i capelli si spezzano facilmente da marted\u00ec. Che stress, oggi ho pure litigato col capo. Mer",
+      "pred": [
+        {
+          "quote": "",
+          "canonical": "Brittle hair",
+          "hpo_id": "HP:0002299",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.94
+        },
+        {
+          "quote": "",
+          "canonical": "Alopecia of scalp",
+          "hpo_id": "HP:0002293",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.76
+        },
+        {
+          "quote": "",
+          "canonical": "Alopecia",
+          "hpo_id": "HP:0001596",
+          "type": "symptom",
+          "negated": false,
+          "family_history": false,
+          "onset_hint": null,
+          "severity": null,
+          "confidence": 0.54
+        }
+      ],
+      "err": null
+    }
+  ],
+  "hardware": {
+    "gpu_name": "TypeSafe API (hosted, hardware not reported)",
+    "gpu_count": null,
+    "vram_total_gb": null,
+    "source": "api.typesafe.ai"
+  }
+}
