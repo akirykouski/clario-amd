@@ -132,6 +132,11 @@ class LLM:
             total = merge_stats(total, st)
         return outs, total  # type: ignore[return-value]
 
+    async def ocr(self, task: str, image_url: str, *, model: str, payload: dict | None = None,
+                  purpose: str | None = None) -> tuple[str, Stats]:
+        """One page (a data: URL) -> markdown, through an OCR model (Token Factory `POST /ocr`). Base: no OCR."""
+        raise LLMError(f"{self.backend} has no OCR endpoint")
+
     async def json(self, task: str, messages: list[dict], cls: type[T], *, max_tokens: int | None = None,
                    payload: dict | None = None) -> tuple[T, Stats]:
         msgs = list(messages)
@@ -164,16 +169,18 @@ class OpenAICompat(LLM):
         self._inflight = asyncio.Semaphore(s.llm_concurrency if tf else 1024)
         self._rate_retries = 6 if tf else 2
 
-    async def _call(self, kw: dict, *, hold_slot: bool = True):
-        """One chat.completions request. A 429 is retried after Retry-After (or backoff), up to _rate_retries times."""
+    async def _call(self, kw: dict, *, hold_slot: bool = True, send=None):
+        """One request (chat.completions unless `send` is given). A 429 is retried after Retry-After (or backoff),
+        up to _rate_retries times."""
         import openai
 
+        send = send or self.client.chat.completions.create
         for attempt in range(self._rate_retries + 1):
             try:
                 if not hold_slot:
-                    return await self.client.chat.completions.create(**kw)
+                    return await send(**kw)
                 async with self._inflight:
-                    return await self.client.chat.completions.create(**kw)
+                    return await send(**kw)
             except openai.RateLimitError as e:
                 wait = retry_delay(e.response.headers if e.response is not None else None, attempt)
                 if wait is None or attempt == self._rate_retries:
@@ -219,6 +226,27 @@ class OpenAICompat(LLM):
         return (resp.choices[0].message.content or ""), Stats(
             self.backend, self.model, round(dt * 1000, 1), toks, round(toks / dt, 1) if toks and dt else None)
 
+    async def ocr(self, task, image_url, *, model, payload=None, purpose=None):
+        """Token Factory OCR (`POST {base}/ocr`, MinerU): takes a data: URL, returns the page as markdown."""
+        import openai
+
+        async def send(**body):
+            return await self.client.post("/ocr", cast_to=object, body=body)
+
+        body = {"model": model, "document": {"type": "image_url", "image_url": image_url}}
+        t0 = time.perf_counter()
+        try:
+            async with self._sem:
+                resp = await self._call(body, send=send)
+        except openai.OpenAIError as e:
+            raise LLMError(f"{self.backend} OCR failed: {e}") from e
+        dt = time.perf_counter() - t0
+        pages = resp.get("pages") if isinstance(resp, dict) else None
+        if not isinstance(pages, list):
+            raise LLMError(f"{self.backend} OCR returned no pages")
+        text = "\n\n".join(str(p.get("markdown") or "") for p in pages if isinstance(p, dict))
+        return text, Stats(self.backend, model, round(dt * 1000, 1), None, None)
+
     def _schema_kw(self, kw: dict, schema: dict | None) -> None:
         """Put the JSON schema on the request using the best mode this server has accepted so far."""
         kw.pop("response_format", None)
@@ -262,7 +290,8 @@ class OpenAICompat(LLM):
         import openai
 
         n = max(1, n)
-        kw = self._kw(messages, True, None) | {"temperature": temperature}
+        model = (payload or {}).get("_model")  # a vision model for this call, as in _complete
+        kw = self._kw(messages, True, None, model) | {"temperature": temperature}
         t0 = time.perf_counter()
         try:
             async with self._sem:
@@ -284,7 +313,7 @@ class OpenAICompat(LLM):
         except openai.OpenAIError as e:
             raise LLMError(f"{self.backend} call failed: {e}") from e
         dt = time.perf_counter() - t0
-        return texts, Stats(self.backend, self.model, round(dt * 1000, 1), toks,
+        return texts, Stats(self.backend, model or self.model, round(dt * 1000, 1), toks,
                             round(toks / dt, 1) if toks and dt else None)
 
     async def stream(self, task, messages, *, max_tokens=None, payload=None):

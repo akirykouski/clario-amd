@@ -26,6 +26,8 @@ No certified threshold recorded yet (`eval/conformal.py` on a `--sc-n` run).
 
 | file | model | backend | dataset | n | date |
 |---|---|---|---|---|---|
+| documents_tf-mineru-gemma4-31b.json | MinerU2.5-Pro + Gemma-4-31B-IT | amd-token-factory | synthetic-referti/demo (backend/clario/data/demo) | 3 | 2026-10-17 |
+| documents_tf-mineru-table.json | MinerU2.5-Pro | amd-token-factory | synthetic-referti/demo (backend/clario/data/demo) | 3 | 2026-10-17 |
 | pattern_calibration.json | clario-patterns 6f1cf36 | cpu | simulated patients from the shipped HPO/Orphanet annotations (knowledge.json.gz, 12820 diseases), k=3..8 terms frequency weighted, 30% moved to an ancestor, 1-2 noise terms, 30% with one negated term; synthetic, no real patients | 1200 | 2026-10-16 |
 | pii_leak.json | clario-privacy d38ab8e | cpu | synthetic templates v1, seed 20261016 | 1700 | 2026-10-16 |
 
@@ -36,3 +38,4 @@ No certified threshold recorded yet (`eval/conformal.py` on a `--sc-n` run).
 | extraction_dryrun-gold-vs-gold.json | offline-synth-v3-test | 140 | 2026-10-15 | 1.000 | gold scored against itself, no model; checks the scorer only, not a model result |
 | conformal_threshold.json | synthetic-dry-run-fixture | 2400 | 2026-10-16 | n/a | synthetic fixture, no model; checks the code path only. The app ignores this file. |
 | documents.offline-fixture.json | synthetic-referti/evalset | 5 | 2026-10-15 | n/a | offline fixture, no model |
+

@@ -70,7 +70,10 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
             async with sem:
                 try:
                     res = await docs.extract_page(llm, page, i + 1, vision_model=s.llm_vision_model,
-                                                  threshold=s.review_threshold, n_samples=s.doc_samples)
+                                                  ocr_model=s.llm_ocr_model, structure=s.doc_structure,
+                                                  threshold=s.review_threshold,
+                                                  n_samples=s.doc_samples)
+                    b["model"] = res.model
                     for r in res.rows:
                         lab = LabResult(id=f"l_{uuid.uuid4().hex[:10]}", batch_id=bid, test_key=docs.test_key(r["test_name"]),
                                         model=res.model, **{**r, "date": (date.fromisoformat(r["date"]) + shift).isoformat()
@@ -138,7 +141,8 @@ def register(app: FastAPI, s: Settings, vault: Vault, llm: Any, spawn,
         el = max(end - b["started"], 1e-3)
         return {"batch_id": bid, "pages_done": b["done"], "pages_total": b["total"],
                 "pages_per_sec": round(b["done"] / el, 2), "gpu": gpu, "errors": b["errors"], "labs": b["labs"],
-                "needs_review": b["needs_review"], "done": b["done"] >= b["total"]}
+                "needs_review": b["needs_review"], "done": b["done"] >= b["total"],
+                "elapsed_s": round(el, 1), "backend": llm.backend, "model": b.get("model")}
 
     @app.get("/api/documents/batch/{bid}/events")
     async def batch_events(bid: str):

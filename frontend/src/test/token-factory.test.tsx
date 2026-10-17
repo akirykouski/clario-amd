@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { api } from "../api";
 import { ComputeBadge } from "../clinic/ClinicApp";
 import { RunChips } from "../clinic/BriefPanel";
-import { modelName, tokenFactoryLabel } from "../components/compute";
+import { modelName, readerName, tokenFactoryLabel } from "../components/compute";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -37,5 +37,13 @@ describe("AMD Token Factory label", () => {
     expect(chips).toHaveTextContent("tokens/s");
     await vi.waitFor(() => expect(gpu).toHaveBeenCalled());
     expect(chips).not.toHaveTextContent("GPU");
+  });
+});
+
+describe("lab import reader", () => {
+  it("names the OCR model and the text model", () => {
+    expect(readerName("MinerU2.5-Pro + Gemma-4-31B-IT")).toBe("MinerU2.5-Pro + Gemma 4 31B");
+    expect(readerName("Gemma-4-31B-IT")).toBe("Gemma 4 31B");
+    expect(readerName(null)).toBe("");
   });
 });

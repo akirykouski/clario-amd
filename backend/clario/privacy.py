@@ -686,17 +686,18 @@ class PrivacyLLM:
         pl = payload
         if self.pseudonymize and payload and isinstance(payload.get("text"), str):
             pl = {**payload, "text": pseudonymize(payload["text"])[0]}  # the local hint must match what is sent
-        return out, pl, red, (task, out, last_user, purpose, red)
+        return out, pl, red, (task, out, last_user, purpose, red, (payload or {}).get("_model"))
 
     async def _record(self, args: tuple) -> None:
         """Write the log record off the event loop: it touches sqlite or a file."""
         await asyncio.to_thread(self._log, *args)
 
-    def _log(self, task: str, sent: list[dict], preview: str, purpose: str | None, red: Redaction) -> None:
+    def _log(self, task: str, sent: list[dict], preview: str, purpose: str | None, red: Redaction,
+             model: str | None = None) -> None:
         images = sum(1 for m in sent if isinstance(m.get("content"), list)
                      for p in m["content"] if isinstance(p, dict) and p.get("type") != "text")
         p = purpose or (task if task in PURPOSES else "other")
-        self.log.append(backend=self._inner.backend, model=self._inner.model, purpose=p, preview=preview,
+        self.log.append(backend=self._inner.backend, model=model or self._inner.model, purpose=p, preview=preview,
                         sent_text=json.dumps(sent, ensure_ascii=False, sort_keys=True), redacted=self.pseudonymize,
                         replacements=red.count, images=images)
 
@@ -723,6 +724,15 @@ class PrivacyLLM:
         await self._record(rec)
         texts, st = await self._inner.samples(task, msgs, *args, payload=pl, **kw)
         return [self._restore_text(t, red) for t in texts], st
+
+    async def ocr(self, task, image_url, *, model, payload=None, purpose=None):
+        """A page image to an OCR model. Images cannot be pseudonymised: the record says so (redacted false, 1 image)."""
+        page = (payload or {}).get("page")
+        preview = f"[page image{f' {page}' if page else ''} for OCR]"
+        await asyncio.to_thread(self.log.append, backend=self._inner.backend, model=model, purpose=purpose or "document",
+                                preview=preview, sent_text=json.dumps({"model": model, "document": image_url}),
+                                redacted=False, replacements=0, images=1)
+        return await self._inner.ocr(task, image_url, model=model, payload=payload, purpose=purpose)
 
     @staticmethod
     def _restore_text(text: str, red: Redaction) -> str:

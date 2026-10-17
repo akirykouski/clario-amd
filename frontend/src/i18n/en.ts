@@ -211,6 +211,8 @@ export const en = {
   "import.noFiles": "No files at hand?",
   "import.useSamples": "Use the 3 sample referti",
   "import.pps": "pages per second",
+  "import.took": "{n} pages in {s} s",
+  "import.readBy": "Read by {reader}",
   "import.progress": "{done} of {total} pages, {labs} results",
   "import.toCheck": ", {n} to check",
   "import.failed": ", {n} pages failed",

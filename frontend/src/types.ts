@@ -147,6 +147,8 @@ export interface BatchStarted { batch_id: string; pages: number; entry_id: strin
 export interface BatchEvent {
   batch_id: string; pages_done: number; pages_total: number; pages_per_sec: number;
   gpu: Record<string, unknown> | null; errors: number; labs: number; needs_review: number; done: boolean;
+  /** Seconds since the batch started; backend and model(s) that read the pages ("MinerU2.5-Pro + Gemma-4-31B-IT"). */
+  elapsed_s?: number; backend?: string; model?: string | null;
 }
 export interface LabResult {
   id: string; batch_id: string; test_name: string; test_key: string; value_numeric: number | null;

@@ -1,0 +1,39 @@
+{
+ "task": "document_extraction",
+ "structure": "table",
+ "field_exact_match": {
+  "value": 1.0,
+  "unit": 1.0,
+  "ref_low": 1.0,
+  "ref_high": 1.0
+ },
+ "row_recall": 1.0,
+ "n": 3,
+ "n_pages": 3,
+ "n_rows": 48,
+ "rows_needs_review": 0,
+ "ocr_latency_s": [
+  39.0,
+  24.2,
+  14.6
+ ],
+ "wall_s": 39.0,
+ "pages_per_sec": 0.08,
+ "concurrency": 4,
+ "pages_processed": [
+  1,
+  1,
+  1
+ ],
+ "dataset": "synthetic-referti/demo (backend/clario/data/demo)",
+ "model": "MinerU2.5-Pro",
+ "backend": "amd-token-factory",
+ "hardware": {
+  "gpu_name": "AMD Token Factory (hosted, GPU not reported)",
+  "gpu_count": null,
+  "vram_total_gb": null,
+  "source": "token-factory"
+ },
+ "date": "2026-10-17",
+ "note": "OCR live on AMD Token Factory: the three rendered demo pages sent concurrently (plus one PDF data-URL probe in the same burst), latency per request as measured, wall = slowest. Table then read in code (documents.parse_table) from that saved OCR output and scored against the truth files. Not run through the app end to end: the shared keys were at 20 RPM."
+}

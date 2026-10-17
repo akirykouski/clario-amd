@@ -212,6 +212,8 @@ export const it: Record<Key, string> = {
   "import.noFiles": "Non hai file a portata di mano?",
   "import.useSamples": "Usa i 3 referti di esempio",
   "import.pps": "pagine al secondo",
+  "import.took": "{n} pagine in {s} s",
+  "import.readBy": "Letto da {reader}",
   "import.progress": "{done} di {total} pagine, {labs} risultati",
   "import.toCheck": ", {n} da controllare",
   "import.failed": ", {n} pagine non lette",

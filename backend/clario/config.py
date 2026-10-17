@@ -16,6 +16,8 @@ TOKEN_FACTORY_HOST = "developer.amd.com.cn"
 TOKEN_FACTORY_MODEL = "Gemma-4-31B-IT"
 TOKEN_FACTORY_CONCURRENCY = 4  # default parallel requests; the gateway allows 8 per key, shared with batch jobs
 TOKEN_FACTORY_MAX_CONCURRENCY = 8
+# Lab report pages on Token Factory: MinerU reads the page into markdown (POST /v1/ocr), Gemma 31B structures the text
+TOKEN_FACTORY_OCR_MODEL = "MinerU2.5-Pro"
 
 
 def is_token_factory_url(base_url: str) -> bool:
@@ -82,9 +84,11 @@ class Settings:
     frontend_dist: Path | None = None
     auto_lock_minutes: int = 15
     pseudonymize: bool | None = None  # None = auto: on in patient mode when the model is remote
-    llm_vision_model: str | None = None
+    llm_vision_model: str | None = None  # chat model that reads page images (fallback, or the only path without OCR)
+    llm_ocr_model: str | None = None  # LLM_OCR_MODEL: page -> markdown via POST /ocr, then the text model structures it
+    doc_structure: str = "table"  # CLARIO_DOC_STRUCTURE: table = read a recognised OCR table in code; model = text model
     doc_concurrency: int | None = None  # None = 4 local, 32 remote (so vLLM can batch), LLM_CONCURRENCY on Token Factory
-    doc_samples: int = 3  # self-consistency samples per page when the client supports them
+    doc_samples: int = 3  # self-consistency samples per page when the client supports them (1 on Token Factory)
     review_threshold: float = ExtractOpts.review_threshold
 
     # Where review_threshold came from: "conformal" (eval/results/conformal_threshold.json or CLARIO_REVIEW_CALIBRATION,
@@ -168,6 +172,8 @@ class Settings:
         concurrency = max(1, int(e.get("LLM_CONCURRENCY") or (TOKEN_FACTORY_CONCURRENCY if tf else 8)))
         if tf:
             concurrency = min(concurrency, TOKEN_FACTORY_MAX_CONCURRENCY)
+        ocr = (e.get("LLM_OCR_MODEL") or "").strip()
+        ocr_model = None if ocr.lower() in ("off", "none", "0") else (ocr or (TOKEN_FACTORY_OCR_MODEL if tf else None))
         s = cls(
             mode=mode,
             llm_base_url=base_url,
@@ -184,7 +190,10 @@ class Settings:
             pseudonymize=_flag(e.get("CLARIO_PSEUDONYMIZE")),
             llm_vision_model=(e.get("LLM_VISION_MODEL") or "").strip() or None,
             doc_concurrency=max(1, int(e["CLARIO_DOC_CONCURRENCY"])) if e.get("CLARIO_DOC_CONCURRENCY") else None,
-            doc_samples=max(1, int(e.get("CLARIO_DOC_SAMPLES") or 3)),
+            llm_ocr_model=ocr_model,
+            doc_structure="model" if (e.get("CLARIO_DOC_STRUCTURE") or "").strip().lower() == "model" else "table",
+            # shared 20 RPM key: one structuring call per page; the OCR text is checked in code instead (documents.py)
+            doc_samples=max(1, int(e.get("CLARIO_DOC_SAMPLES") or (1 if tf else 3))),
             sc_n=max(1, int(e.get("CLARIO_SC_N") or d.sc_n)),
             trust_model_confidence=bool(_flag(e.get("CLARIO_TRUST_MODEL_CONFIDENCE"), d.trust_model_confidence)),
             hpo_pick=bool(_flag(e.get("CLARIO_HPO_PICK"), d.hpo_pick)),
