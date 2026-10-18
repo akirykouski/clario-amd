@@ -1,0 +1,52 @@
+{
+  "label": "impact-proxy-giulia-en",
+  "date": "2026-10-18",
+  "patient": "Giulia (EN), synthetic demo persona",
+  "words_per_minute": 238,
+  "wpm_source": "Brysbaert M. How many words do we read per minute? J Mem Lang 109 (2019) 104047",
+  "package": {
+    "diary_entries": 19,
+    "diary_words": 337,
+    "care_words": 78,
+    "lab_reports": 3,
+    "lab_report_words": 524,
+    "total_words": 939,
+    "reading_minutes": 3.9
+  },
+  "brief": {
+    "part": "AI-written summary, timeline and questions (the PDF adds a code-built symptom list)",
+    "items": 10,
+    "words": 128,
+    "reading_minutes": 0.5,
+    "model": "Gemma-4-31B-IT",
+    "backend": "amd-token-factory",
+    "generated": "2026-10-17",
+    "latency_s": 63.3
+  },
+  "reduction": {
+    "words_ratio": 7.3,
+    "minutes_saved_reading": 3.4
+  },
+  "cost_per_brief": [
+    {
+      "concurrency": 1,
+      "briefs": 6,
+      "cost_usd_total": 0.000385,
+      "cost_usd_per_brief": 6.42e-05,
+      "latency_p50_s": 72.06,
+      "mean_prompt_tokens": 2414,
+      "mean_out_tokens": 696
+    },
+    {
+      "concurrency": 4,
+      "briefs": 6,
+      "cost_usd_total": 0.000306,
+      "cost_usd_per_brief": 5.1e-05,
+      "latency_p50_s": 54.56,
+      "mean_prompt_tokens": 2414,
+      "mean_out_tokens": 705
+    }
+  ],
+  "cost_source": "gateway-reported cost per request, eval/results/bench_tf-gemma4-31b.json",
+  "caveats": "One synthetic patient. Measures text to read, not clinician time; no clinician was timed. A real patient's months of notes and reports would be longer than this demo."
+}
