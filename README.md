@@ -14,7 +14,7 @@ Built for the lablab.ai AMD Developer Hackathon ACT III, Track 2 (Health and Wel
 
 - **Try it:** [patient app](https://se4wer--clario-patient.us-east.modal.run) ("Open the demo diary", no passphrase) and [clinic console](https://se4wer--clario-clinic.us-east.modal.run), both live with synthetic patients.
 - **On AMD:** Gemma 4 31B on AMD Token Factory wrote our 2,992-diary training set, reads lab reports (MinerU, 48 of 48 rows) and drafts the clinician brief. Our fine-tuned Gemma 4 E4B runs offline on an AMD Ryzen CPU. Details: [Where the models run](#where-the-models-run).
-- **Key result:** on the same 100 held-out test diaries, our 4B model scores F1 0.693 (0.644 as a 5.3 GB GGUF on a Ryzen CPU) against 0.471 for Gemma 4 31B and 0.356 before fine-tuning. Synthetic test set; we also report real patient text (PsyTAR) below, and every number links to a file in `eval/results/`.
+- **Key result:** on the same 100 held-out test diaries, our 4B model scores F1 0.693 (0.644 as a 5.3 GB GGUF on a Ryzen CPU) against 0.471 for Gemma 4 31B and 0.356 before fine-tuning. Synthetic test set; on real patient text (PsyTAR) the gain does not transfer yet, and we report that too. Every number links to a file in `eval/results/`.
 - **Safety:** every term quotes the patient's words, the brief is watermarked "AI draft, not reviewed" until a named clinician edits and signs it, and the product never names a condition to the patient.
 
 ## The problem
@@ -80,7 +80,7 @@ Demo: "Demo data (synthetic)" loads Giulia, a synthetic patient, and "Import the
 | Lab report OCR | MinerU2.5-Pro, table read in code | AMD Token Factory | 48 of 48 rows, `eval/results/documents_tf-mineru-table.json` |
 | Clinician brief, pseudonymised input | Gemma 4 31B IT | AMD Token Factory | `backend/clario/brief.py`, `eval/results/bench_tf-gemma4-31b.json` |
 | Large-model benchmark | Gemma 4 31B IT, DeepSeek-V4-Flash | AMD Token Factory | `eval/results/extraction_tf-*.json` |
-| **Patient diary extraction, offline** | **Our fine-tuned Gemma 4 E4B**, merged and quantised to GGUF Q4_K_M | **AMD Ryzen 7 7700**, llama.cpp CPU backend, no network | F1 0.644 after the HPO check on the same 100 test diaries (bf16 on vLLM: 0.693; Gemma 4 31B on Token Factory: 0.471), median 23 s per diary, `eval/results/extraction_ft-e4b-q4km-ryzen-test100.json` |
+| **Patient diary extraction, offline** | **Our fine-tuned Gemma 4 E4B**, merged and quantised to GGUF Q4_K_M | **AMD Ryzen 7 7700**, llama.cpp CPU backend, no network | F1 0.644 after the HPO check on the same 100 test diaries (bf16 on vLLM: 0.693; Gemma 4 31B on Token Factory: 0.471), median 23 s per diary, `eval/results/extraction_ft-e4b-q4km-ryzen-test100.json`; server log, machine and GGUF hash in `eval/results/ryzen_run/` |
 
 Token Factory does not report its GPUs, so those result files say "hardware not disclosed", and we do not claim a GPU model. On the event Discord, the organisers confirmed on 16 Oct that Token Factory is the expected way to build ("You don't need credit to participate in this hackathon. Just the api from the tokenfactory."), and an AMD mentor confirmed on 18 Oct that a GPU instance is not required ("you dont need the gpu instance").
 
@@ -182,11 +182,12 @@ On all 300 test rows, F1 after the HPO check is 0.353 for the base E4B and 0.701
 | Recall after the HPO check | 0.475 | 0.515 | |
 | F1 after the HPO check | 0.365 | 0.463 | |
 
-What this shows:
-- **The fine-tune works on text it was never trained on.** On real patient language it still returns usable JSON 97.7% of the time and quotes the patient for 99.7% of terms, so each term it reports points to words the patient actually wrote. The base model loses one answer in nine to broken output, which in the app means a note read as empty.
-- **It learned the ontology itself.** Scored on its own HPO codes, before any lookup, its F1 is 17 times the base model's (0.150 against 0.009); the base model gets almost no codes right without our ontology check.
-- **The ontology check carries both models.** After `clario.extract.resolve_hpo`, the two find about the same share of real symptoms (recall 0.48 and 0.52), and the fine-tune's F1 is lower: it proposes more terms (785 against 602), and PsyTAR marks only the mentions that map cleanly to HPO (29%), so unmarked but correct terms count against it. A hand check of 30 random "false positives" found 14 real symptoms with a correct or near HPO code, which puts the fine-tune's precision on real text near 0.62 rather than the scored 0.30; the same check on the base model gives about 0.77, so the order does not change (`eval/results/psytar_spotcheck.md`, judged by Claude for the team, not by a clinician).
-- **The synthetic gain does not transfer yet,** and we report it instead of hiding it. The next training round mixes real lay text into the synthetic diaries, and this file is the baseline it has to beat.
+What this shows. **On real text the fine-tune does not beat the base model on F1 after the HPO check (0.365 against 0.463): the gain we measure on synthetic diaries does not transfer yet.** What does carry over:
+- **Reliability.** On real patient language the fine-tune returns valid JSON 97.7% of the time and quotes the patient for 99.7% of terms, so each term points to words the patient actually wrote. The base model loses one answer in nine to broken output, which in the app means a note read as empty.
+- **The ontology itself.** Scored on its own HPO codes, before any lookup, its F1 is 17 times the base model's (0.150 against 0.009); the base model gets almost no codes right without our ontology check.
+- **Most of its "errors" are real symptoms.** It proposes more terms than the base model (785 against 602), and PsyTAR marks only the mentions that map cleanly to HPO (29%), so unmarked but correct terms count against it. A hand check of 30 random "false positives" found 14 real symptoms with a correct or near HPO code, which puts its precision on real text near 0.62 rather than the scored 0.30; the same check on the base model gives about 0.77, so the order does not change (`eval/results/psytar_spotcheck.md`, judged by Claude for the team, not by a clinician).
+
+The next training round mixes real lay text into the synthetic diaries, and these files are the baseline it has to beat.
 
 **Review queue.** With Gemma 4 31B and self-consistency over 5 samples, keeping the auto-accepted rest within 1, 2 or 5 percent error would send every entity to review: share 1.000 at each tolerance (`eval/results/review_curve_tf-gemma4-31b-sc5.json`, 150 test diaries). It measures how many entities go to a person, not accuracy or coverage; the file says which confidence it used in `confidence_source`.
 

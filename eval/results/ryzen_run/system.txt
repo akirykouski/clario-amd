@@ -1,0 +1,16 @@
+# captured 2026-10-18T01:44Z
+## CPU / RAM / OS
+CPU: AMD Ryzen 7 7700 8-Core Processor | cores 8 | threads 16
+RAM GB: 31
+OS: Microsoft Windows 11 Pro
+## llama.cpp
+version: 0.7.0-dev (build 11680, commit b797b9ca8)
+built with Clang 20.1.8 for Windows x86_64
+## llama.cpp devices (the run used --device none -ngl 0: CPU only, no GPU offload)
+Available devices:
+  Vulkan0: NVIDIA GeForce RTX 5060 Ti (16050 MiB, 15282 MiB free)
+  Vulkan1: AMD Radeon(TM) Graphics (16180 MiB, 15370 MiB free)
+## server command
+llama-server -m clario-v3-q4_k_m.gguf --device none -ngl 0 -t 8 -c 8192 -np 2 --port 8093 --host 127.0.0.1 --jinja
+## model file
+clario-v3-q4_k_m.gguf, 5302274048 bytes, sha256 cccb0df750244b21b752f67f3bc5e1cddfef5898c371b943694d3ef64a86749e
