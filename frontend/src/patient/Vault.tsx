@@ -4,7 +4,7 @@ import { LangSwitch } from "../components/LangSwitch";
 import { useT } from "../i18n";
 import { AppMark } from "../components/AppIdentity";
 
-export function Vault({ mode, demoOpen, onDone }: { mode: "setup" | "unlock"; demoOpen?: boolean; onDone: () => void }) {
+export function Vault({ mode, demoOpen, onDone }: { mode: "setup" | "unlock"; demoOpen?: boolean; onDone: (o?: { tour?: boolean }) => void }) {
   const { t } = useT();
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -22,7 +22,7 @@ export function Vault({ mode, demoOpen, onDone }: { mode: "setup" | "unlock"; de
   };
   const skip = async () => {
     setBusy(true); setErr(null);
-    try { await api.demoOpen(); onDone(); }
+    try { await api.demoOpen(); onDone({ tour: true }); } // a visitor on the demo gets the product tour at once
     catch (x) { setErr((x as Error).message); setBusy(false); }
   };
 

@@ -17,7 +17,7 @@ describe("Open the demo diary", () => {
     const done = vi.fn();
     render(<Vault mode="unlock" demoOpen onDone={done} />);
     fireEvent.click(screen.getByRole("button", { name: "Open the demo diary" }));
-    await waitFor(() => expect(done).toHaveBeenCalled());
+    await waitFor(() => expect(done).toHaveBeenCalledWith({ tour: true }));
     expect(open).toHaveBeenCalledTimes(1);
     expect(unlock).not.toHaveBeenCalled();
   });

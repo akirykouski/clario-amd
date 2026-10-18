@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BookOpen, CalendarDays, FlaskConical, Lock, Send, ShieldCheck, Waypoints } from "lucide-react";
 import { motion } from "framer-motion";
@@ -28,6 +28,8 @@ export default function PatientApp() {
   const [vault, setVault] = useState<VaultState | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const wide = useWide();
+  // "Open the demo diary" also starts the product tour: the first screen after unlocking carries ?tour=1
+  const tourNext = useRef(false);
 
   const refresh = () => api.vault().then(setVault).catch((e: Error) => setErr(e.message));
   useEffect(() => { refresh(); }, []);
@@ -40,9 +42,13 @@ export default function PatientApp() {
   if (!open) {
     const target = vault.initialized ? "/unlock" : "/setup";
     if (loc.pathname !== target) return <Navigate to={target} replace />;
-    return <Vault mode={vault.initialized ? "unlock" : "setup"} demoOpen={!!vault.demo_open} onDone={() => { refresh().then(() => nav("/", { replace: true })); }} />;
+    return <Vault mode={vault.initialized ? "unlock" : "setup"} demoOpen={!!vault.demo_open} onDone={(o) => { tourNext.current = !!o?.tour; refresh(); }} />;
   }
-  if (loc.pathname === "/setup" || loc.pathname === "/unlock") return <Navigate to="/" replace />;
+  if (loc.pathname === "/setup" || loc.pathname === "/unlock") {
+    const to = tourNext.current ? "/?tour=1" : "/";
+    tourNext.current = false;
+    return <Navigate to={to} replace />;
+  }
 
   const lock = async () => { await api.lock().catch(() => {}); await refresh(); nav("/unlock"); };
   const tab = ({ isActive }: { isActive: boolean }) =>
