@@ -133,3 +133,23 @@ def test_signed_day_is_the_clinic_day_not_the_utc_day(monkeypatch):
     monkeypatch.setenv("CLARIO_TZ", "UTC")
     assert signed_day("2026-10-17T22:30:00+00:00") == "2026-10-17"
     assert signed_day(None) == "" and signed_day("2026-10-17") == "2026-10-17"
+
+
+def test_concurrent_png_renders_do_not_crash():
+    """PDFium is not thread-safe: parallel brief.png requests used to SIGSEGV the clinic server."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from fpdf import FPDF
+
+    from clario.brief_pdf import to_png
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("helvetica", size=12)
+    for i in range(40):
+        pdf.set_text_color(i * 5 % 255, 40, 90)
+        pdf.cell(0, 6, f"line {i}", new_x="LMARGIN", new_y="NEXT")
+    data = bytes(pdf.output())
+    with ThreadPoolExecutor(8) as ex:
+        out = list(ex.map(lambda _: to_png(data, width=400), range(32)))
+    assert all(o[:8] == b"\x89PNG\r\n\x1a\n" for o in out)

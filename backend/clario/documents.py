@@ -184,6 +184,13 @@ def is_pdf(data: bytes) -> bool:
 
 
 def pdf_pages(data: bytes, source: str = "document.pdf", max_dim: int = MAX_DIM) -> list[Page]:
+    from .brief_pdf import PDFIUM_LOCK
+
+    with PDFIUM_LOCK:
+        return _pdf_pages(data, source, max_dim)
+
+
+def _pdf_pages(data: bytes, source: str, max_dim: int) -> list[Page]:
     import pypdfium2 as pdfium
 
     try:

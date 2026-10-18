@@ -11,10 +11,15 @@ other Latin text prints as written. The body shrinks until the brief fits one A4
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from fpdf import FPDF
+
+# PDFium is not thread-safe, and sync routes run in a thread pool: two pages rendered at once crash the process
+# (SIGSEGV in FPDF_LoadPage). Every pypdfium2 call in the app holds this lock.
+PDFIUM_LOCK = threading.Lock()
 
 FONTS = Path(__file__).parent / "data" / "fonts"
 TOKEN_FACTORY = "amd-token-factory"
@@ -184,14 +189,15 @@ def to_png(data: bytes, width: int = 1240) -> bytes:
     import pypdfium2 as pdfium
     from PIL import Image
 
-    pdf = pdfium.PdfDocument(data)
-    try:
-        pages = []
-        for i in range(len(pdf)):
-            pg = pdf[i]
-            pages.append(pg.render(scale=width / pg.get_size()[0]).to_pil().convert("RGB"))
-    finally:
-        pdf.close()
+    with PDFIUM_LOCK:
+        pdf = pdfium.PdfDocument(data)
+        try:
+            pages = []
+            for i in range(len(pdf)):
+                pg = pdf[i]
+                pages.append(pg.render(scale=width / pg.get_size()[0]).to_pil().convert("RGB"))
+        finally:
+            pdf.close()
     gap = 24 if len(pages) > 1 else 0
     out = Image.new("RGB", (width, sum(p.height for p in pages) + gap * (len(pages) - 1)), (233, 236, 240))
     y = 0
