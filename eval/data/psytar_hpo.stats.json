@@ -1,0 +1,18 @@
+{
+  "sentences_total": 6002,
+  "mentions_total": 6621,
+  "mentions_by_type": {
+    "ADR": 4813,
+    "WD": 590,
+    "SSI": 1218
+  },
+  "not_verbatim": 559,
+  "no_match": 472,
+  "below_threshold": 3664,
+  "mapped": 1926,
+  "min_conf": 0.95,
+  "sheets_missing": [],
+  "rows": 1156,
+  "mapping_coverage": 0.2909,
+  "citation": "Zolnoori M, et al. A systematic approach for developing a corpus of patient reported adverse drug events: A case study for SSRI and SNRI medications. J Biomed Inform 90 (2019). doi:10.1016/j.jbi.2018.12.005. Licence CC BY 4.0."
+}

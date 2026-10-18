@@ -10,6 +10,13 @@ Built for the lablab.ai AMD Developer Hackathon ACT III, Track 2 (Health and Wel
 
 > Demo servers hold synthetic patients only. Do not enter real health information.
 
+**For judges, in one minute**
+
+- **Try it:** [patient app](https://se4wer--clario-patient.us-east.modal.run) ("Open the demo diary", no passphrase) and [clinic console](https://se4wer--clario-clinic.us-east.modal.run), both live with synthetic patients.
+- **On AMD:** Gemma 4 31B on AMD Token Factory wrote our 2,992-diary training set, reads lab reports (MinerU, 48 of 48 rows) and drafts the clinician brief. Our fine-tuned Gemma 4 E4B runs offline on an AMD Ryzen CPU. Details: [Where the models run](#where-the-models-run).
+- **Key result:** on the same 100 held-out test diaries, our 4B model scores F1 0.693 (0.644 as a 5.3 GB GGUF on a Ryzen CPU) against 0.471 for Gemma 4 31B and 0.356 before fine-tuning. Synthetic test set; we also report real patient text (PsyTAR) below, and every number links to a file in `eval/results/`.
+- **Safety:** every term quotes the patient's words, the brief is watermarked "AI draft, not reviewed" until a named clinician edits and signs it, and the product never names a condition to the patient.
+
 ## The problem
 
 People with rare or hard-to-name conditions wait years for an answer, and the weeks before the first specialist visit are the least documented part of the journey. Patients recall the last few days well and the last few months poorly. Clinics get a 15-minute slot and a pile of paper.
@@ -18,13 +25,23 @@ The EURORDIS Rare Barometer survey of 6,507 people living with a rare disease in
 
 ## Demo
 
-| Slot | File | Shows |
+![Clario: the patient app's week organizer and a note with its understood terms](docs/media/cover/cover.png)
+
+| What | Where | Shows |
 |---|---|---|
-| GIF 1 | `docs/media/patient-flow.gif` (TODO: record) | Write a note, see the terms with their quotes, fix one with "Not right" |
-| GIF 2 | `docs/media/share-and-clinic.gif` (TODO: record) | Import the 3 sample referti, share sealed to the clinic, check two lab readings, brief PDF, edit and sign |
-| GIF 3 | `docs/media/second-opinion.gif` (TODO: record) | Second opinion: the new doctor signs first, then compares with the previous GP |
-| Screenshot | `docs/media/cover.png` (TODO: capture) | Cover image, brief in `docs/SUBMISSION.md` |
-| Live app | TODO: public URLs from the deploy (`deploy/modal/apps.py`, issue #6) | Patient app and clinic console, synthetic data only |
+| Patient app (live) | [se4wer--clario-patient.us-east.modal.run](https://se4wer--clario-patient.us-east.modal.run) | "Demo data (synthetic)" loads Giulia; write a note, see the terms with their quotes, fix one with "Not right", share sealed to the clinic |
+| Clinic console (live) | [se4wer--clario-clinic.us-east.modal.run](https://se4wer--clario-clinic.us-east.modal.run) | Inbox, two lab readings to check, brief PDF marked "AI draft, not reviewed", edit and sign, second opinion |
+| Project page | [akirykouski.github.io/clario-amd](https://akirykouski.github.io/clario-amd) | Overview and the results table |
+| Clip: the brief, from AI draft to signed (17 s) | [`docs/media/video/brief-review.mp4`](docs/media/video/brief-review.mp4) | Draft watermark, every line cites a diary note, code flags an unsupported line, the doctor edits and signs |
+| Clip: under the hood (45 s) | [`docs/media/video/under-the-hood.mp4`](docs/media/video/under-the-hood.mp4) | Gemma 4 end to end, the 2,992-diary dataset, the fine-tune and its F1 against Gemma 4 31B |
+
+Both live apps hold synthetic patients only. The cold start on Modal can take up to a minute.
+
+The clinic console with a received package, as it runs live (captured 18 Oct 2026). Left: the patient at a glance, with what was already tried. Right: the brief Gemma 4 31B drafted on AMD Token Factory, marked "AI draft, not reviewed", with its tokens/s and latency:
+
+![Clinic console: a received package and its AI-drafted brief](docs/media/screens/clinic-package.png)
+
+[![The brief, from AI draft to signed](docs/media/video/brief-review.jpg)](docs/media/video/brief-review.mp4)
 
 ## What it does
 
@@ -50,26 +67,41 @@ Demo: "Demo data (synthetic)" loads Giulia, a synthetic patient, and "Import the
  pseudonymiser before any remote call   ── sealed ──► pseudonymiser before any remote call
         │                                 expiring          │
         ├─ diary extraction: fine-tuned Gemma 4 E4B         ├─ brief: Gemma 4 31B, AMD Token Factory
-        │  (vLLM on Modal NVIDIA L4)                        │
+        │  on the patient's own AMD Ryzen (llama.cpp,       │
+        │  offline), or vLLM on Modal for the public demo   │
         └─ lab OCR: MinerU2.5-Pro, AMD Token Factory        └─ one OpenAI-compatible client everywhere
 ```
 
-**On AMD today (AMD Token Factory, hosted API):**
+**Every inference workload in Clario has run on AMD hardware, and each one has a result file:**
 
-| Workload | Model | Evidence |
-|---|---|---|
-| Training data generation | Gemma 4 31B IT | Published set [m0rtyddd/clario-synth-v3](https://huggingface.co/datasets/m0rtyddd/clario-synth-v3), `train/synth.py` |
-| Lab report OCR | MinerU2.5-Pro, table read in code | `eval/results/documents_tf-mineru-table.json`, `backend/clario/documents.py` |
-| Clinician brief, pseudonymised input | Gemma 4 31B IT | `backend/clario/brief.py`, `eval/results/bench_tf-gemma4-31b.json` |
-| Large-model benchmark | Gemma 4 31B IT, DeepSeek-V4-Flash | `eval/results/extraction_tf-*.json`, `docs/BENCHMARK_4B.md` |
+| Workload | Model | AMD platform | Evidence |
+|---|---|---|---|
+| Training data generation | Gemma 4 31B IT | AMD Token Factory | Published set [m0rtyddd/clario-synth-v3](https://huggingface.co/datasets/m0rtyddd/clario-synth-v3) (2,992 diaries), `train/synth.py` |
+| Lab report OCR | MinerU2.5-Pro, table read in code | AMD Token Factory | 48 of 48 rows, `eval/results/documents_tf-mineru-table.json` |
+| Clinician brief, pseudonymised input | Gemma 4 31B IT | AMD Token Factory | `backend/clario/brief.py`, `eval/results/bench_tf-gemma4-31b.json` |
+| Large-model benchmark | Gemma 4 31B IT, DeepSeek-V4-Flash | AMD Token Factory | `eval/results/extraction_tf-*.json` |
+| **Patient diary extraction, offline** | **Our fine-tuned Gemma 4 E4B**, merged and quantised to GGUF Q4_K_M | **AMD Ryzen 7 7700**, llama.cpp CPU backend, no network | F1 0.644 after the HPO check on the same 100 test diaries (bf16 on vLLM: 0.693; Gemma 4 31B on Token Factory: 0.471), median 23 s per diary, `eval/results/extraction_ft-e4b-q4km-ryzen-test100.json` |
 
-Token Factory does not report its GPUs, so the result files say "hardware not disclosed", and we do not claim a GPU model.
+Token Factory does not report its GPUs, so those result files say "hardware not disclosed", and we do not claim a GPU model. On the event Discord, the organisers confirmed on 16 Oct that Token Factory is the expected way to build ("You don't need credit to participate in this hackathon. Just the api from the tokenfactory."), and an AMD mentor confirmed on 18 Oct that a GPU instance is not required ("you dont need the gpu instance").
 
-**Not on AMD, and why.** The LoRA fine-tune of Gemma 4 E4B ran on Modal NVIDIA L40S, and the fine-tuned E4B is served by vLLM on a Modal NVIDIA L4. AMD Developer Cloud credits never arrived, so we had no MI300X. The same training script (`train/train_rocm.py`, with `train/Dockerfile.rocm`) and a one-command MI300X runbook (`deploy/amd/bootstrap.sh`, `deploy/amd/README.md`) are ready, but have not run on an MI300X.
+**Why the patient model runs on a Ryzen.** The patient's diary is the most sensitive data in the product, so the model that reads it belongs on the patient's own computer, and that computer is a laptop or desktop, not an Instinct server. A 4-billion-parameter model that beats the 31-billion-parameter one is what makes this possible. We measured it on an ordinary 8-core AMD Ryzen 7 7700 desktop CPU with no GPU: quantised to 5.3 GB it still beats Gemma 4 31B on our task, and the result file records the machine. To run it yourself, see "Run the patient model on your own AMD machine" below.
+
+**Not on AMD: training, and why.** The LoRA fine-tune of Gemma 4 E4B ran on a Modal NVIDIA L40S, and the public demo serves the bf16 fine-tune with vLLM on a Modal NVIDIA L4, because we had no AMD GPU to train on. The same training script (`train/train_rocm.py`, `train/Dockerfile.rocm`) and a one-command MI300X runbook (`deploy/amd/bootstrap.sh`, `deploy/amd/README.md`) are ready and have not run on an MI300X.
+
+<details>
+<summary>AMD Developer Cloud access: what we tried</summary>
+
+- We requested AMD Developer Cloud credits from three team accounts.
+- We added funds to the AMD Developer Cloud console to rent a GPU droplet ourselves. Creating an MI300X droplet still asked us to "request complimentary credit or a limit increase", which we did.
+- 16 Oct: we escalated on the event Discord (ticket and channel), more than 48 hours after the first request. The answer we got was that Token Factory is enough to take part (quoted above). Other teams reported the same access problem in the same channels.
+- 17 Oct: at the on-site event we asked the mentors to escalate.
+- As of 18 Oct we have no GPU droplet access. If access is granted before judging, `deploy/amd/bootstrap.sh --train --eval` reruns the fine-tune and the eval on an MI300X and writes the result files with `amd-smi` provenance.
+
+</details>
 
 ## Roadmap
 
-- Patient model on the patient's device: the fine-tuned E4B on AMD Ryzen AI through Lemonade. The GGUF build is being prepared (issue #23) and is untested on the hardware. The app client already speaks Lemonade's OpenAI-compatible API.
+- Patient model on the patient's device: done on an AMD Ryzen CPU with llama.cpp (see "Where the models run"). Next: the Ryzen AI NPU through Lemonade, whose OpenAI-compatible API the app client already speaks; not yet tested on Ryzen AI hardware.
 - Clinician brief on the clinic's own AMD Instinct servers, so the diary never leaves the clinic.
 - OCR on our own server in production (open weights), because real reports carry personal data. The demo uses synthetic reports only.
 - Fine-tuned Gemma 4 31B: trained, deployment pending (no serving resources during the hackathon).
@@ -132,12 +164,29 @@ Every number below is read from the file named next to it. All files are in `eva
 |---|---|---|---|---|
 | Clario fine-tuned E4B, served on Modal | 0.693 | 0.693 | 0.693 | `extraction_ft-e4b-vllm-test100.json` |
 | Clario fine-tuned E4B, training eval | 0.686 | 0.688 | 0.687 | `extraction_ft-e4b-test100.json` |
+| Clario fine-tuned E4B, GGUF Q4_K_M on an AMD Ryzen 7 7700 CPU, offline | 0.648 | 0.641 | 0.644 | `extraction_ft-e4b-q4km-ryzen-test100.json` |
 | DeepSeek-V4-Flash | 0.478 | 0.514 | 0.495 | `extraction_tf-deepseek-v4-flash-test100.json` |
 | Gemma 4 31B | 0.459 | 0.484 | 0.471 | `extraction_tf-gemma-4-31b-it-test100.json` |
 | Base Gemma 4 E4B | 0.349 | 0.364 | 0.356 | `extraction_base-e4b-test100.json` |
 | Jev, retrieve-then-decide | 0.335 | 0.314 | 0.324 | `extraction_jev-test100.json` |
 
-On all 300 test rows, F1 after the HPO check is 0.353 for the base E4B and 0.701 for the fine-tune (`extraction_base-e4b.json`, `extraction_ft-e4b.json`). Raw F1 on those 300 rows is 0.003 and 0.629. The weak spot is family history: relative recall 0.139 on 300 rows (`extraction_ft-e4b.json`). Jev returns no quotes, so grounding does not apply to it. Latencies are not one comparable measure (batching, a shared API key); see `docs/BENCHMARK_4B.md`. These numbers say nothing yet about real patient text.
+On all 300 test rows, F1 after the HPO check is 0.353 for the base E4B and 0.701 for the fine-tune (`extraction_base-e4b.json`, `extraction_ft-e4b.json`). Raw F1 on those 300 rows is 0.003 and 0.629. The weak spot is family history: relative recall 0.139 on 300 rows (`extraction_ft-e4b.json`). Jev returns no quotes, so grounding does not apply to it. Latencies are not one comparable measure (batching, a shared API key); see `docs/BENCHMARK_4B.md`. For real patient text, see the PsyTAR results below.
+
+**On real patient text (PsyTAR).** To check that the model is not only good at our own synthetic style, we ran it on 300 sentences from PsyTAR: real, unedited drug reviews written by patients, with symptom spans marked by experts and mapped to HPO by `train/psytar_hpo.py` (CC BY 4.0, Zolnoori et al. 2019). Same GGUF Q4_K_M builds for both models; this is a quality eval only and ran on an NVIDIA RTX 5060 Ti for speed.
+
+| On 300 real patient sentences (491 marked symptoms) | Clario fine-tune | Gemma 4 E4B, no fine-tune | File |
+|---|---|---|---|
+| Answers in valid JSON | **97.7%** | 89.3% | `extraction_*-psytar300.json` |
+| Every term quoted from the patient's words | **99.7%** | 98.8% | |
+| F1 on the model's own HPO codes (raw) | **0.150** | 0.009 | |
+| Recall after the HPO check | 0.475 | 0.515 | |
+| F1 after the HPO check | 0.365 | 0.463 | |
+
+What this shows:
+- **The fine-tune works on text it was never trained on.** On real patient language it still returns usable JSON 97.7% of the time and quotes the patient for 99.7% of terms, so each term it reports points to words the patient actually wrote. The base model loses one answer in nine to broken output, which in the app means a note read as empty.
+- **It learned the ontology itself.** Scored on its own HPO codes, before any lookup, its F1 is 17 times the base model's (0.150 against 0.009); the base model gets almost no codes right without our ontology check.
+- **The ontology check carries both models.** After `clario.extract.resolve_hpo`, the two find about the same share of real symptoms (recall 0.48 and 0.52), and the fine-tune's F1 is lower: it proposes more terms (785 against 602), and PsyTAR marks only the mentions that map cleanly to HPO (29%), so unmarked but correct terms count against it. Precision here is a lower bound.
+- **The synthetic gain does not transfer yet,** and we report it instead of hiding it. The next training round mixes real lay text into the synthetic diaries, and this file is the baseline it has to beat.
 
 **Review queue.** With Gemma 4 31B and self-consistency over 5 samples, keeping the auto-accepted rest within 1, 2 or 5 percent error would send every entity to review: share 1.000 at each tolerance (`eval/results/review_curve_tf-gemma4-31b-sc5.json`, 150 test diaries). It measures how many entities go to a person, not accuracy or coverage; the file says which confidence it used in `confidence_source`.
 
@@ -177,11 +226,20 @@ CLARIO_MODE=patient CLARIO_OFFLINE=1 uv --directory backend run python -m clario
 
 For the clinic side, in a second terminal: `CLARIO_MODE=clinic CLARIO_OFFLINE=1 uv --directory backend run python -m clario.app` (http://127.0.0.1:8800). Open the patient app, set a passphrase of 12 or more characters, and load the demo patient. Offline output is for testing the product flow. It is not a model result.
 
+**Run the patient model on your own AMD machine.** The fine-tuned E4B as a 5.3 GB GGUF runs on an AMD Ryzen CPU with llama.cpp, with no GPU and no network. Point the patient app at it:
+
+```bash
+llama-server -m clario-e4b-v3-q4_k_m.gguf --device none -ngl 0 -c 8192 --port 8093 --jinja
+LLM_BASE_URL=http://127.0.0.1:8093/v1 LLM_API_KEY=local LLM_MODEL=clario-e4b CLARIO_MODE=patient uv --directory backend run python -m clario.app
+```
+
+The GGUF is on Hugging Face: [m0rtyddd/clario-gemma4-e4b-v3-gguf](https://huggingface.co/m0rtyddd/clario-gemma4-e4b-v3-gguf). It is our LoRA ([seawer/clario-gemma-4-e4b-lora](https://huggingface.co/seawer/clario-gemma-4-e4b-lora)) merged with `train/export.py merge`, converted with llama.cpp `convert_hf_to_gguf.py` and quantised with `llama-quantize ... Q4_K_M`. The eval that produced the Ryzen row above: `python eval/extraction_eval.py --base-url http://127.0.0.1:8093/v1 --model clario-e4b-v3-q4_k_m --limit 100 --label ft-e4b-q4km-ryzen-test100`.
+
 **Tests.** `cd backend && uv run pytest -q`, `cd frontend && npx vitest run`, `cd train && ../backend/.venv/bin/python -m pytest -q`.
 
 **Public demo on Modal.** `modal deploy deploy/modal/apps.py` starts the patient app and the clinic console, with Gemma 4 31B on AMD Token Factory; `PATIENT_LLM=modal` reads the diary with the fine-tuned E4B served by `deploy/modal/serve_model.py`. Keys come from Modal Secrets.
 
-**On AMD Developer Cloud (one MI300X droplet). Prepared, not run: credits never arrived.**
+**On AMD Developer Cloud (one MI300X droplet). Prepared, not run: we had no droplet access (see "AMD Developer Cloud access" above).**
 
 ```bash
 ssh root@<DROPLET_IP>

@@ -22,11 +22,16 @@ F1 is measured after the app's deterministic HPO check (`clario.extract.resolve_
 |---|---|---|---|---|---|---|---|---|---|---|
 | **Clario: Gemma 4 E4B + LoRA, served by vLLM on Modal** | 0.693 | 0.693 | 0.693 | 0.607 | 1.000 | 0.000 | 1.000 | 11.5 s | Modal L4, vLLM 0.31 | `ft-e4b-vllm-test100` |
 | **Clario: Gemma 4 E4B + LoRA, training eval** | 0.686 | 0.688 | 0.687 | 0.604 | 1.000 | 0.000 | 1.000 | 1.5 s | Modal L40S, transformers | `ft-e4b-test100` |
+| **Clario: Gemma 4 E4B + LoRA, GGUF Q4_K_M, offline** | 0.648 | 0.641 | 0.644 | 0.281 | 0.793 | 0.000 | 0.990 | 23.2 s | **AMD Ryzen 7 7700 CPU**, llama.cpp | `ft-e4b-q4km-ryzen-test100` |
 | DeepSeek-V4-Flash | 0.478 | 0.514 | 0.495 | 0.400 | 0.759 | 0.045 | 1.000 | 18.4 s | AMD Token Factory API | `tf-deepseek-v4-flash-test100` |
 | Gemma 4 31B IT | 0.459 | 0.484 | 0.471 | 0.048 | 0.103 | 0.000 | 1.000 | 20.6 s | AMD Token Factory API | `tf-gemma-4-31b-it-test100` |
 | Gemma 4 E4B IT, base (no fine-tune) | 0.349 | 0.364 | 0.356 | 0.002 | 0.000 | 0.000 | 1.000 | 2.2 s | Modal L40S, transformers | `base-e4b-test100` |
 | Jev 1.13 (TypeSafe), retrieve-then-decide | 0.335 | 0.314 | 0.324 | 0.324 | 0.483 | 0.227 | 1.000 | n/a | TypeSafe API | `jev-test100` |
 | Jev 1.13, oracle candidates (upper bound, not a fair comparison) | 0.704 | 0.735 | 0.719 | 0.719 | 0.897 | 0.864 | 1.000 | n/a | TypeSafe API | `jev-oracle-test100` |
+
+The Ryzen row is the same fine-tune, merged, converted to GGUF and quantised to Q4_K_M (5.3 GB), run by llama.cpp on the CPU of an AMD Ryzen 7 7700 with no GPU. Quantisation costs 0.05 F1 after the HPO check (0.693 to 0.644) and more on raw codes (0.607 to 0.281): the 4-bit weights recall HPO ids less exactly, and the ontology check recovers most of it.
+
+**Real patient text (PsyTAR, 300 sentences, quality eval on an NVIDIA RTX 5060 Ti, both models as GGUF Q4_K_M).** Fine-tune against base: valid JSON 0.977 against 0.893, quote grounding 0.997 against 0.988, raw F1 0.150 against 0.009, recall after the HPO check 0.475 against 0.515, F1 after the HPO check 0.365 against 0.463 (`extraction_ft-e4b-q4km-psytar300.json`, `extraction_base-e4b-q4km-psytar300.json`). PsyTAR marks only mentions that map cleanly to HPO (29% of them), so precision is a lower bound. The fine-tune is more reliable and has learned the codes, but its gain on synthetic diaries does not yet carry over to real text.
 
 ## 2. Fine-tune vs base, full test split (300 rows)
 
